@@ -108,23 +108,6 @@ void dbimou::init(const char *class_name, Napi::Env env)
     ctor.SuppressDestruct();
 }
 
-void dbimou::init(const char *class_name, Napi::Env env, Napi::Object exports) 
-{
-    auto func = DefineClass(env, class_name, {
-        InstanceMethod("put", &dbimou::put),
-        InstanceMethod("get", &dbimou::get),
-        InstanceMethod("del", &dbimou::del),
-        InstanceMethod("has", &dbimou::has),
-        InstanceMethod("forEach", &dbimou::for_each),
-        InstanceMethod("stat", &dbimou::stat),
-        InstanceMethod("keys", &dbimou::keys),
-    });
-
-    ctor = Napi::Persistent(func);
-    ctor.SuppressDestruct();
-    exports.Set(class_name, func);
-}
-
 Napi::Value dbimou::put(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     

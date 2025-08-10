@@ -65,7 +65,6 @@ public:
         return env_.get();
     }
 
-    static void init(const char *class_name, Napi::Env env);
     static void init(const char *class_name, Napi::Env env, Napi::Object exports);
 
     envmou& operator++() noexcept {

@@ -22,24 +22,6 @@ void txnmou::init(const char *class_name, Napi::Env env) {
     ctor.SuppressDestruct();
 }
 
-void txnmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
-{
-    auto func = DefineClass(env, class_name, {
-        InstanceMethod("commit", &txnmou::commit),
-        InstanceMethod("abort", &txnmou::abort),
-        InstanceMethod("isActive", &txnmou::is_active),
-        InstanceMethod("isTopLevel", &txnmou::is_top_level),
-#ifdef MDBX_TXN_HAS_CHILD        
-        InstanceMethod("startTransaction", &txnmou::start_transaction),
-        InstanceMethod("getChildrenCount", &txnmou::get_children_count),
-#endif
-    });
-
-    ctor = Napi::Persistent(func);
-    ctor.SuppressDestruct();
-    exports.Set(class_name, ctor.Value());
-}
-
 Napi::Value txnmou::commit(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 

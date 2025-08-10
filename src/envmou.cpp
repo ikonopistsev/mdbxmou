@@ -9,24 +9,6 @@ namespace mdbxmou {
 
 Napi::FunctionReference envmou::ctor{};
 
-void envmou::init(const char *class_name, Napi::Env env)
-{
-    auto func = DefineClass(env, class_name, {
-        InstanceMethod("open", &envmou::open),
-        InstanceMethod("openSync", &envmou::open_sync),
-        InstanceMethod("close", &envmou::close),
-        InstanceMethod("closeSync", &envmou::close_sync),
-        InstanceMethod("copyTo", &envmou::copy_to),
-        InstanceMethod("copyToSync", &envmou::copy_to_sync),
-        InstanceMethod("version", &envmou::get_version),
-        InstanceMethod("startRead", &envmou::start_read),
-        InstanceMethod("startWrite", &envmou::start_write),
-        InstanceMethod("query", &envmou::query)
-    });
-    ctor = Napi::Persistent(func);
-    ctor.SuppressDestruct();
-}
-
 void envmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
 {
     auto func = DefineClass(env, class_name, {

@@ -90,7 +90,6 @@ public:
     {   }
 
     static void init(const char *class_name, Napi::Env env);
-    static void init(const char *class_name, Napi::Env env, Napi::Object exports);
 
     // Основные операции (только синхронные)
     Napi::Value commit(const Napi::CallbackInfo&);
