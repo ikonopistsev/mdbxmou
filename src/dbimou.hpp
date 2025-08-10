@@ -59,12 +59,14 @@ public:
     Napi::Value stat(const Napi::CallbackInfo&);
     Napi::Value keys(const Napi::CallbackInfo&);
 
-    void attach(envmou* env, txnmou* txn, MDBX_dbi dbi, MDBX_db_flags_t flags)
+    void attach(envmou* env, txnmou* txn, MDBX_dbi dbi, 
+        MDBX_db_flags_t flags, query_db::key_type id_type = query_db::key_type::key_unknown)
     {
         env_ = env;
         txn_ = txn;
         dbi_ = dbi;
         flags_ = flags;
+        id_type_ = id_type;
     }
 
     static const env_arg0* get_env_userctx(MDBX_env* env_ptr);

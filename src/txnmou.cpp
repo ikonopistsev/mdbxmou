@@ -109,14 +109,25 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info)
     {
         std::string tmp{};
         MDBX_db_flags_t flags{MDBX_DB_DEFAULTS};
+        query_db::key_type id_type{query_db::key_type::key_unknown};
         auto arg_count = info.Length();
         if (arg_count == 2) {
             tmp = info[0].As<Napi::String>().Utf8Value();
+            if (info[1].IsBigInt()) {
+                flags = static_cast<MDBX_db_flags_t>(info[1].As<Napi::BigInt>().Int64Value(nullptr));
+                id_type = query_db::key_type::key_bigint;
+            }
             flags = static_cast<MDBX_db_flags_t>(info[1].As<Napi::Number>().Int32Value());
+            id_type = query_db::key_type::key_number;
         } else {
             if (arg_count == 1) {
-                if (info[0].IsNumber()) {
+                if (info[0].IsBigInt()) {
+                    bool lossless;
+                    flags = static_cast<MDBX_db_flags_t>(info[0].As<Napi::BigInt>().Int64Value(&lossless));
+                    id_type = query_db::key_type::key_bigint;
+                } else if (info[0].IsNumber()) {
                     flags = static_cast<MDBX_db_flags_t>(info[0].As<Napi::Number>().Int32Value());
+                    id_type = query_db::key_type::key_number;
                 } else if (info[0].IsString()) {
                     tmp = info[0].As<Napi::String>().Utf8Value();
                 }
@@ -143,7 +154,7 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info)
             throw Napi::Error::New(env, std::string("flags=") + 
                 std::to_string(flags) + ", (db:" + name + "), " + mdbx_strerror(rc));
         }
-        ptr->attach(env_, this, dbi, flags);
+        ptr->attach(env_, this, dbi, flags, id_type);
         return obj;
     }
     catch(const std::exception& e)

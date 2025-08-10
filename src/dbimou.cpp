@@ -6,7 +6,7 @@ namespace mdbxmou {
 
 Napi::FunctionReference dbimou::ctor{};
 
-static inline MDBX_val cast(Napi::Env env, MDBX_db_flags_t flags, query_db::key_type& id_type,
+static inline MDBX_val cast(Napi::Env env, MDBX_db_flags_t flags, query_db::key_type id_type,
     std::uint64_t& id_val, query_item::value_type& holder, const Napi::Value &from) // +stdexcept
 {
     MDBX_val rc{};
@@ -14,7 +14,7 @@ static inline MDBX_val cast(Napi::Env env, MDBX_db_flags_t flags, query_db::key_
     if (from.IsBuffer())        
     {
         auto key = from.As<Napi::Buffer<char>>();
-        id_type = query_db::key_type::key_unknown;
+        //id_type = query_db::key_type::key_unknown;
         rc = MDBX_val{key.Data(), key.Length()};
     } else if (from.IsString()) {
         size_t length;
@@ -29,7 +29,7 @@ static inline MDBX_val cast(Napi::Env env, MDBX_db_flags_t flags, query_db::key_
             env, from, holder.data(), holder.capacity(), nullptr);
         NAPI_THROW_IF_FAILED(env, status, "");
 
-        id_type = query_db::key_type::key_unknown;
+        //id_type = query_db::key_type::key_unknown;
         rc = MDBX_val{holder.data(), holder.size()};
     } else if (flags & MDBX_INTEGERKEY) {
         if (from.IsBigInt()) {
@@ -40,7 +40,7 @@ static inline MDBX_val cast(Napi::Env env, MDBX_db_flags_t flags, query_db::key_
                 throw Napi::Error::New(env, 
                     "BigInt key must be lossless for MDBX_INTEGERKEY");
             }
-            id_type = query_db::key_type::key_bigint;
+            //id_type = query_db::key_type::key_bigint;
             rc = MDBX_val{&id_val, sizeof(id_val)};
         } else if (from.IsNumber()) {
             auto value = from.As<Napi::Number>();
@@ -50,7 +50,7 @@ static inline MDBX_val cast(Napi::Env env, MDBX_db_flags_t flags, query_db::key_
                     "Number key must be non-negative for MDBX_INTEGERKEY");
             }
             id_val = static_cast<std::uint64_t>(num);
-            id_type = query_db::key_type::key_number;
+            //id_type = query_db::key_type::key_number;
             rc = MDBX_val{&id_val, sizeof(id_val)};
         } else {
              throw Napi::Error::New(env, "expected BigInt or Number for MDBX_INTEGERKEY");
@@ -235,11 +235,12 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
 Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     
-    bool use_bigint = false;
+    auto id_type = id_type_;
     Napi::Function fn;
     auto arg_count = info.Length();
     if (arg_count == 2) {
-        use_bigint = info[0].As<Napi::Boolean>().Value();
+        id_type = info[0].As<Napi::Boolean>().Value() ? 
+            query_db::key_type::key_bigint : query_db::key_type::key_number;
         if (!info[1].IsFunction()) {
             throw Napi::TypeError::New(env, "Expected a function as the second argument");
         }
@@ -277,7 +278,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
             Napi::Value rc_key;
             if (flags_ & MDBX_INTEGERKEY) {
                 auto k = *static_cast<std::uint64_t*>(key.iov_base);
-                if (use_bigint) {
+                if (id_type == query_db::key_type::key_bigint) {
                     rc_key = Napi::BigInt::New(env, k);
                 } else {
                     rc_key = Napi::Number::New(env, static_cast<double>(k));
@@ -357,9 +358,11 @@ Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
 Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
-    bool use_bigint = false;
+    auto id_type = id_type_;
+
     if (info.Length()) {        
-        use_bigint = info[0].As<Napi::Boolean>().Value();
+        id_type = info[0].As<Napi::Boolean>().Value() ? 
+            query_db::key_type::key_bigint : query_db::key_type::key_number;
     }
     
     MDBX_cursor* cursor;
@@ -392,7 +395,7 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
             Napi::Value js_key;
             if (flags_ & MDBX_INTEGERKEY) {
                 auto k = *static_cast<std::uint64_t*>(key.iov_base);
-                if (use_bigint) {
+                if (id_type == query_db::key_type::key_bigint) {
                     js_key = Napi::BigInt::New(env, k);
                 } else {
                     js_key = Napi::Number::New(env, static_cast<double>(k));
