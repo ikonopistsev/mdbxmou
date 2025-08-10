@@ -235,11 +235,21 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
 Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     
-    if (info.Length() < 1 || !info[0].IsFunction()) {
-        throw Napi::TypeError::New(env, "Expected a function as the first argument");
+    bool use_bigint = false;
+    Napi::Function fn;
+    auto arg_count = info.Length();
+    if (arg_count == 2) {
+        use_bigint = info[0].As<Napi::Boolean>().Value();
+        if (!info[1].IsFunction()) {
+            throw Napi::TypeError::New(env, "Expected a function as the second argument");
+        }
+        fn = info[1].As<Napi::Function>();
+    } else {
+        if (!info[0].IsFunction()) {
+            throw Napi::TypeError::New(env, "Expected a function as the first argument");
+        }
+        fn = info[0].As<Napi::Function>();
     }
-
-    Napi::Function fn = info[0].As<Napi::Function>();
     
     MDBX_cursor* cursor;
     auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor);
@@ -265,16 +275,25 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
         do {
             // Конвертируем ключ
             Napi::Value rc_key;
-            auto p = static_cast<const char*>(key.iov_base);
-            if (arg0->key_string) {
-                rc_key = Napi::String::New(env, p, key.iov_len);
+            if (flags_ & MDBX_INTEGERKEY) {
+                auto k = *static_cast<std::uint64_t*>(key.iov_base);
+                if (use_bigint) {
+                    rc_key = Napi::BigInt::New(env, k);
+                } else {
+                    rc_key = Napi::Number::New(env, static_cast<double>(k));
+                }
             } else {
-                rc_key = Napi::Buffer<char>::Copy(env, p, key.iov_len);
+                auto p = static_cast<const char*>(key.iov_base);
+                if (arg0->key_string) {
+                    rc_key = Napi::String::New(env, p, key.iov_len);
+                } else {
+                    rc_key = Napi::Buffer<char>::Copy(env, p, key.iov_len);
+                }
             }
-            
+
             // Конвертируем значение
             Napi::Value rc_val;
-            p = static_cast<const char*>(val.iov_base);
+            auto p = static_cast<const char*>(val.iov_base);
             if (arg0->val_string) {
                 rc_val = Napi::String::New(env, p, val.iov_len);
             } else {
@@ -337,6 +356,11 @@ Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
 
 Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+
+    bool use_bigint = false;
+    if (info.Length()) {        
+        use_bigint = info[0].As<Napi::Boolean>().Value();
+    }
     
     MDBX_cursor* cursor;
     auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor);
@@ -366,12 +390,22 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
         do {
             // Конвертируем ключ
             Napi::Value js_key;
-            auto p = static_cast<const char*>(key.iov_base);
-            if (arg0->key_string) {
-                js_key = Napi::String::New(env, p, key.iov_len);
+            if (flags_ & MDBX_INTEGERKEY) {
+                auto k = *static_cast<std::uint64_t*>(key.iov_base);
+                if (use_bigint) {
+                    js_key = Napi::BigInt::New(env, k);
+                } else {
+                    js_key = Napi::Number::New(env, static_cast<double>(k));
+                }
             } else {
-                js_key = Napi::Buffer<char>::Copy(env, p, key.iov_len);
+                auto p = static_cast<const char*>(key.iov_base);
+                if (arg0->key_string) {
+                    js_key = Napi::String::New(env, p, key.iov_len);
+                } else {
+                    js_key = Napi::Buffer<char>::Copy(env, p, key.iov_len);
+                }
             }
+
             keys.Set(index++, js_key);
             
             // Переходим к следующей записи

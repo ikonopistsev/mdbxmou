@@ -49,8 +49,21 @@ const test = async () => {
   const r = db.startRead();
   const rdbi = r.getDbi(MDBX_db_flag.MDBX_INTEGERKEY);
   const val = rdbi.get(BigInt(2));
+  console.log("keys-Number", rdbi.keys());
+  console.log("keys-BigInt", rdbi.keys(true));
+  console.log("read 2", val);
+
+  console.log("forEach");
+  rdbi.forEach((key, value, index) => {
+    console.log(key, value, index);
+  });
+  console.log("forEach-BigInt");
+  rdbi.forEach(true, (key, value, index) => {
+    console.log(key, value, index);
+  });
+
   r.commit();
-  console.log("read 2", val)
+
 
   await db.close();
 }
