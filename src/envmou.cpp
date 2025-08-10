@@ -414,14 +414,14 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
 
     MDBX_txn_flags txn_flags{MDBX_TXN_RDONLY};
     // пок сделаем boolean (rw = true)
-    if (info.Length() > 1 || info[2].IsBoolean()) {
-        txn_flags = info[2].As<Napi::Boolean>().Value() ?
-            MDBX_TXN_READWRITE : MDBX_TXN_RDONLY;
+    if (info.Length() > 1 || info[1].IsBoolean()) {
+        txn_flags = static_cast<MDBX_txn_flags_t>(
+            info[1].As<Napi::Number>().Int64Value());
     }
 
     if (info.Length() < 1 || !info[0].IsArray()) {
         throw Napi::TypeError::New(env, 
-            "Expected array of requests: [{ db: string, flags: number, key: [] }, ...]");
+            "Expected array of requests: [{ db: String, flag: Number, item: [] }, ...]");
     }
 
     auto arg0 = info[0].As<Napi::Array>();

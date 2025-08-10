@@ -5,13 +5,13 @@ namespace mdbxmou {
 
 void async_query::Execute() 
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: async_query id=%d\n", gettid());
-    // создаем траназкцию 
+    // создаем транзакцию
+    //fprintf(stderr, "TRACE: async_query::Execute mdbx_txn_begin id=%d\n", gettid());
     MDBX_txn* txn;
     auto rc = mdbx_txn_begin(env_, nullptr, txn_flags_, &txn);
     if (rc != MDBX_SUCCESS) {
-        SetError(mdbx_strerror(rc));
+        SetError("query->txn_begin " + std::string("flags=") + std::to_string(txn_flags_) + 
+            std::string(", ") + mdbx_strerror(rc));
         return;
     }
 
@@ -33,13 +33,20 @@ void async_query::Execute()
             }
             MDBX_dbi dbi;
             rc = mdbx_dbi_open(txn, name, req.flag, &dbi);
+            //fprintf(stderr, "TRACE: async_query::Execute mdbx_dbi_open=%d id=%d\n", rc, gettid());
             if (rc != MDBX_SUCCESS) {
                 mdbx_txn_abort(txn);
-                SetError(mdbx_strerror(rc) + std::string(" (db:") + name + ")");
+                // чтобы не получить сигфолт
+                if (!name) {
+                    name = "null";
+                }
+                SetError("query->dbi_open " + std::string("flags=") + std::to_string(req.flag) + 
+                    std::string(", (db:") + name + "), " + mdbx_strerror(rc));
                 return;
             }
 
-            for (auto& q : req.param) 
+            //fprintf(stderr, "TRACE: async_query::Execute loop id=%d\n", gettid());
+            for (auto& q : req.item) 
             {
                 // получаем ключ и значение
                 auto k = q.mdbx_key(req.flag);
@@ -50,6 +57,7 @@ void async_query::Execute()
                     q.set_result(rc, v);
                 } else {
                     // иначе put
+                    //fprintf(stderr, "TRACE: async_query::Execute mdbx_put id=%d\n", gettid());
                     rc = mdbx_put(txn, dbi, &k, &v, 
                         static_cast<MDBX_put_flags_t>(q.flag));
                     q.rc = rc;
@@ -57,9 +65,11 @@ void async_query::Execute()
             }
         }
 
+        //fprintf(stderr, "TRACE: async_query::Execute mdbx_txn_commit id=%d\n", gettid());
         rc = mdbx_txn_commit(txn);
         if (rc != MDBX_SUCCESS) {
-            SetError(mdbx_strerror(rc));
+            SetError("query->txn_commit " + std::string("flags=") + std::to_string(txn_flags_) + 
+                std::string(", ") + mdbx_strerror(rc));
         }
     } catch (const std::exception& e) {
         abort_txn(txn);
@@ -73,7 +83,7 @@ void async_query::Execute()
 void async_query::OnOK() 
 {
     // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: async_query OnOK id=%d\n", gettid());
+    //fprintf(stderr, "TRACE: async_query::OnOK id=%d\n", gettid());
     
     // уменьшаем счетчик trx_count
     --env_;
@@ -89,7 +99,7 @@ void async_query::OnOK()
         if (row.flag != MDBX_DB_DEFAULTS) {
             js_row.Set("flag", Napi::Number::New(env, row.flag));
         }
-        auto& param = row.param;
+        auto& param = row.item;
         auto js_arr = Napi::Array::New(env, param.size());
         for (std::size_t j = 0; j < param.size(); ++j) {
             const auto& item = param[j];
@@ -137,6 +147,7 @@ void async_query::OnOK()
 
 void async_query::OnError(const Napi::Error& e) 
 {
+    //fprintf(stderr, "TRACE: async_query::OnError id=%d\n", gettid());
     // уменьшаем счетчик trx_count
     --env_;
 

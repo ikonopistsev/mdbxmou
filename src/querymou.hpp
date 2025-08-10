@@ -49,6 +49,7 @@ struct query_item
 
     void set_result(int code, const MDBX_val& v) 
     {
+        // fprintf(stderr, "set_result: code=%d, v.iov_len=%zu\n", code, v.iov_len);
         rc = code;
         auto ptr = static_cast<const char*>(v.iov_base);
         val.assign(ptr, ptr + v.iov_len);
@@ -65,7 +66,7 @@ struct query_db
     std::string db{};
     MDBX_db_flags_t flag{MDBX_DB_DEFAULTS};
     int key_type_used{key_unknown};
-    std::vector<query_item> param{};
+    std::vector<query_item> item{};
     
     static query_db parse(Napi::Env env, const Napi::Object& obj);
 };

@@ -6,6 +6,7 @@
   },
   "scripts": {
     "e4": "node ./test/e4.js",
+    "e5": "node ./test/e5.js",
     "build": "node build.js",
     "install": "node build.js"
   },

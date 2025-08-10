@@ -57,8 +57,9 @@ query_item query_item::parse(Napi::Env env, const Napi::Object& item, MDBX_db_fl
             "Expected string, buffer for key or BigInt/Number for MDBX_INTEGERKEY");
     }
 
-    if (item.Has("flags")) {
-        rc.flag = item.Get("flags").As<Napi::Number>().Uint32Value();
+    if (item.Has("flag")) {
+        rc.flag = static_cast<std::size_t>(
+            item.Get("flag").As<Napi::Number>().Int32Value());
     }
     
     if (item.Has("value") && rc.flag != query_item::mdbxmou_action_get) {
@@ -95,11 +96,11 @@ query_db query_db::parse(Napi::Env env, const Napi::Object& obj)
     if (obj.Has("item")) {
         auto items_array = obj.Get("item").As<Napi::Array>();
         auto length = items_array.Length();
-        result.param.reserve(length);
+        result.item.reserve(length);
         
         for (uint32_t i = 0; i < length; ++i) {
             const auto& item_obj = items_array.Get(i).As<Napi::Object>();
-            result.param.push_back(query_item::parse(env, item_obj, result.flag, result.key_type_used));
+            result.item.push_back(query_item::parse(env, item_obj, result.flag, result.key_type_used));
         }
     } else {
         throw Napi::Error::New(env, "query: 'item' array");

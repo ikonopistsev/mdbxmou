@@ -52,9 +52,11 @@ static inline MDBX_val cast(Napi::Env env, MDBX_db_flags_t flags, query_db::key_
             id_val = static_cast<std::uint64_t>(num);
             id_type = query_db::key_type::key_number;
             rc = MDBX_val{&id_val, sizeof(id_val)};
+        } else {
+             throw Napi::Error::New(env, "expected BigInt or Number for MDBX_INTEGERKEY");
         }
     } else {
-        throw Napi::TypeError::New(env, "expected String or Buffer or BigInt/Number for MDBX_INTEGERKEY");
+        throw Napi::Error::New(env, "expected String or Buffer");
     }
 
     return rc;
@@ -84,7 +86,7 @@ static inline MDBX_val cast(Napi::Env env,
 
         rc = MDBX_val{holder.data(), holder.size()};
     } else {
-        throw Napi::TypeError::New(env, "expected string or buffer");
+        throw Napi::Error::New(env, "expected String or Buffer");
     }
 
     return rc;
@@ -170,26 +172,11 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info) {
             throw Napi::Error::New(env, mdbx_strerror(rc));
         }        
 
-        if (flags_ & MDBX_INTEGERKEY) {
-            if (val.iov_len != sizeof(std::uint64_t)) {
-                throw Napi::Error::New(env, "Invalid value length for MDBX_INTEGERKEY");
-            }
-            if (id_type_ != query_db::key_type::key_unknown) {
-                throw Napi::Error::New(env, "Invalid key type for MDBX_INTEGERKEY");
-            }
-            if (id_type_ != query_db::key_type::key_bigint) {
-                std::uint64_t id = *static_cast<const std::uint64_t*>(val.iov_base);
-                return Napi::BigInt::New(env, id);
-            }
-            std::uint64_t id = *static_cast<const std::uint64_t*>(val.iov_base);
-            return Napi::Number::New(env, static_cast<double>(id));
-        } else {
-            auto p = static_cast<const char*>(val.iov_base);
-            if (arg0->key_string) {
-                return Napi::String::New(env, p, val.iov_len);
-            }
-            return Napi::Buffer<char>::Copy(env, p, val.iov_len);
+        auto p = static_cast<const char*>(val.iov_base);
+        if (arg0->val_string) {
+            return Napi::String::New(env, p, val.iov_len);
         }
+        return Napi::Buffer<char>::Copy(env, p, val.iov_len);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("get: ") + e.what());
     }

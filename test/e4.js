@@ -2,13 +2,13 @@
 
 const fs = require('fs');
 const MDBX = require('../lib/nativemou.js');
-const { MDBX_Env, MDBX_db_flags } = MDBX;
+const { MDBX_Env, MDBX_db_flag } = MDBX;
 
 const test = async () => {
   const path4 = 'e4';
   const path5 = 'e5';
 
-  console.log(MDBX_db_flags);
+  console.log(MDBX_db_flag);
 
   await Promise.all([
     fs.promises.rm(path4, { recursive: true, force: true }),
@@ -33,7 +33,7 @@ const test = async () => {
   const count = 10;
   const txn = db4.startWrite();
   // при изменении типа ключей надо указывать MDBX_CREATE если базы еще нет
-  const dbi = txn.getDbi(MDBX_db_flags.MDBX_REVERSEKEY|MDBX_db_flags.MDBX_CREATE);
+  const dbi = txn.getDbi(MDBX_db_flag.MDBX_REVERSEKEY|MDBX_db_flag.MDBX_CREATE);
   for (let i = 0; i < count; i++) {
     dbi.put(`key_${i}`, `value_${i}`, 0);
   }
@@ -54,7 +54,7 @@ const test = async () => {
   {
     const txn = db4.startRead();
     // для read транакций не нужно указывать MDBX_CREATE иначе будет Permission denied
-    const dbi = txn.getDbi(MDBX_db_flags.MDBX_REVERSEKEY);
+    const dbi = txn.getDbi(MDBX_db_flag.MDBX_REVERSEKEY);
     const stat = dbi.stat();
     for (let i = 0; i < count; i++) {
       val = dbi.get(`key_${i}`);
