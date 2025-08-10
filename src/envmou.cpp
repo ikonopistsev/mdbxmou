@@ -91,8 +91,11 @@ mdbx::env::geometry envmou::parse_geometry(Napi::Object obj)
 
 MDBX_env_flags_t envmou::parse_env_flags(Napi::Object obj)
 {
-    // TODO - implement parsing of environment flags
-    return MDBX_ACCEDE|MDBX_LIFORECLAIM|MDBX_SAFE_NOSYNC;
+    MDBX_env_flags_t flags{MDBX_ENV_DEFAULTS};
+    if (obj.Has("flags")) {
+        flags = static_cast<MDBX_env_flags_t>(obj.Get("flags").As<Napi::Number>().Uint32Value());
+    }
+    return flags;
 }
 
 env_arg0 envmou::parse(Napi::Object arg0)
