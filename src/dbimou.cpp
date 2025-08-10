@@ -6,8 +6,62 @@ namespace mdbxmou {
 
 Napi::FunctionReference dbimou::ctor{};
 
+static inline MDBX_val cast(Napi::Env env, MDBX_db_flags_t flags, query_db::key_type& id_type,
+    std::uint64_t& id_val, query_item::value_type& holder, const Napi::Value &from) // +stdexcept
+{
+    MDBX_val rc{};
+    
+    if (from.IsBuffer())        
+    {
+        auto key = from.As<Napi::Buffer<char>>();
+        id_type = query_db::key_type::key_unknown;
+        rc = MDBX_val{key.Data(), key.Length()};
+    } else if (from.IsString()) {
+        size_t length;
+        napi_status status =
+            napi_get_value_string_utf8(env, from, nullptr, 0, &length);
+        NAPI_THROW_IF_FAILED(env, status, "");
+
+        holder.reserve(length + 1);
+        holder.resize(length);
+
+        status = napi_get_value_string_utf8(
+            env, from, holder.data(), holder.capacity(), nullptr);
+        NAPI_THROW_IF_FAILED(env, status, "");
+
+        id_type = query_db::key_type::key_unknown;
+        rc = MDBX_val{holder.data(), holder.size()};
+    } else if (flags & MDBX_INTEGERKEY) {
+        if (from.IsBigInt()) {
+            auto value = from.As<Napi::BigInt>();
+            bool lossless{true};
+            id_val = value.Uint64Value(&lossless);
+            if (!lossless) {
+                throw Napi::Error::New(env, 
+                    "BigInt key must be lossless for MDBX_INTEGERKEY");
+            }
+            id_type = query_db::key_type::key_bigint;
+            rc = MDBX_val{&id_val, sizeof(id_val)};
+        } else if (from.IsNumber()) {
+            auto value = from.As<Napi::Number>();
+            auto num = value.Int64Value();
+            if (num < 0) {
+                throw Napi::Error::New(env, 
+                    "Number key must be non-negative for MDBX_INTEGERKEY");
+            }
+            id_val = static_cast<std::uint64_t>(num);
+            id_type = query_db::key_type::key_number;
+            rc = MDBX_val{&id_val, sizeof(id_val)};
+        }
+    } else {
+        throw Napi::TypeError::New(env, "expected String or Buffer or BigInt/Number for MDBX_INTEGERKEY");
+    }
+
+    return rc;
+}
+
 static inline MDBX_val cast(Napi::Env env, 
-    const Napi::Value &from, std::string& holder) // +stdexcept
+    query_item::value_type& holder, const Napi::Value &from) // +stdexcept
 {
     MDBX_val rc{};
     
@@ -83,8 +137,8 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info) {
     }
 
     try {
-        auto key = cast(env, info[0], key_buf_);
-        auto val = cast(env, info[1], val_buf_);
+        auto key = cast(env, flags_, id_type_, id_, key_buf_, info[0]);
+        auto val = cast(env, val_buf_, info[1]);
         auto rc = mdbx_put(*txn_, dbi_, &key, &val, flags);
         if (rc != MDBX_SUCCESS) {
             throw Napi::Error::New(env, mdbx_strerror(rc));
@@ -105,7 +159,7 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info) {
 
     try {
         auto arg0 = get_env_userctx(*env_);
-        auto key = cast(env, info[0], key_buf_);
+        auto key = cast(env, flags_, id_type_, id_, key_buf_, info[0]);
 
         MDBX_val val{};
         auto rc = mdbx_get(*txn_, dbi_, &key, &val);
@@ -116,11 +170,26 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info) {
             throw Napi::Error::New(env, mdbx_strerror(rc));
         }        
 
-        auto p = static_cast<const char*>(val.iov_base);
-        if (arg0->key_string) {
-            return Napi::String::New(env, p, val.iov_len);
+        if (flags_ & MDBX_INTEGERKEY) {
+            if (val.iov_len != sizeof(std::uint64_t)) {
+                throw Napi::Error::New(env, "Invalid value length for MDBX_INTEGERKEY");
+            }
+            if (id_type_ != query_db::key_type::key_unknown) {
+                throw Napi::Error::New(env, "Invalid key type for MDBX_INTEGERKEY");
+            }
+            if (id_type_ != query_db::key_type::key_bigint) {
+                std::uint64_t id = *static_cast<const std::uint64_t*>(val.iov_base);
+                return Napi::BigInt::New(env, id);
+            }
+            std::uint64_t id = *static_cast<const std::uint64_t*>(val.iov_base);
+            return Napi::Number::New(env, static_cast<double>(id));
+        } else {
+            auto p = static_cast<const char*>(val.iov_base);
+            if (arg0->key_string) {
+                return Napi::String::New(env, p, val.iov_len);
+            }
+            return Napi::Buffer<char>::Copy(env, p, val.iov_len);
         }
-        return Napi::Buffer<char>::Copy(env, p, val.iov_len);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("get: ") + e.what());
     }
@@ -136,7 +205,7 @@ Napi::Value dbimou::del(const Napi::CallbackInfo& info) {
     }
 
     try {
-        auto key = cast(env, info[0], key_buf_);
+        auto key = cast(env, flags_, id_type_, id_, key_buf_, info[0]);
         auto rc = mdbx_del(*txn_, dbi_, &key, nullptr);
         if (rc == MDBX_NOTFOUND) {
             return Napi::Value::From(env, false);
@@ -160,7 +229,7 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
     }
 
     try {
-        auto key = cast(env, info[0], key_buf_);
+        auto key = cast(env, flags_, id_type_, id_, key_buf_, info[0]);
         auto rc = mdbx_get(*txn_, dbi_, &key, nullptr);
         if (rc == MDBX_NOTFOUND) {
             return Napi::Value::From(env, false);

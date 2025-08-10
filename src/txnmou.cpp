@@ -136,7 +136,8 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info)
         MDBX_dbi dbi{};
         auto rc = mdbx_dbi_open(*this, name, flags, &dbi);
         if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, std::string("Open dbi: ") + mdbx_strerror(rc));
+            throw Napi::Error::New(env, std::string("flags=") + 
+                std::to_string(flags) + ", " + mdbx_strerror(rc));
         }
         ptr->attach(env_, this, dbi, flags);
         return obj;

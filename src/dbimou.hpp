@@ -18,8 +18,10 @@ class dbimou final
     txnmou* txn_{nullptr};
     MDBX_dbi dbi_{};
     MDBX_db_flags_t flags_{MDBX_DB_DEFAULTS};
-    std::string key_buf_{};
-    std::string val_buf_{};
+    query_item::value_type key_buf_{};
+    query_item::value_type val_buf_{};
+    std::uint64_t id_{};
+    query_db::key_type id_type_{query_db::key_type::key_unknown};
 
     struct close_cursor {
         void operator()(MDBX_cursor *cursor) const noexcept {

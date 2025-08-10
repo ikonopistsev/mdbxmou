@@ -27,7 +27,7 @@ struct query_item
     MDBX_val mdbx_key(MDBX_db_flags_t db_flag) const 
     {
         MDBX_val rc{};
-        if (db_flag == MDBX_INTEGERKEY) {
+        if (db_flag & MDBX_INTEGERKEY) {
             rc.iov_base = const_cast<std::uint64_t*>(&id);
             rc.iov_len = sizeof(id);
         } else {
