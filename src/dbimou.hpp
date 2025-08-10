@@ -1,5 +1,6 @@
 #pragma once
 
+#include "valuemou.hpp"
 #include "querymou.hpp"
 #include "env_arg0.hpp"
 #include <memory>
@@ -18,9 +19,9 @@ class dbimou final
     txnmou* txn_{nullptr};
     MDBX_dbi dbi_{};
     MDBX_db_flags_t flags_{MDBX_DB_DEFAULTS};
-    query_item::value_type key_buf_{};
-    query_item::value_type val_buf_{};
-    std::uint64_t id_{};
+    buffer_type key_buf_{};
+    buffer_type val_buf_{};
+    std::uint64_t id_buf_{};
     query_db::key_type id_type_{query_db::key_type::key_unknown};
 
     struct close_cursor {
