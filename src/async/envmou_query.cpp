@@ -51,7 +51,7 @@ void async_query::Execute()
                 // получаем ключ и значение
                 auto k = q.mdbx_key(req.flag);
                 auto v = q.mdbx_value();
-                if (q.flag == query_item::mdbxmou_action_get) {
+                if (q.flag == query_item::MDBXMOU_GET) {
                     // выполняем get
                     rc = mdbx_get(txn, dbi, &k, &v);
                     q.set_result(rc, v);
@@ -106,7 +106,7 @@ void async_query::OnOK()
             Napi::Object js_item = Napi::Object::New(env);
             if (row.flag & MDBX_INTEGERKEY) {
                 auto& id_rc = item.id;
-                if (row.key_type_used == 1) { // key_bigint
+                if (row.id_type == query_db::key_bigint) {
                     js_item.Set("key", Napi::BigInt::New(env, id_rc));
                 } else {
                     js_item.Set("key", Napi::Number::New(env, static_cast<int64_t>(id_rc)));
@@ -131,7 +131,7 @@ void async_query::OnOK()
             }
 
             // скрываем гет флаг
-            if (item.flag != query_item::mdbxmou_action_get) {
+            if (item.flag != query_item::MDBXMOU_GET) {
                 js_item.Set("flag", Napi::Number::New(env, item.flag));
             }
             js_item.Set("rc", Napi::Number::New(env, item.rc));

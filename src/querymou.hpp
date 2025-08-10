@@ -18,11 +18,11 @@ struct query_item
     value_type key{};
     value_type val{};
     // флаг чтения данных
-    constexpr static std::size_t mdbxmou_action_get{static_cast<std::size_t>(-1)};
-    std::size_t flag{mdbxmou_action_get};
+    constexpr static std::size_t MDBXMOU_GET{static_cast<std::size_t>(-1)};
+    std::size_t flag{MDBXMOU_GET};
     int rc{};
 
-    static query_item parse(Napi::Env env, const Napi::Object& obj, MDBX_db_flags_t db_flag, int& db_key_type);
+    static query_item parse(Napi::Env env, const Napi::Object& obj, MDBX_db_flags_t db_flag, int db_key_type);
 
     MDBX_val mdbx_key(MDBX_db_flags_t db_flag) const 
     {
@@ -40,7 +40,7 @@ struct query_item
     MDBX_val mdbx_value() const 
     {
         MDBX_val rc{};
-        if (flag != mdbxmou_action_get) {
+        if (flag != MDBXMOU_GET) {
             rc.iov_base = const_cast<char*>(val.data());
             rc.iov_len = val.size();
         }
@@ -65,7 +65,7 @@ struct query_db
     };    
     std::string db{};
     MDBX_db_flags_t flag{MDBX_DB_DEFAULTS};
-    int key_type_used{key_unknown};
+    key_type id_type{key_unknown};
     std::vector<query_item> item{};
     
     static query_db parse(Napi::Env env, const Napi::Object& obj);

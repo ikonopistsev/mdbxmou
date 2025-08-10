@@ -2,7 +2,7 @@
 
 namespace mdbxmou {
 
-query_item query_item::parse(Napi::Env env, const Napi::Object& item, MDBX_db_flags_t db_flag, int& db_key_type)
+query_item query_item::parse(Napi::Env env, const Napi::Object& item, MDBX_db_flags_t db_flag, int id_type)
 {
     query_item rc{};
     auto item_key = item.Get("key");
@@ -16,13 +16,9 @@ query_item query_item::parse(Napi::Env env, const Napi::Object& item, MDBX_db_fl
     } else if (db_flag & MDBX_INTEGERKEY) {
         if (item_key.IsBigInt()) {
             // Проверяем консистентность типов
-            if (db_key_type == query_db::key_number) { // key_unknown
+            if (id_type == query_db::key_number) { // key_unknown
                 throw Napi::Error::New(env, 
                     "All keys must be the same type for MDBX_INTEGERKEY");
-            }
-            // key_bigint - фиксируем тип по первому ключу
-            if (db_key_type == query_db::key_unknown) {
-                db_key_type = query_db::key_bigint;
             }
             auto value = item_key.As<Napi::BigInt>();
             bool lossless{true};
@@ -33,14 +29,10 @@ query_item query_item::parse(Napi::Env env, const Napi::Object& item, MDBX_db_fl
             }
         } else if (item_key.IsNumber()) {
             // Проверяем консистентность типов
-            if (db_key_type == query_db::key_bigint) { // key_unknown
+            if (id_type == query_db::key_bigint) { // key_unknown
                 throw Napi::Error::New(env, 
                     "All keys must be the same type for MDBX_INTEGERKEY");
             }
-            // key_bigint - фиксируем тип по первому ключу
-            if (db_key_type == query_db::key_unknown) {
-                db_key_type = query_db::key_number;
-            }            
             auto value = item_key.As<Napi::Number>();
             auto num = value.Int64Value();
             if (num < 0) {
@@ -62,7 +54,7 @@ query_item query_item::parse(Napi::Env env, const Napi::Object& item, MDBX_db_fl
             item.Get("flag").As<Napi::Number>().Int32Value());
     }
     
-    if (item.Has("value") && rc.flag != query_item::mdbxmou_action_get) {
+    if (item.Has("value") && rc.flag != query_item::MDBXMOU_GET) {
         auto item_val = item.Get("value");
         if (item_val.IsString()) {
             auto str = item_val.As<Napi::String>().Utf8Value();
@@ -89,7 +81,19 @@ query_db query_db::parse(Napi::Env env, const Napi::Object& obj)
     
     // Парсим флаги базы данных
     if (obj.Has("flag")) {
-        result.flag = static_cast<MDBX_db_flags_t>(obj.Get("flag").As<Napi::Number>().Uint32Value());
+        auto arg_flag = obj.Get("flag");
+        if (arg_flag.IsBigInt()) {
+            bool lossless{true};
+            result.flag = static_cast<MDBX_db_flags_t>(arg_flag.As<Napi::BigInt>().Int64Value(&lossless));
+            if (result.flag & MDBX_INTEGERKEY) {
+                result.id_type = query_db::key_bigint;
+            }
+        } if (arg_flag.IsNumber()) {
+            result.flag = static_cast<MDBX_db_flags_t>(arg_flag.As<Napi::Number>().Int32Value());
+            if (result.flag & MDBX_INTEGERKEY) {
+                result.id_type = query_db::key_number;
+            }
+        }
     }
     
     // Парсим элементы
@@ -100,7 +104,7 @@ query_db query_db::parse(Napi::Env env, const Napi::Object& obj)
         
         for (uint32_t i = 0; i < length; ++i) {
             const auto& item_obj = items_array.Get(i).As<Napi::Object>();
-            result.item.push_back(query_item::parse(env, item_obj, result.flag, result.key_type_used));
+            result.item.push_back(query_item::parse(env, item_obj, result.flag, result.id_type));
         }
     } else {
         throw Napi::Error::New(env, "query: 'item' array");
