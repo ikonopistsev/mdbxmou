@@ -10,26 +10,24 @@ namespace mdbxmou {
 using buffer_type = std::vector<char>;
 
 class valuemou
+    : public mdbx::slice
 {
-protected:    
-    mdbx::slice slice_{};
-
 public:
     valuemou() = default;
 
     valuemou(const mdbx::slice& arg0) noexcept
-        : slice_{arg0}
+        : mdbx::slice{arg0}
     {   }
 
     valuemou(const Napi::Buffer<char>& arg0) noexcept
-        : slice_{arg0.Data(), arg0.Length()}
+        : mdbx::slice{arg0.Data(), arg0.Length()}
     {   }
 
     valuemou(const Napi::Buffer<char>& arg0, buffer_type& mem)
     {   
         auto ptr = arg0.Data();
         mem.assign(ptr, ptr + arg0.Length());
-        slice_.assign(mem.data(), mem.size());
+        assign(mem.data(), mem.size());
     }
 
     valuemou(const Napi::String& arg0, 
@@ -51,7 +49,7 @@ public:
             throw Napi::Error::New(env, "napi_get_value_string_utf8 copyout");
         }
 
-        slice_.assign(mem.data(), mem.size());
+        assign(mem.data(), mem.size());
     }
 
     static inline valuemou from(const Napi::Value& arg0, 
@@ -60,7 +58,7 @@ public:
         if (arg0.IsBuffer()) {
             return {arg0.As<Napi::Buffer<char>>()};
         } else if (!arg0.IsString()) {
-            throw Napi::Error::New(env, "Unsupported value");
+            throw Napi::Error::New(env, "unsupported value");
         }
         return {arg0.As<Napi::String>(), env, mem};
     }
@@ -68,20 +66,13 @@ public:
     Napi::Value to_string(const Napi::Env& env) const
     {
         return Napi::String::New(env, 
-            slice_.char_ptr(), slice_.length());
+            char_ptr(), length());
     }
 
     Napi::Value to_buffer(const Napi::Env& env) const
     {
         return Napi::Buffer<char>::Copy(env, 
-            slice_.char_ptr(), slice_.length());
-    }
-
-    operator MDBX_val *() noexcept { 
-        return slice_; 
-    }
-    operator const MDBX_val *() const noexcept { 
-        return slice_; 
+            char_ptr(), length());
     }
 };
 
@@ -128,7 +119,7 @@ public:
             throw Napi::Error::New(env, "Number negative");
         }
         mem = static_cast<std::uint64_t>(value);
-        slice_.assign(&mem, sizeof(mem));
+        assign(&mem, sizeof(mem));
     }
 
     keymou(const Napi::BigInt& arg0, 
@@ -139,7 +130,7 @@ public:
         if (!looseless) {
             throw Napi::Error::New(env, "BigInt !looseless");
         }
-        slice_.assign(&mem, sizeof(mem));
+        assign(&mem, sizeof(mem));
     }
 
     static inline keymou from(const Napi::Value& arg0, 
@@ -154,7 +145,7 @@ public:
         if (arg0.IsBigInt()) {
             return {arg0.As<Napi::BigInt>(), env, mem};
         } else if (!arg0.IsNumber()) {
-            throw Napi::Error::New(env, "Unsupported key");
+            throw Napi::Error::New(env, "unsupported key");
         }
         return {arg0.As<Napi::Number>(), env, mem};
     }
@@ -165,19 +156,19 @@ public:
         if (arg0.IsBuffer() || arg0.IsString()) {
             return from(arg0, env, buf);
         } else if (!(arg0.IsNumber() || arg0.IsBigInt())) {
-            throw Napi::Error::New(env, "Unsupported key");
+            throw Napi::Error::New(env, "unsupported key");
         }
         return from(arg0, env, num);
     }
 
     Napi::Value to_number(const Napi::Env& env) const
     {
-        return Napi::Number::New(env, slice_.as_int64());
+        return Napi::Number::New(env, as_int64());
     }
 
     Napi::Value to_bigint(const Napi::Env& env) const
     {
-        return Napi::BigInt::New(env, slice_.as_uint64());
+        return Napi::BigInt::New(env, as_uint64());
     }
 };
 

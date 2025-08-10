@@ -1,9 +1,6 @@
 #pragma once
 
-#include <napi.h>
-#include <mdbx.h++>
-#include <cstdint>
-#include <vector>
+#include "valuemou.hpp"
 
 namespace mdbxmou {
 
@@ -12,11 +9,10 @@ struct query_db;
 
 struct query_item 
 {
-    using value_type = std::vector<char>;
     // быстрый key если MDBX_db_flags_t == MDBX_INTEGERKEY
     std::uint64_t id{}; 
-    value_type key{};
-    value_type val{};
+    buffer_type key{};
+    buffer_type val{};
     // флаг чтения данных
     constexpr static std::size_t MDBXMOU_GET{static_cast<std::size_t>(-1)};
     std::size_t flag{MDBXMOU_GET};
