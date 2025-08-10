@@ -5,6 +5,7 @@
     "node-addon-api": "^8.5.0"
   },
   "scripts": {
+    "e3": "node ./test/e3.js",
     "e4": "node ./test/e4.js",
     "e5": "node ./test/e5.js",
     "build": "node build.js",

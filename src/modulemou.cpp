@@ -26,9 +26,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     Napi::Object txn_flag = Napi::Object::New(env);
     MDBXMOU_DECLARE_FLAG(txn_flag, MDBX_TXN_READWRITE);
     MDBXMOU_DECLARE_FLAG(txn_flag, MDBX_TXN_RDONLY);
-    MDBXMOU_DECLARE_FLAG(txn_flag, MDBX_TXN_TRY);
-    MDBXMOU_DECLARE_FLAG(txn_flag, MDBX_TXN_NOMETASYNC);
-    MDBXMOU_DECLARE_FLAG(txn_flag, MDBX_TXN_NOSYNC);
+    //MDBXMOU_DECLARE_FLAG(txn_flag, MDBX_TXN_TRY);
+    //MDBXMOU_DECLARE_FLAG(txn_flag, MDBX_TXN_NOMETASYNC);
+    //MDBXMOU_DECLARE_FLAG(txn_flag, MDBX_TXN_NOSYNC);
     exports.Set("MDBX_txn_flag", txn_flag);
 
     Napi::Object db_flag = Napi::Object::New(env);
