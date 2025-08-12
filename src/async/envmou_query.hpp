@@ -44,7 +44,7 @@ class async_query
         mdbx::map_handle dbi, query_line& arg0);    
 
     void do_get(const txnmou_managed& txn, 
-        mdbx::map_handle dbi, query_line& arg0);    
+        mdbx::map_handle dbi, query_line& arg0, bool keys = false);    
 
     void do_put(txnmou_managed& txn, 
         mdbx::map_handle dbi, query_line& arg0);   

@@ -24,11 +24,11 @@ void async_query::Execute()
 
             auto mode = req.mode;
             //fprintf(stderr, "async_query::choose 0x%X\n", mode.val);
-            if (mode.val & query_mode::del) {
+            if (mode.val & query_mode::get|query_mode::keys) {
                 // делаем del
-                do_del(txn, dbi, req);
-            } else if (mode.val & query_mode::get) {
                 do_get(txn, dbi, req);
+            } else if (mode.val & query_mode::del) {
+                do_del(txn, dbi, req);
             } else {
                 do_put(txn, dbi, req);
             }
@@ -78,7 +78,7 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
         }
 
         // выдадим флаги удаления и успешности
-        if (mode.val & query_mode::del) {
+        if (mode.val & query_mode::del|query_mode::keys) {
             js_item.Set("found", Napi::Boolean::New(env, item.rc));
         }
         js_arr.Set(j, js_item);
@@ -140,7 +140,7 @@ void async_query::do_del(txnmou_managed& txn,
 }
 
 void async_query::do_get(const txnmou_managed& txn, 
-    mdbx::map_handle dbi, query_line& arg0)
+    mdbx::map_handle dbi, query_line& arg0, bool keys)
 {
     //fprintf(stderr, "async_query::do_get\n");
 
@@ -151,7 +151,8 @@ void async_query::do_get(const txnmou_managed& txn,
             keymou{q.id_buf} : keymou{q.key_buf};
         mdbx::slice abs{};
         valuemou val{txn.get(dbi, key, abs)};
-        q.set(val);
+        q.set(keys ? val : abs);
+        q.rc = !val.is_null();
     }
 }
 

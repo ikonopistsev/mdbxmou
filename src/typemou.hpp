@@ -80,7 +80,7 @@ struct query_mode
         update = MDBX_CURRENT,
         insert_unique = MDBX_NOOVERWRITE,
         write_mask = upsert | update | insert_unique,
-        mask = get | del | upsert | update | insert_unique
+        mask = get | del | keys | upsert | update | insert_unique
     };
     int val{get};
 
