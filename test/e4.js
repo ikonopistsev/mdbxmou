@@ -59,7 +59,7 @@ const test = async () => {
     const dbi = txn.openMap(BigInt(key_mode.ordinal));
     const stat = dbi.stat();
     for (let i = 0; i < count; i++) {
-      val = dbi.get(BigInt(i));
+      val = dbi.get(i);
     }
     console.log('last value:', val.toString());
     console.log('stat:', JSON.stringify(stat));

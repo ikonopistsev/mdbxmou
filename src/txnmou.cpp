@@ -102,24 +102,27 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
         auto value_flag = conf->value_flag;
         auto arg_count = info.Length();
         if (arg_count == 3) {
-            auto arg0 = info[0];
-            auto arg1 = info[1];
-            auto arg2 = info[2];
-            key_mode = parse_key_mode(env, arg0, key_flag);
-            value_mode = value_mode::parse(arg1);
-            db_name = arg2.As<Napi::String>().Utf8Value();
+            auto arg0 = info[0]; // db_name
+            auto arg1 = info[1]; // key_mode
+            auto arg2 = info[2]; // value_mode
+            db_name = arg0.As<Napi::String>().Utf8Value();
+            key_mode = parse_key_mode(env, arg1, key_flag);
+            value_mode = value_mode::parse(arg2);
         } else if (arg_count == 2) {
-            auto arg0 = info[0];
-            auto arg1 = info[1];
+            // db_name + key_mode || key_mode + value_mode
+            auto arg0 = info[0]; 
+            auto arg1 = info[1]; 
             if (arg0.IsString()) {
                 db_name = arg0.As<Napi::String>().Utf8Value();
-            } else if (arg1.IsNumber()) {
+                key_mode = parse_key_mode(env, arg1, key_flag);
+            } else if (arg0.IsNumber()) {
+                key_mode = parse_key_mode(env, arg0, key_flag);
                 value_mode = value_mode::parse(arg1);
             } else {
                 throw Napi::Error::New(env, "Invalid argument type for db_name or value_mode");
             }
-            key_mode = parse_key_mode(env, arg1, key_flag);
         } else if (arg_count == 1) {
+            // db_name || key_mode
             auto arg0 = info[0];
             if (arg0.IsString()) {
                 db_name = arg0.As<Napi::String>().Utf8Value();
