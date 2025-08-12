@@ -387,7 +387,7 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
 
     if (info.Length() < 1 || !info[0].IsArray()) {
         throw Napi::TypeError::New(env, 
-            "Expected array of requests: [{ db: String, flag: Number, item: [] }, ...]");
+            "Expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number, mode: Number, item: [] }, ...]");
     }
     try
     {

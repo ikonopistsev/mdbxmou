@@ -11,8 +11,6 @@ struct query_element
     // память для преобразования 
     buffer_type key_buf{};
     buffer_type val_buf{};
-    buffer_type prev_buf{};
-    // быстрый key если MDBX_db_flags_t == MDBX_INTEGERKEY
     std::uint64_t id_buf{};
     bool rc{false};
 
