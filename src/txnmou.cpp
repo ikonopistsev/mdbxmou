@@ -94,9 +94,9 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
             throw std::runtime_error("dbi: cannot open DB in read-only transaction");
         }
 
-        std::string db_name{};
         key_mode key_mode{};
         value_mode value_mode{};
+        std::string db_name{};
         auto conf = dbimou::get_env_userctx(*env_);
         auto key_flag = conf->key_flag;
         auto value_flag = conf->value_flag;

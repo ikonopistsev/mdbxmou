@@ -27,18 +27,18 @@ const test = async () => {
   const count = 2;
   console.log('Start write');
   const txn = db.startWrite();
-  // при изменении типа ключей надо указывать MDBX_CREATE если базы еще нет
+  // будем использовать ordinal ключи
   const dbi = txn.createMap(key_mode.ordinal);
   for (let i = 0; i < count; i++) {
-    dbi.put(BigInt(i), `val-${i}`, 0);
+    dbi.put(i, `val-${i}`, 0);
   }
   txn.commit();
   console.log('Write finish');
 
 
-  // вычитаем key = 2 - асинхронно
-  // по умолчаниюю чтение идет в режиме wr убираем флаг MDBX_CREATE
-  // чтобы не получить Permission denied
+  // вычитаем key = 1 - асинхронно
+  // запишем при этом key = 2
+  // по умолчаниюю query выполняется в режиме wr
   const out = await db.query([
     { 
       mode: query_mode.get, 
@@ -50,21 +50,21 @@ const test = async () => {
       mode: query_mode.insert_unique, 
       key_mode: key_mode.ordinal,
       key_flag: key_flag.number,
-      item: [{ "key": Number(2), "value":"val-2" }] 
+      item: [{ "key": 2, "value":"val-2" }] 
     }
   ]);
   console.log(JSON.stringify(out));
 
   // вычитаем key = 2 - синхронно
   const r = db.startRead();
-  const rdbi = r.openMap(BigInt(key_mode.ordinal));
+  const rdbi = r.openMap(key_mode.ordinal);
   const val = rdbi.get(2);
   console.log("keys", rdbi.keys());
   console.log("read 2", val);
 
   console.log("forEach");
   rdbi.forEach((key, value, index) => {
-    console.log(key, value, index);
+    console.log(`[${index}]`, key, value);
   });
 
   r.commit();
