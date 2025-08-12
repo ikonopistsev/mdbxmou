@@ -58,8 +58,9 @@ const test = async () => {
   // вычитаем key = 2 - синхронно
   const r = db.startRead();
   const rdbi = r.openMap(key_mode.ordinal);
+  const keys = rdbi.keys();
   const val = rdbi.get(2);
-  console.log("keys", rdbi.keys());
+  console.log("keys", keys);
   console.log("read 2", val);
 
   console.log("forEach");
@@ -68,8 +69,26 @@ const test = async () => {
   });
 
   r.commit();
+  // добавим не существующий ключ
+  keys.push(42);
+  // удалим все ключи
+  const rm = await db.query([
+      { 
+        mode: query_mode.del, 
+        key_mode: key_mode.ordinal, 
+        item: keys.map(key => ({ "key": key }))
+      }
+  ]);
+  console.log("rm keys", JSON.stringify(rm));
 
-
+  // вычитаем все ключи
+  {
+    // вычитаем key = 2 - синхронно
+    const r = db.startRead();
+    const dbi = r.openMap(key_mode.ordinal);
+    console.log("keys", dbi.keys());
+    r.commit();
+  }
   await db.close();
 }
 
