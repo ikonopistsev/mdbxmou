@@ -42,51 +42,63 @@ void async_query::Execute()
     }
 }
 
+static Napi::Value write_row(Napi::Env env, const query_line& row) 
+{
+    auto& param = row.item;
+    auto key_mode = row.key_mod;
+    auto key_flag = row.key_flag;
+    auto mode = row.mode;
+    auto js_arr = Napi::Array::New(env, param.size());
+    for (std::size_t j = 0; j < param.size(); ++j) {
+        const auto& item = param[j];
+        Napi::Object js_item = Napi::Object::New(env);
+        if (key_mode.val & key_mode::ordinal) {
+            js_item.Set("key", (key_flag.val & base_flag::number) ?
+                Napi::Number::New(env, item.id_buf) : Napi::BigInt::New(env, item.id_buf));
+        } else {
+            js_item.Set("key", (key_flag.val & base_flag::string) ?
+                Napi::String::New(env, item.key_buf.data(), item.key_buf.size()) :
+                Napi::Buffer<char>::Copy(env, item.key_buf.data(), item.key_buf.size()));
+        }
+
+        if (mode.val & query_mode::get) {
+            auto& val_buf = item.val_buf;
+            if (val_buf.empty()) {
+                js_item.Set("value", env.Null());
+            } else {
+                auto value_flag = row.value_flag;
+                js_item.Set("value", (value_flag.val & base_flag::string) ?
+                    Napi::String::New(env, val_buf.data(), val_buf.size()) :
+                    Napi::Buffer<char>::Copy(env, val_buf.data(), val_buf.size()));
+            }
+        }
+        js_arr.Set(j, js_item);
+    }
+    return js_arr;
+}
+
 void async_query::OnOK() 
 {
     --env_;
 
     Napi::Env env = Env();
+
+    if (single_) {
+        if (query_.size() == 1) {
+            const auto& row = query_[0];
+            deferred_.Resolve(write_row(env, row));
+            return;
+        }
+    }
+
     Napi::Array result = Napi::Array::New(env, query_.size());
     for (std::size_t i = 0; i < query_.size(); ++i) {
-        const auto& row = query_[i];
         Napi::Object js_row = Napi::Object::New(env);
+        const auto& row = query_[i];
         if (!row.db.empty()) {
             js_row.Set("db", Napi::String::New(env, row.db_name));
         }
-        auto& param = row.item;
-        auto key_mode = row.key_mod;
-        auto key_flag = row.key_flag;
-        auto mode = row.mode;
-        auto js_arr = Napi::Array::New(env, param.size());
-        for (std::size_t j = 0; j < param.size(); ++j) {
-            const auto& item = param[j];
-            Napi::Object js_item = Napi::Object::New(env);
-            if (key_mode.val & key_mode::ordinal) {
-                js_item.Set("key", (key_flag.val & base_flag::number) ?
-                    Napi::Number::New(env, item.id_buf) : Napi::BigInt::New(env, item.id_buf));
-            } else {
-                js_item.Set("key", (key_flag.val & base_flag::string) ?
-                    Napi::String::New(env, item.key_buf.data(), item.key_buf.size()) :
-                    Napi::Buffer<char>::Copy(env, item.key_buf.data(), item.key_buf.size()));
-            }
-
-            if (mode.val & query_mode::get) {
-                auto& val_buf = item.val_buf;
-                if (val_buf.empty()) {
-                    js_item.Set("value", env.Null());
-                } else {
-                    auto value_flag = row.value_flag;
-                    js_item.Set("value", (value_flag.val & base_flag::string) ?
-                        Napi::String::New(env, val_buf.data(), val_buf.size()) :
-                        Napi::Buffer<char>::Copy(env, val_buf.data(), val_buf.size()));
-                }
-            }
-            js_arr.Set(j, js_item);
-        }
-
-        js_row.Set("item", js_arr);
-        result.Set(i, js_row);
+        result.Set(i, write_row(env, row));
     }
 
     deferred_.Resolve(result);

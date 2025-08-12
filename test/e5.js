@@ -67,6 +67,15 @@ const test = async () => {
   });
 
   r.commit();
+
+  // почитаем асинхронно в упрощенном режиме
+  console.log("Read key = 2 in simple async mode to out2");
+  const out2 = await db.query({
+    key_mode: key_mode.ordinal,
+    item: [{ "key": 42 }]  
+  });
+  console.log("out2", JSON.stringify(out2));
+
   // добавим не существующий ключ
   keys.push(42);
   // удалим все ключи

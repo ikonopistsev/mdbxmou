@@ -381,14 +381,15 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
 
     txn_mode mode{};
 
+    if (info.Length() < 1) {
+        throw Napi::TypeError::New(env, 
+            "Expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number, mode: Number, item: [] }, ...]");
+    }
+
     if (info.Length() > 1 || info[1].IsNumber()) {
         mode = txn_mode::parse(info[1].As<Napi::Number>());
     }
 
-    if (info.Length() < 1 || !info[0].IsArray()) {
-        throw Napi::TypeError::New(env, 
-            "Expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number, mode: Number, item: [] }, ...]");
-    }
     try
     {
         lock_guard lock(*this);
@@ -397,10 +398,11 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
 
         auto conf = dbimou::get_env_userctx(*this);
 
+        auto arg0 = info[0];
         query_request query = parse_query(mode, 
-            conf->key_flag, conf->value_flag, info[0]);
-
-        auto* worker = new async_query(env, *this, mode, std::move(query));
+            conf->key_flag, conf->value_flag, arg0);
+        auto* worker = new async_query(env, *this, mode, 
+            std::move(query), arg0.IsObject());
         auto promise = worker->GetPromise();
         worker->Queue();
         

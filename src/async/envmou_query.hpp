@@ -14,15 +14,18 @@ class async_query
     txn_mode txn_mode_{};
     // действия для выполнения
     query_request query_{};
+    // упрощенный режим 1 массив
+    bool single_{false};
 
     public:
     async_query(Napi::Env env, envmou& e, 
-        txn_mode txn_mode, query_request query)
+        txn_mode txn_mode, query_request query, bool single = false)
         : Napi::AsyncWorker{env}
         , deferred_{Napi::Promise::Deferred::New(env)}
         , env_{e}
         , txn_mode_{txn_mode}
         , query_{std::move(query)}
+        , single_{single}
     {   }
 
     void Execute() override;
