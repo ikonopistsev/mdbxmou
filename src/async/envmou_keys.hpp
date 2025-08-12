@@ -6,20 +6,20 @@ namespace mdbxmou {
 
 class envmou;
 
-class async_query
+class async_keys
     : public Napi::AsyncWorker 
 {
     Napi::Promise::Deferred deferred_;
     envmou& env_;
     txn_mode txn_mode_{};
     // действия для выполнения
-    query_request query_{};
+    keys_request query_{};
     // упрощенный режим 1 массив
     bool single_{false};
 
     public:
-    async_query(Napi::Env env, envmou& e, 
-        txn_mode txn_mode, query_request query, bool single = false)
+    async_keys(Napi::Env env, envmou& e, 
+        txn_mode txn_mode, keys_request query, bool single = false)
         : Napi::AsyncWorker{env}
         , deferred_{Napi::Promise::Deferred::New(env)}
         , env_{e}
@@ -40,14 +40,8 @@ class async_query
 
     txnmou_managed start_transaction();
 
-    void do_del(txnmou_managed& txn, 
-        mdbx::map_handle dbi, query_line& arg0);    
-
-    void do_get(const txnmou_managed& txn, 
-        mdbx::map_handle dbi, query_line& arg0);    
-
-    void do_put(txnmou_managed& txn, 
-        mdbx::map_handle dbi, query_line& arg0);   
+    void do_keys(txnmou_managed& txn, 
+        mdbx::map_handle dbi, keys_line& arg0);    
 };
 
 } // namespace mdbxmou

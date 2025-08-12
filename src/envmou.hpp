@@ -80,7 +80,8 @@ public:
     Napi::Value copy_to(const Napi::CallbackInfo&);
     // метод для групповых вставок или чтения
     // внутри транзакция, получение db и чтение/запись
-    Napi::Value query(const Napi::CallbackInfo&); 
+    Napi::Value query(const Napi::CallbackInfo&);
+    Napi::Value keys(const Napi::CallbackInfo&);
     
     // Методы для создания транзакций
     Napi::Value start_read(const Napi::CallbackInfo& info) {

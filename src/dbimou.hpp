@@ -34,6 +34,7 @@ class dbimou final
     };
     using cursor_ptr = std::unique_ptr<MDBX_cursor, close_cursor>;
 
+public:
     static inline MDBX_stat get_stat(MDBX_txn* txn, MDBX_dbi dbi) 
     {
         MDBX_stat stat;
@@ -44,7 +45,6 @@ class dbimou final
         return stat;
     }    
     
-public:    
     static Napi::FunctionReference ctor;
 
     dbimou(const Napi::CallbackInfo& info)

@@ -62,7 +62,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     MDBXMOU_DECLARE_FLAG_NAME(query_mode, "update", mdbxmou::query_mode::update);
     MDBXMOU_DECLARE_FLAG_NAME(query_mode, "insertUnique", mdbxmou::query_mode::insert_unique);
     MDBXMOU_DECLARE_FLAG_NAME(query_mode, "get", mdbxmou::query_mode::get);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "keys", mdbxmou::query_mode::keys);
     MDBXMOU_DECLARE_FLAG_NAME(query_mode, "del", mdbxmou::query_mode::del);
     mdbx_mou.Set("queryMode", query_mode);
 

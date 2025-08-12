@@ -51,7 +51,7 @@ const test = async () => {
       item: [{ "key": 2, "value":"val-2" }] 
     }
   ]);
-  console.log(JSON.stringify(out));
+  console.log('q1', JSON.stringify(out));
 
   // вычитаем key = 2 - синхронно
   const r = db.startRead();
@@ -68,14 +68,22 @@ const test = async () => {
 
   r.commit();
 
-  // почитаем асинхронно в упрощенном режиме
-  console.log("Read key = 2 in simple async mode to out2");
-  const out2 = await db.query({
-    keyMode: keyMode.ordinal,
-    item: [{ "key": 2 }, { "key": 42 }]  
-  });
-  console.log("out2", JSON.stringify(out2));
-
+  {
+    // почитаем асинхронно в упрощенном режиме
+    console.log("Read key = 2 in simple async mode to out2");
+    const out2 = await db.query({
+      keyMode: keyMode.ordinal,
+      item: [{ "key": 2 }, { "key": 42 }]  
+    });
+    console.log("out2", JSON.stringify(out2));
+  }
+  {
+    // почитаем асинхронно в упрощенном режиме
+    const out = await db.keys({
+      keyMode: BigInt(keyMode.ordinal),
+    });
+    console.log("await keys()", out);
+  }
   // добавим не существующий ключ
   keys.push(42);
   // удалим все ключи
