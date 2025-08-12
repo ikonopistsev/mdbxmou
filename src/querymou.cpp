@@ -76,6 +76,8 @@ query_line query_line::parse(txn_mode mode, base_flag key_flag,
 
     if (obj.Has("mode")) {
         rc.mode = query_mode::parse(mode, obj.Get("mode").As<Napi::Number>());
+    } else if (obj.Has("queryMode")) {
+        rc.mode = query_mode::parse(mode, obj.Get("queryMode").As<Napi::Number>());
     }
 
     // fprintf(stderr, "query_line::parse mode: 0x%X\n",
