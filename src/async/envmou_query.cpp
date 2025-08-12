@@ -61,7 +61,11 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
                 Napi::Buffer<char>::Copy(env, item.key_buf.data(), item.key_buf.size()));
         }
 
-        if (mode.val & query_mode::get) {
+        // все методы которые должны показать value в результате
+        const auto mask{query_mode::get|query_mode::upsert|
+            query_mode::update|query_mode::insert_unique};
+        if (mode.val & mask) 
+        {
             auto& val_buf = item.val_buf;
             if (val_buf.empty()) {
                 js_item.Set("value", env.Null());
@@ -158,7 +162,6 @@ void async_query::do_put(txnmou_managed& txn,
             keymou{q.id_buf} : keymou{q.key_buf};
         mdbx::slice val{q.val_buf.data(), q.val_buf.size()};
         txn.put(dbi, key, val, mode);
-        q.rc = true;
     }
 }
 

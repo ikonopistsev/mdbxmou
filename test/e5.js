@@ -72,7 +72,7 @@ const test = async () => {
   console.log("Read key = 2 in simple async mode to out2");
   const out2 = await db.query({
     key_mode: key_mode.ordinal,
-    item: [{ "key": 42 }]  
+    item: [{ "key": 2 }, { "key": 42 }]  
   });
   console.log("out2", JSON.stringify(out2));
 
