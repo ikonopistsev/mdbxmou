@@ -2,34 +2,33 @@
 
 const fs = require('fs');
 const MDBX = require('../lib/nativemou.js');
-const { MDBX_Env, MDBX_db_flag, MDBX_txn_flag, MDBX_put_flag, MDBX_mou_option } = MDBX;
+const { MDBX_Env, MDBX_Param } = MDBX;
 
 const test = async () => {
   const path = 'e5';
 
-  console.log("MDBX_db_flag", MDBX_db_flag);
-  console.log("MDBX_txn_flag", MDBX_txn_flag);
-  console.log("MDBX_put_flag", MDBX_put_flag);
-  console.log("MDBX_mou_option", MDBX_mou_option);
-
   await Promise.all([
     fs.promises.rm(path, { recursive: true, force: true })
   ]);
+
+  console.log("MDBX_Param:", MDBX_Param);
+  // получаем константы
+  const { key_mode, key_flag, query_mode, value_flag } = MDBX_Param;
+
 
   const db = new MDBX_Env();
 
   console.log('Opening database...');
   const rc = await db.open({
       path: path,
-      valString: true,
+      value_flag: value_flag.string
   });
 
-  const db_flag = MDBX_db_flag.MDBX_INTEGERKEY|MDBX_db_flag.MDBX_CREATE;
   const count = 2;
   console.log('Start write');
   const txn = db.startWrite();
   // при изменении типа ключей надо указывать MDBX_CREATE если базы еще нет
-  const dbi = txn.getDbi(db_flag);
+  const dbi = txn.createMap(key_mode.ordinal);
   for (let i = 0; i < count; i++) {
     dbi.put(BigInt(i), `val-${i}`, 0);
   }
@@ -42,21 +41,23 @@ const test = async () => {
   // чтобы не получить Permission denied
   const out = await db.query([
     { 
-      "flag": MDBX_db_flag.MDBX_INTEGERKEY, 
-      "oper": MDBX_put_flag.MDBXMOU_GET, 
-      "item": [{ "key": Number(1) }] 
+      mode: query_mode.get, 
+      key_mode: key_mode.ordinal, 
+      key_flag: key_flag.number,
+      item: [{ "key": Number(1) }] 
     },
     { 
-      "flag": MDBX_db_flag.MDBX_INTEGERKEY, 
-      "oper": MDBX_put_flag.MDBX_UPSERT, 
-      "item": [{ "key": Number(2), "value":"val-2" }] 
+      mode: query_mode.insert_unique, 
+      key_mode: key_mode.ordinal,
+      key_flag: key_flag.number,
+      item: [{ "key": Number(2), "value":"val-2" }] 
     }
-  ], MDBX_txn_flag.MDBX_TXN_READWRITE);
+  ]);
   console.log(JSON.stringify(out));
 
   // вычитаем key = 2 - синхронно
   const r = db.startRead();
-  const rdbi = r.getDbi(BigInt(MDBX_db_flag.MDBX_INTEGERKEY));
+  const rdbi = r.openMap(BigInt(key_mode.ordinal));
   const val = rdbi.get(2);
   console.log("keys", rdbi.keys());
   console.log("read 2", val);
