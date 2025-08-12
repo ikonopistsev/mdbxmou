@@ -44,7 +44,7 @@ const test = async () => {
       mode: query_mode.get, 
       key_mode: key_mode.ordinal, 
       key_flag: key_flag.number,
-      item: [{ "key": Number(1) }] 
+      item: [{ "key": 1 }] 
     },
     { 
       mode: query_mode.insert_unique, 
