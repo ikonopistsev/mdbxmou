@@ -14,9 +14,8 @@ class envmou final
     : public Napi::ObjectWrap<envmou>
 {  
     static Napi::FunctionReference ctor;
-    static mdbx::env::geometry parse_geometry(Napi::Object obj);
-    static MDBX_env_flags_t parse_env_flags(Napi::Object obj);
-    static env_arg0 parse(Napi::Object obj);
+    static mdbx::env::geometry parse_geometry(const Napi::Value& obj);
+    static env_arg0 parse(const Napi::Value& obj);
 
     struct free_env {
         void operator()(MDBX_env* env) const {
@@ -39,19 +38,12 @@ class envmou final
     // Inline метод для проверки что база данных открыта
     void check() const {
         if (!is_open()) {
-            throw std::runtime_error("Env not open");
-        }
-    }
-
-    // Inline метод для проверки что база данных закрыта (std версия)
-    void check_closed() const {
-        if (!env_) {
-            throw std::runtime_error("Env closed");
+            throw std::runtime_error("closed");
         }
     }
 
     // Общий метод для создания транзакций
-    Napi::Value start_transaction(const Napi::CallbackInfo& info, MDBX_txn_flags_t flags);
+    Napi::Value start_transaction(const Napi::CallbackInfo& info, txn_mode mode);
 
 public:    
     envmou(const Napi::CallbackInfo& i)
@@ -91,8 +83,12 @@ public:
     Napi::Value query(const Napi::CallbackInfo&); 
     
     // Методы для создания транзакций
-    Napi::Value start_read(const Napi::CallbackInfo&);
-    Napi::Value start_write(const Napi::CallbackInfo&);
+    Napi::Value start_read(const Napi::CallbackInfo& info) {
+        return start_transaction(info, {txn_mode::ro});
+    }
+    Napi::Value start_write(const Napi::CallbackInfo& info) {
+        return start_transaction(info, {});
+    }
 
     using lock_guard = std::lock_guard<envmou>;
     //  для защиты асинхронных операций

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <napi.h>
-#include <mdbx.h++>
+#include "valuemou.hpp"
 // #include <sys/syscall.h>
 // #include <unistd.h>
 
@@ -11,11 +10,11 @@ struct env_arg0 {
     std::string path;
     MDBX_dbi max_dbi{32};
     mdbx::env::geometry geom{};
-    MDBX_env_flags_t flags{};
+    env_flag flag{};
     mode_t mode{0664};
-    unsigned int max_readers{128};
-    bool key_string{false};
-    bool val_string{false};
+    std::uint32_t max_readers{128};
+    base_flag key_flag{};
+    base_flag value_flag{};
 };
 
 // static inline pid_t gettid() {

@@ -11,21 +11,18 @@ class async_query
 {
     Napi::Promise::Deferred deferred_;
     envmou& env_;
-    MDBX_txn_flags txn_flags_{MDBX_TXN_RDONLY};
-    bool key_string_{false};
-    bool val_string_{false};
-    std::vector<query_db> query_arr_{};
+    txn_mode txn_mode_{};
+    // действия для выполнения
+    query_request query_{};
 
-public:
-    async_query(Napi::Env env, envmou& e, MDBX_txn_flags txn_flags,
-       bool key_string, bool val_string, std::vector<query_db> query_arr)
+    public:
+    async_query(Napi::Env env, envmou& e, 
+        txn_mode txn_mode, query_request query)
         : Napi::AsyncWorker{env}
         , deferred_{Napi::Promise::Deferred::New(env)}
         , env_{e}
-        , txn_flags_{txn_flags}
-        , key_string_{key_string}
-        , val_string_{val_string}
-        , query_arr_{std::move(query_arr)}
+        , txn_mode_{txn_mode}
+        , query_{std::move(query)}
     {   }
 
     void Execute() override;
@@ -37,6 +34,17 @@ public:
     Napi::Promise GetPromise() const { 
         return deferred_.Promise(); 
     }
+
+    txnmou_managed start_transaction();
+
+    void do_del(txnmou_managed& txn, 
+        mdbx::map_handle dbi, query_line& arg0);    
+
+    void do_get(const txnmou_managed& txn, 
+        mdbx::map_handle dbi, query_line& arg0);    
+
+    void do_put(txnmou_managed& txn, 
+        mdbx::map_handle dbi, query_line& arg0);   
 };
 
 } // namespace mdbxmou

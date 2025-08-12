@@ -1,13 +1,8 @@
 #pragma once
 
-#include <napi.h>
-#include <mdbx.h++>
-#include <cstdint>
-#include <vector>
+#include "typemou.hpp"
 
 namespace mdbxmou {
-
-using buffer_type = std::vector<char>;
 
 class valuemou
     : public mdbx::slice
@@ -21,6 +16,10 @@ public:
 
     valuemou(const Napi::Buffer<char>& arg0) noexcept
         : mdbx::slice{arg0.Data(), arg0.Length()}
+    {   }
+
+    valuemou(const buffer_type& arg0) noexcept
+        : mdbx::slice{arg0.data(), arg0.size()}
     {   }
 
     valuemou(const Napi::Buffer<char>& arg0, buffer_type& mem)
@@ -79,14 +78,6 @@ public:
 class keymou final
     : public valuemou
 {
-public:
-    enum variant_type : int {
-        mdbxmou_buffer,
-        mdbxmou_string,
-        mdbxmou_number,
-        mdbxmou_bigint
-    };
-
 public:    
     keymou() = default;
 
@@ -102,6 +93,14 @@ public:
         : valuemou{arg0}
     {   }
 
+    keymou(const buffer_type& arg0) noexcept
+        : valuemou{arg0}
+    {   }    
+
+    keymou(const std::uint64_t& arg0) noexcept
+        : valuemou{mdbx::slice{&arg0, sizeof(arg0)}}
+    {   }
+
     keymou(const Napi::Buffer<char>& arg0, buffer_type& mem)
         : valuemou{arg0, mem}
     {   }
@@ -110,6 +109,16 @@ public:
         const Napi::Env& env, buffer_type& mem)
         : valuemou{arg0, env, mem}
     {   }
+
+    keymou(const Napi::Number& arg0, std::uint64_t& mem)
+    {   
+        auto value = arg0.Int64Value();
+        if (value < 0) {
+            throw std::runtime_error("Number negative");
+        }
+        mem = static_cast<std::uint64_t>(value);
+        assign(&mem, sizeof(mem));
+    }    
 
     keymou(const Napi::Number& arg0, 
         const Napi::Env& env, std::uint64_t& mem)
@@ -121,6 +130,16 @@ public:
         mem = static_cast<std::uint64_t>(value);
         assign(&mem, sizeof(mem));
     }
+
+    keymou(const Napi::BigInt& arg0,std::uint64_t& mem)
+    {   
+        bool looseless;
+        mem = arg0.Uint64Value(&looseless);
+        if (!looseless) {
+            throw std::runtime_error("BigInt !looseless");
+        }
+        assign(&mem, sizeof(mem));
+    }    
 
     keymou(const Napi::BigInt& arg0, 
         const Napi::Env& env, std::uint64_t& mem)
@@ -145,7 +164,7 @@ public:
         if (arg0.IsBigInt()) {
             return {arg0.As<Napi::BigInt>(), env, mem};
         } else if (!arg0.IsNumber()) {
-            throw Napi::Error::New(env, "unsupported key");
+            throw Napi::Error::New(env, "key must be a Number or BigInt");
         }
         return {arg0.As<Napi::Number>(), env, mem};
     }
@@ -156,7 +175,7 @@ public:
         if (arg0.IsBuffer() || arg0.IsString()) {
             return from(arg0, env, buf);
         } else if (!(arg0.IsNumber() || arg0.IsBigInt())) {
-            throw Napi::Error::New(env, "unsupported key");
+            throw Napi::Error::New(env, "key must be a Buffer,String,Number or BigInt");
         }
         return from(arg0, env, num);
     }

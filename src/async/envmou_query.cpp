@@ -5,136 +5,83 @@ namespace mdbxmou {
 
 void async_query::Execute() 
 {
-    // создаем транзакцию
-    //fprintf(stderr, "TRACE: async_query::Execute mdbx_txn_begin id=%d\n", gettid());
-    MDBX_txn* txn;
-    auto rc = mdbx_txn_begin(env_, nullptr, txn_flags_, &txn);
-    if (rc != MDBX_SUCCESS) {
-        SetError("query->txn_begin " + std::string("flags=") + std::to_string(txn_flags_) + 
-            std::string(", ") + mdbx_strerror(rc));
-        return;
-    }
-
-    // лямбда для отката транзакции
-    auto abort_txn = [](MDBX_txn* txn) noexcept {
-        auto rc = mdbx_txn_abort(txn);
-        if (rc != MDBX_SUCCESS) {
-            // какое-то сообщение куда-то
-            fprintf(stderr, "mdbx_txn_abort failed: %s\n", mdbx_strerror(rc));
-        }
-    };
-
     try {
-        for (auto& req : query_arr_) 
+        // стартуем транзакцию
+        auto txn = start_transaction();
+        for (auto& req : query_) 
         {
-            const char * name = nullptr;
-            if (!req.db.empty()) {
-                name = req.db.c_str();
-            }
-            MDBX_dbi dbi;
-            rc = mdbx_dbi_open(txn, name, req.flag, &dbi);
-            //fprintf(stderr, "TRACE: async_query::Execute mdbx_dbi_open=%d id=%d\n", rc, gettid());
-            if (rc != MDBX_SUCCESS) {
-                mdbx_txn_abort(txn);
-                // чтобы не получить сигфолт
-                if (!name) {
-                    name = "null";
-                }
-                SetError("query->dbi_open " + std::string("flags=") + std::to_string(req.flag) + 
-                    std::string(", (db:") + name + "), " + mdbx_strerror(rc));
-                return;
+            mdbx::map_handle dbi{};
+            auto db_mode = req.db_mod;
+            //fprintf(stderr, "async_query::db_mode 0x%X\n", db_mode.val);
+            if (db_mode.val & db_mode::accede) {
+                dbi = txn.open_map_accede(req.db);
+            } else if (db_mode.val & db_mode::create) {
+                dbi = txn.create_map(req.db, req.key_mod, req.val_mod);
+            } else {
+                //fprintf(stderr, "async_query::open_map 0x%X 0x%X\n", req.key_mod.val, req.val_mod.val);
+                dbi = txn.open_map(req.db, req.key_mod, req.val_mod);
             }
 
-            //fprintf(stderr, "TRACE: async_query::Execute loop id=%d\n", gettid());
-            for (auto& q : req.item) 
-            {
-                // получаем ключ и значение
-                auto k = q.mdbx_key(req.flag);
-                auto v = q.mdbx_value();
-                if (q.flag == query_item::MDBXMOU_GET) {
-                    // выполняем get
-                    rc = mdbx_get(txn, dbi, &k, &v);
-                    q.set_result(rc, v);
-                } else {
-                    // иначе put
-                    //fprintf(stderr, "TRACE: async_query::Execute mdbx_put id=%d\n", gettid());
-                    rc = mdbx_put(txn, dbi, &k, &v, 
-                        static_cast<MDBX_put_flags_t>(q.flag));
-                    q.rc = rc;
-                }
+            auto mode = req.mode;
+            //fprintf(stderr, "async_query::choose 0x%X\n", mode.val);
+            if (mode.val & query_mode::del) {
+                // делаем del
+                do_del(txn, dbi, req);
+            } else if (mode.val & query_mode::get) {
+                do_get(txn, dbi, req);
+            } else {
+                do_put(txn, dbi, req);
             }
         }
 
-        //fprintf(stderr, "TRACE: async_query::Execute mdbx_txn_commit id=%d\n", gettid());
-        rc = mdbx_txn_commit(txn);
-        if (rc != MDBX_SUCCESS) {
-            SetError("query->txn_commit " + std::string("flags=") + std::to_string(txn_flags_) + 
-                std::string(", ") + mdbx_strerror(rc));
-        }
+        txn.commit();
     } catch (const std::exception& e) {
-        abort_txn(txn);
         SetError(e.what());
     } catch (...) {
-        abort_txn(txn);
         SetError("async_query::Execute");
     }
 }
 
 void async_query::OnOK() 
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    //fprintf(stderr, "TRACE: async_query::OnOK id=%d\n", gettid());
-    
-    // уменьшаем счетчик trx_count
     --env_;
 
     Napi::Env env = Env();
-    Napi::Array result = Napi::Array::New(env, query_arr_.size());
-    for (std::size_t i = 0; i < query_arr_.size(); ++i) {
-        const auto& row = query_arr_[i];
+    Napi::Array result = Napi::Array::New(env, query_.size());
+    for (std::size_t i = 0; i < query_.size(); ++i) {
+        const auto& row = query_[i];
         Napi::Object js_row = Napi::Object::New(env);
         if (!row.db.empty()) {
-            js_row.Set("db", Napi::String::New(env, row.db));
-        }
-        if (row.flag != MDBX_DB_DEFAULTS) {
-            js_row.Set("flag", Napi::Number::New(env, row.flag));
+            js_row.Set("db", Napi::String::New(env, row.db_name));
         }
         auto& param = row.item;
+        auto key_mode = row.key_mod;
+        auto key_flag = row.key_flag;
+        auto mode = row.mode;
         auto js_arr = Napi::Array::New(env, param.size());
         for (std::size_t j = 0; j < param.size(); ++j) {
             const auto& item = param[j];
             Napi::Object js_item = Napi::Object::New(env);
-            if (row.flag & MDBX_INTEGERKEY) {
-                auto& id_rc = item.id;
-                if (row.id_type == query_db::key_bigint) {
-                    js_item.Set("key", Napi::BigInt::New(env, id_rc));
-                } else {
-                    js_item.Set("key", Napi::Number::New(env, static_cast<int64_t>(id_rc)));
-                }
+            if (key_mode.val & key_mode::ordinal) {
+                js_item.Set("key", (key_flag.val & base_flag::number) ?
+                    Napi::Number::New(env, item.id_buf) : Napi::BigInt::New(env, item.id_buf));
             } else {
-                auto& key_rc = item.key;
-                if (key_string_) {
-                    js_item.Set("key", Napi::String::New(env, key_rc.data(), key_rc.size()));
-                } else {
-                    js_item.Set("key", Napi::Buffer<char>::Copy(env, key_rc.data(), key_rc.size()));
-                }
+                js_item.Set("key", (key_flag.val & base_flag::string) ?
+                    Napi::String::New(env, item.key_buf.data(), item.key_buf.size()) :
+                    Napi::Buffer<char>::Copy(env, item.key_buf.data(), item.key_buf.size()));
             }
 
-            if (item.val.empty()) {
-                js_item.Set("value", env.Null());
-            } else {
-                if (val_string_) {
-                    js_item.Set("value", Napi::String::New(env, item.val.data(), item.val.size()));
+            if (mode.val & query_mode::get) {
+                auto& val_buf = item.val_buf;
+                if (val_buf.empty()) {
+                    js_item.Set("value", env.Null());
                 } else {
-                    js_item.Set("value", Napi::Buffer<char>::Copy(env, item.val.data(), item.val.size()));
+                    auto value_flag = row.value_flag;
+                    js_item.Set("value", (value_flag.val & base_flag::string) ?
+                        Napi::String::New(env, val_buf.data(), val_buf.size()) :
+                        Napi::Buffer<char>::Copy(env, val_buf.data(), val_buf.size()));
                 }
             }
-
-            // скрываем гет флаг
-            if (item.flag != query_item::MDBXMOU_GET) {
-                js_item.Set("flag", Napi::Number::New(env, item.flag));
-            }
-            js_item.Set("rc", Napi::Number::New(env, item.rc));
             js_arr.Set(j, js_item);
         }
 
@@ -147,11 +94,60 @@ void async_query::OnOK()
 
 void async_query::OnError(const Napi::Error& e) 
 {
-    //fprintf(stderr, "TRACE: async_query::OnError id=%d\n", gettid());
-    // уменьшаем счетчик trx_count
     --env_;
-
+    
     deferred_.Reject(e.Value());
-}    
+}
+
+txnmou_managed async_query::start_transaction()
+{
+    MDBX_txn *ptr;
+    mdbx::error::success_or_throw(::mdbx_txn_begin(env_, nullptr, txn_mode_, &ptr));
+    return { ptr };
+}
+
+void async_query::do_del(txnmou_managed& txn, 
+    mdbx::map_handle dbi, query_line& arg0)
+{
+    auto key_mode = arg0.key_mod;
+    for (auto& q : arg0.item) 
+    {
+        auto key = mdbx::is_ordinal(key_mode) ?
+            keymou{q.id_buf} : keymou{q.key_buf};
+        q.rc = txn.erase(dbi, key);
+    }
+}
+
+void async_query::do_get(const txnmou_managed& txn, 
+    mdbx::map_handle dbi, query_line& arg0)
+{
+    //fprintf(stderr, "async_query::do_get\n");
+
+    auto key_mode = arg0.key_mod;
+    for (auto& q : arg0.item) 
+    {
+        auto key = mdbx::is_ordinal(key_mode) ?
+            keymou{q.id_buf} : keymou{q.key_buf};
+        mdbx::slice abs{};
+        valuemou val{txn.get(dbi, key, abs)};
+        q.set(val);
+    }
+}
+
+void async_query::do_put(txnmou_managed& txn, 
+    mdbx::map_handle dbi, query_line& arg0)
+{
+    auto mode = arg0.mode;
+    // очищаем put флаги
+    auto key_mode = arg0.key_mod;
+    for (auto& q : arg0.item) 
+    {
+        auto key = mdbx::is_ordinal(key_mode) ?
+            keymou{q.id_buf} : keymou{q.key_buf};
+        mdbx::slice val{q.val_buf.data(), q.val_buf.size()};
+        txn.put(dbi, key, val, mode);
+        q.rc = true;
+    }
+}
 
 } // namespace mdbxmou

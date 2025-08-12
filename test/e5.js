@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const MDBX = require('../lib/nativemou.js');
-const { MDBX_Env, MDBX_db_flag, MDBX_txn_flag, MDBX_put_flag } = MDBX;
+const { MDBX_Env, MDBX_db_flag, MDBX_txn_flag, MDBX_put_flag, MDBX_mou_option } = MDBX;
 
 const test = async () => {
   const path = 'e5';
@@ -10,6 +10,7 @@ const test = async () => {
   console.log("MDBX_db_flag", MDBX_db_flag);
   console.log("MDBX_txn_flag", MDBX_txn_flag);
   console.log("MDBX_put_flag", MDBX_put_flag);
+  console.log("MDBX_mou_option", MDBX_mou_option);
 
   await Promise.all([
     fs.promises.rm(path, { recursive: true, force: true })
@@ -40,8 +41,16 @@ const test = async () => {
   // по умолчаниюю чтение идет в режиме wr убираем флаг MDBX_CREATE
   // чтобы не получить Permission denied
   const out = await db.query([
-    { "flag":db_flag, "item": [{ "key": Number(1), "flag":MDBX_put_flag.MDBXMOU_GET }] },
-    { "flag":db_flag, "item": [{ "key": 2, "value":"val-2", "flag":MDBX_put_flag.MDBX_UPSERT }] }
+    { 
+      "flag": MDBX_db_flag.MDBX_INTEGERKEY, 
+      "oper": MDBX_put_flag.MDBXMOU_GET, 
+      "item": [{ "key": Number(1) }] 
+    },
+    { 
+      "flag": MDBX_db_flag.MDBX_INTEGERKEY, 
+      "oper": MDBX_put_flag.MDBX_UPSERT, 
+      "item": [{ "key": Number(2), "value":"val-2" }] 
+    }
   ], MDBX_txn_flag.MDBX_TXN_READWRITE);
   console.log(JSON.stringify(out));
 

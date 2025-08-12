@@ -18,12 +18,15 @@ class dbimou final
     envmou* env_{nullptr};
     txnmou* txn_{nullptr};
     MDBX_dbi dbi_{};
-    MDBX_db_flags_t flags_{MDBX_DB_DEFAULTS};
+    db_mode mode_{};
+    key_mode key_mode_{};
+    value_mode value_mode_{};
+    base_flag key_flag_{};
+    base_flag value_flag_{};
     buffer_type key_buf_{};
     buffer_type val_buf_{};
     std::uint64_t id_buf_{};
-    query_db::key_type id_type_{query_db::key_type::key_unknown};
-
+    
     struct close_cursor {
         void operator()(MDBX_cursor *cursor) const noexcept {
             mdbx_cursor_close(cursor);
@@ -60,13 +63,17 @@ public:
     Napi::Value keys(const Napi::CallbackInfo&);
 
     void attach(envmou* env, txnmou* txn, MDBX_dbi dbi, 
-        MDBX_db_flags_t flags, query_db::key_type id_type = query_db::key_type::key_unknown)
+        db_mode mode, key_mode key_mode, value_mode value_mode, 
+        base_flag key_flag, base_flag value_flag)
     {
         env_ = env;
         txn_ = txn;
         dbi_ = dbi;
-        flags_ = flags;
-        id_type_ = id_type;
+        mode_ = mode;
+        key_mode_ = key_mode;
+        value_mode_ = value_mode;
+        key_flag_ = key_flag;
+        value_flag_ = value_flag;
     }
 
     static const env_arg0* get_env_userctx(MDBX_env* env_ptr);

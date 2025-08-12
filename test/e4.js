@@ -2,13 +2,13 @@
 
 const fs = require('fs');
 const MDBX = require('../lib/nativemou.js');
-const { MDBX_Env, MDBX_db_flag } = MDBX;
+const { MDBX_Env, MDBX_Param } = MDBX;
 
 const test = async () => {
   const path4 = 'e4';
   const path5 = 'e5';
 
-  console.log(MDBX_db_flag);
+  console.log("MDBX_Param:", MDBX_Param);
 
   await Promise.all([
     fs.promises.rm(path4, { recursive: true, force: true }),
@@ -20,9 +20,11 @@ const test = async () => {
 
   console.log('Opening database...');
 
+  const { value_flag } = MDBX_Param;
   await Promise.all([
     db4.open({
       path: path4,
+      value_flag: value_flag.string
     }),
     db5.open({
       path: path5,
@@ -31,11 +33,12 @@ const test = async () => {
 
   console.log('Start write test...');
   const count = 10;
+  const { key_mode } = MDBX_Param;
   const txn = db4.startWrite();
   // при изменении типа ключей надо указывать MDBX_CREATE если базы еще нет
-  const dbi = txn.getDbi(MDBX_db_flag.MDBX_REVERSEKEY|MDBX_db_flag.MDBX_CREATE);
+  const dbi = txn.createMap(key_mode.ordinal);
   for (let i = 0; i < count; i++) {
-    dbi.put(`key_${i}`, `value_${i}`, 0);
+    dbi.put(i, `value_${i}`);
   }
   txn.commit();
   console.log('Start write finish');
@@ -46,26 +49,37 @@ const test = async () => {
 
   await db4.open({
     path: path4,
-    valString: true,
-    keyString: true
+    value_flag: value_flag.string
   });
 
   let val = "";
   {
     const txn = db4.startRead();
     // для read транакций не нужно указывать MDBX_CREATE иначе будет Permission denied
-    const dbi = txn.getDbi(MDBX_db_flag.MDBX_REVERSEKEY);
+    const dbi = txn.openMap(BigInt(key_mode.ordinal));
     const stat = dbi.stat();
     for (let i = 0; i < count; i++) {
-      val = dbi.get(`key_${i}`);
+      val = dbi.get(BigInt(i));
     }
     console.log('last value:', val.toString());
     console.log('stat:', JSON.stringify(stat));
     txn.commit();
   }
 
+  {
+    const txn = db4.startRead();
+    const dbi = txn.openMap(BigInt(key_mode.ordinal));
+    dbi.forEach((key, value) => {
+      console.log(key, value);
+    });
+    txn.commit();
+  }
+
+
+  const { txn_mode, query_mode, db_mode, key_flag } = MDBX_Param;
   const result = await db4.query([
-    { "item": [{ "key": "key_0" }, { "key": "key_1" }, { "key": "key_2" }] }, { "item": [{ "key": "key_3" }, { "key": "key_4" }, { "key": "key_5" }] }
+    { db_mode: db_mode.accede, key_mode: key_mode.ordinal, key_flag: key_flag.bigint, mode: query_mode.get, item: [{ key: 0 }, { key: 1 }, { key: 2 }] },
+    { db_mode: db_mode.accede, key_mode: key_mode.ordinal, key_flag: key_flag.bigint, mode: query_mode.get, item: [{ key: 3 }, { key: 4 }, { key: 5 }] }
   ]);
   console.log('query', JSON.stringify(result));
 

@@ -30,17 +30,13 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info) {
         throw Napi::Error::New(env, "put: key and value required");
     }
 
-    MDBX_put_flags flags{MDBX_UPSERT};
-    if (arg_len == 3) {
-        flags = static_cast<MDBX_put_flags>(info[2].As<Napi::Number>().Uint32Value());
-    }
-
     try {
-        auto key = (flags_ & MDBX_INTEGERKEY) ?
+        auto key = (key_mode_.val & key_mode::ordinal) ?
             keymou::from(info[0], env, id_buf_) : 
             keymou::from(info[0], env, key_buf_);
         auto val = valuemou::from(info[1], env, val_buf_);
-        auto rc = mdbx_put(*txn_, dbi_, key, val, flags);
+        auto flag = static_cast<MDBX_put_flags_t>(key_mode_.val & value_mode_.val);
+        auto rc = mdbx_put(*txn_, dbi_, key, val, flag);
         if (rc != MDBX_SUCCESS) {
             throw Napi::Error::New(env, mdbx_strerror(rc));
         }
@@ -60,17 +56,16 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info) {
 
     try {
         valuemou val{};
-        auto key = (flags_ & MDBX_INTEGERKEY) ?
+        auto key = (key_mode_.val & key_mode::ordinal) ?
             keymou::from(info[0], env, id_buf_) : 
             keymou::from(info[0], env, key_buf_);
-        auto arg0 = get_env_userctx(*env_);
         auto rc = mdbx_get(*txn_, dbi_, key, val);
         if (rc == MDBX_NOTFOUND)
             return env.Undefined();
         if (rc != MDBX_SUCCESS) {
             throw Napi::Error::New(env, mdbx_strerror(rc));
         }
-        return (arg0->val_string) ? 
+        return (value_flag_.val & base_flag::string) ? 
             val.to_string(env) : val.to_buffer(env);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("get: ") + e.what());
@@ -87,7 +82,7 @@ Napi::Value dbimou::del(const Napi::CallbackInfo& info) {
     }
 
     try {
-        auto key = (flags_ & MDBX_INTEGERKEY) ?
+        auto key = (key_mode_.val & key_mode::ordinal) ?
             keymou::from(info[0], env, id_buf_) : 
             keymou::from(info[0], env, key_buf_);
         auto rc = mdbx_del(*txn_, dbi_, key, nullptr);
@@ -113,7 +108,7 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
     }
 
     try {
-        auto key = (flags_ & MDBX_INTEGERKEY) ?
+        auto key = (key_mode_.val & key_mode::ordinal) ?
             keymou::from(info[0], env, id_buf_) : 
             keymou::from(info[0], env, key_buf_);
         auto rc = mdbx_get(*txn_, dbi_, key, nullptr);
@@ -158,22 +153,21 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
         throw Napi::Error::New(env, mdbx_strerror(rc));
     }        
     try {
-        auto arg0 = get_env_userctx(*env_);
         std::size_t index{};
         // Перебираем все записи
         do {
             // Конвертируем ключ
             Napi::Value rc_key;
-            if (flags_ & MDBX_INTEGERKEY) {
-                rc_key = (id_type_ == query_db::key_type::key_bigint) ?
+            if (key_mode_.val & key_mode::ordinal) {
+                rc_key = (key_flag_.val & base_flag::bigint) ?
                     key.to_bigint(env) : key.to_number(env);
             } else {
-                rc_key = (arg0->key_string) ?
+                rc_key = (key_flag_.val & base_flag::string) ?
                     key.to_string(env) : key.to_buffer(env);
             }
 
             // Конвертируем значение
-            Napi::Value rc_val = (arg0->val_string) ?
+            Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
                 val.to_string(env) : val.to_buffer(env);
             
             // Вызываем callback(value, key, index)
@@ -261,11 +255,11 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
         do {
             // Конвертируем ключ
             Napi::Value rc_key;
-            if (flags_ & MDBX_INTEGERKEY) {
-                rc_key = (id_type_ == query_db::key_type::key_bigint) ?
+            if (key_mode_.val & key_mode::ordinal) {
+                rc_key = (key_flag_.val & base_flag::bigint) ?
                     key.to_bigint(env) : key.to_number(env);
             } else {
-                rc_key = (arg0->key_string) ?
+                rc_key = (key_flag_.val & base_flag::string) ?
                     key.to_string(env) : key.to_buffer(env);
             }
 

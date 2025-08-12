@@ -28,9 +28,11 @@ void envmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
     exports.Set(class_name, func);
 }
 
-mdbx::env::geometry envmou::parse_geometry(Napi::Object obj) 
+mdbx::env::geometry envmou::parse_geometry(const Napi::Value& arg0) 
 {
     mdbx::env::geometry geom{};
+
+    auto obj = arg0.As<Napi::Object>();
 
     if (obj.Has("fixed_size")) {
         auto value = obj.Get("fixed_size").As<Napi::Number>();
@@ -71,42 +73,37 @@ mdbx::env::geometry envmou::parse_geometry(Napi::Object obj)
     return geom;
 }
 
-MDBX_env_flags_t envmou::parse_env_flags(Napi::Object obj)
-{
-    MDBX_env_flags_t flags{MDBX_ENV_DEFAULTS};
-    if (obj.Has("flags")) {
-        flags = static_cast<MDBX_env_flags_t>(obj.Get("flags").As<Napi::Number>().Uint32Value());
-    }
-    return flags;
-}
-
-env_arg0 envmou::parse(Napi::Object arg0)
+env_arg0 envmou::parse(const Napi::Value& arg0)
 {
     env_arg0 rc;
 
-    rc.path = arg0.Get("path").As<Napi::String>().Utf8Value();
-    if (arg0.Has("max_dbi")) {
-        auto value = arg0.Get("max_dbi").As<Napi::Number>();
+    auto obj = arg0.As<Napi::Object>();
+
+    rc.path = obj.Get("path").As<Napi::String>().Utf8Value();
+    if (obj.Has("max_dbi")) {
+        auto value = obj.Get("max_dbi").As<Napi::Number>();
         rc.max_dbi = static_cast<MDBX_dbi>(value.Uint32Value());
     } 
 
-    if (arg0.Has("geometry")) {
-        rc.geom = parse_geometry(arg0.Get("geometry").As<Napi::Object>());
+    if (obj.Has("geometry")) {
+        rc.geom = parse_geometry(obj.Get("geometry"));
     }
 
-    rc.flags = parse_env_flags(arg0);
-
-    if (arg0.Has("mode")) {
-        auto value = arg0.Get("mode").As<Napi::Number>();
-        rc.mode = static_cast<mode_t>(value.Int64Value());
+    if (obj.Has("flags")) {
+        rc.flag = env_flag::parse(obj.Get("flags"));
     }
 
-    if (arg0.Has("keyString")) {
-        rc.key_string = arg0.Get("keyString").As<Napi::Boolean>().Value();
+    if (obj.Has("mode")) {
+        auto value = obj.Get("mode").As<Napi::Number>();
+        rc.mode = static_cast<mode_t>(value.Int32Value());
     }
 
-    if (arg0.Has("valString")) {
-        rc.val_string = arg0.Get("valString").As<Napi::Boolean>().Value();
+    if (obj.Has("key_flag")) {
+        rc.key_flag = base_flag::parse_key(obj.Get("key_flag"));
+    }
+
+    if (obj.Has("value_flag")) {
+        rc.value_flag = base_flag::parse_value(obj.Get("value_flag"));
     }
 
     return rc;
@@ -194,7 +191,7 @@ MDBX_env* envmou::create_and_open(const env_arg0& arg0)
         throw std::runtime_error(mdbx_strerror(rc));
     }
 
-    rc = mdbx_env_open(env, arg0.path.c_str(), arg0.flags, arg0.mode);
+    rc = mdbx_env_open(env, arg0.path.c_str(), arg0.flag, arg0.mode);
     if (rc != MDBX_SUCCESS) {
         mdbx_env_close(env);
         throw std::runtime_error(mdbx_strerror(rc));
@@ -346,7 +343,7 @@ Napi::Value envmou::get_version(const Napi::CallbackInfo& info)
     return Napi::Value::From(info.Env(), version);
 }
 
-Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, MDBX_txn_flags_t flags) 
+Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, txn_mode mode) 
 {
     // выдадим идентфикатор потока для лога (thread_id)
     //fprintf(stderr, "TRACE: start_transaction id=%d\n", gettid());    
@@ -359,17 +356,15 @@ Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, MDBX_txn_f
         check();
 
         MDBX_txn* txn;
-        auto rc = mdbx_txn_begin(*this, nullptr, flags, &txn);
+        auto rc = mdbx_txn_begin(*this, nullptr, mode, &txn);
         if (rc != MDBX_SUCCESS) {
-            const char* txn_type = (flags & MDBX_TXN_RDONLY) ? "read" : "write";
-            throw Napi::Error::New(env, std::string("Failed to start ") + txn_type 
-                + " transaction: " + mdbx_strerror(rc));
+            throw Napi::Error::New(env, std::string("Env: ") + mdbx_strerror(rc));
         }
 
         // Создаем новый объект txnmou
         auto txn_obj = txnmou::ctor.New({});
         auto txn_wrapper = txnmou::Unwrap(txn_obj);
-        txn_wrapper->attach(*this, txn, flags, nullptr);
+        txn_wrapper->attach(*this, txn, mode, nullptr);
 
         return txn_obj;
     } catch (const std::exception& e) {
@@ -377,19 +372,6 @@ Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, MDBX_txn_f
     }
 }
 
-/*
-    // Пример использования get (аргумент get)
-    // Запрос
-    [ 
-        { "db": "name1", "flags": 0, "param": [ "key1", "key2" ] },
-        { "db": "name2", "flags": 0, "param": [ "key3" ] } 
-    ]
-    // await Ответ массив
-    [
-        [{"key":"key1","value":"value_1","rc":0},{"key":"key2","value":"value_2","rc":0}],
-        [{"key":"key3","value":null,"rc":-50}]
-    ]
-*/
 Napi::Value envmou::query(const Napi::CallbackInfo& info)
 {
     // выдадим идентфикатор потока для лога (thread_id)
@@ -397,62 +379,39 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
 
     Napi::Env env = info.Env();
 
-    MDBX_txn_flags txn_flags{MDBX_TXN_RDONLY};
-    // пок сделаем boolean (rw = true)
-    if (info.Length() > 1 || info[1].IsBoolean()) {
-        txn_flags = static_cast<MDBX_txn_flags_t>(
-            info[1].As<Napi::Number>().Int64Value());
+    txn_mode mode{};
+
+    if (info.Length() > 1 || info[1].IsNumber()) {
+        mode = txn_mode::parse(info[1].As<Napi::Number>());
     }
 
     if (info.Length() < 1 || !info[0].IsArray()) {
         throw Napi::TypeError::New(env, 
             "Expected array of requests: [{ db: String, flag: Number, item: [] }, ...]");
     }
-
-    auto arg0 = info[0].As<Napi::Array>();
-
     try
     {
-        std::vector<query_db> query_arr;
-        // сколько обращений к db
-        query_arr.reserve(arg0.Length());
-        // для всех бд парсим элементы
-        for (std::size_t i = 0; i < arg0.Length(); ++i) 
-        {
-            auto obj = arg0.Get(i).As<Napi::Object>();
-            query_db elem = query_db::parse(env, obj);
-            query_arr.push_back(std::move(elem));
-        }        
-
         lock_guard lock(*this);
 
         check();
 
         auto conf = dbimou::get_env_userctx(*this);
 
+        query_request query = parse_query(mode, 
+            conf->key_flag, conf->value_flag, info[0]);
+
         // чтобы не переписывать конструктор использую оператор
-        auto* worker = new async_query(env, this->operator++(), txn_flags, 
-            conf->key_string, conf->val_string, std::move(query_arr));
+        auto* worker = new async_query(env, 
+            this->operator++(), mode, std::move(query));
         auto promise = worker->GetPromise();
         worker->Queue();
         return promise;
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         throw Napi::Error::New(env, e.what());
     } catch (...) {
         throw Napi::Error::New(env, "envmou::query");
     }
     return env.Undefined();
-}
-
-Napi::Value envmou::start_read(const Napi::CallbackInfo& info) 
-{
-    return start_transaction(info, MDBX_TXN_RDONLY);
-}
-
-Napi::Value envmou::start_write(const Napi::CallbackInfo& info) 
-{
-    return start_transaction(info, MDBX_TXN_READWRITE);
 }
 
 } // namespace mdbxmou
