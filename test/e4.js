@@ -76,10 +76,10 @@ const test = async () => {
   }
 
 
-  const { txnMode, queryMode, dbMode, keyFlag } = MDBX_Param;
+  const { queryMode, dbMode, keyFlag } = MDBX_Param;
   const result = await db4.query([
-    { dbMode: dbMode.accede, keyMode: keyMode.ordinal, keyFlag: keyFlag.bigint, mode: queryMode.get, item: [{ key: 0 }, { key: 1 }, { key: 2 }] },
-    { dbMode: dbMode.accede, keyMode: keyMode.ordinal, keyFlag: keyFlag.bigint, mode: queryMode.get, item: [{ key: 3 }, { key: 4 }, { key: 5 }] }
+    { dbMode: dbMode.accede, keyMode: keyMode.ordinal, mode: queryMode.get, item: [{ key: 0 }, { key: 1n }, { key: 2n }] },
+    { dbMode: dbMode.accede, keyMode: keyMode.ordinal, mode: queryMode.get, item: [{ key: 3n }, { key: 4n }, { key: 5n }] }
   ]);
   console.log('query', JSON.stringify(result));
 

@@ -14,6 +14,7 @@ add_library(${PROJECT_NAME} SHARED
     "src/async/envmou_close.cpp"
     "src/async/envmou_query.cpp"
     "src/async/envmou_open.cpp"
+    "src/async/envmou_keys.cpp"
     "src/modulemou.cpp"
     "src/querymou.cpp"
     "src/envmou.cpp" 

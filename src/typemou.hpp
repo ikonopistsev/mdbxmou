@@ -75,7 +75,6 @@ struct query_mode
     enum type : int {
         get = 0x10000000,
         del = 0x20000000,
-        keys = 0x40000000,
         upsert = MDBX_UPSERT,
         update = MDBX_CURRENT,
         insert_unique = MDBX_NOOVERWRITE,
@@ -148,14 +147,6 @@ struct base_flag
     };
     int val{};
 
-    // static inline base_flag parse_key(const key_mode& mode, const Napi::Value& arg0) {
-    //     auto value = arg0.As<Napi::Number>().Int32Value() & mask_key;
-    //     if ((value & (number | bigint)) && (!(mode.val & key_mode::ordinal))) {
-    //         throw std::runtime_error("key must be number or string");
-    //     }
-    //     return {value};
-    // }
-
     static inline base_flag parse_key(const Napi::Value& arg0) {
         return {arg0.As<Napi::Number>().Int32Value() & mask_key};
     }      
@@ -181,12 +172,18 @@ static inline key_mode parse_key_mode(Napi::Env env, const Napi::Value& arg0, ba
         }
         mode.val = static_cast<int>(value);
         if (mode.val & key_mode::ordinal) {
-            key_flag.val = base_flag::bigint;
+            // только если цифровой key_flag не был задан
+            if (key_flag.val <= base_flag::string) {
+                key_flag.val = base_flag::bigint;
+            }
         }
     } else if (arg0.IsNumber()) {
         mode = key_mode::parse(arg0);
         if (mode.val & key_mode::ordinal) {
-            key_flag.val = base_flag::number;
+            // только если цифровой key_flag не был задан
+            if (key_flag.val <= base_flag::string) {
+                key_flag.val = base_flag::number;
+            }
         }
     } else {
         throw Napi::Error::New(env, "Invalid argument type for key mode");

@@ -3,6 +3,7 @@
 #include "async/envmou_copy_to.hpp"
 #include "async/envmou_query.hpp"
 #include "async/envmou_open.hpp"
+#include "async/envmou_keys.hpp"
 #include "async/envmou_close.hpp"
 
 namespace mdbxmou {
@@ -21,7 +22,8 @@ void envmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
         InstanceMethod("version", &envmou::get_version),
         InstanceMethod("startRead", &envmou::start_read),
         InstanceMethod("startWrite", &envmou::start_write),
-        InstanceMethod("query", &envmou::query)
+        InstanceMethod("query", &envmou::query),
+        InstanceMethod("keys", &envmou::keys)
     });
     ctor = Napi::Persistent(func);
     ctor.SuppressDestruct();
@@ -111,9 +113,6 @@ env_arg0 envmou::parse(const Napi::Value& arg0)
 
 Napi::Value envmou::open(const Napi::CallbackInfo& info)
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: open id=%d\n", gettid());   
-
     auto env = info.Env();
     auto arg0 = parse(info[0].As<Napi::Object>());
 
@@ -144,9 +143,6 @@ Napi::Value envmou::open(const Napi::CallbackInfo& info)
 
 Napi::Value envmou::open_sync(const Napi::CallbackInfo& info)
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: open_sync id=%d\n", gettid());    
-
     auto env = info.Env();
     auto arg0 = parse(info[0].As<Napi::Object>());
 
@@ -215,9 +211,6 @@ void envmou::attach(MDBX_env* env, const env_arg0& arg0)
 
 Napi::Value envmou::close(const Napi::CallbackInfo& info)
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: close id=%d\n", gettid());
-
     auto env = info.Env();
     try {
         // асинхронный вызов разлочится внутри worker'a
@@ -250,9 +243,6 @@ Napi::Value envmou::close(const Napi::CallbackInfo& info)
 
 Napi::Value envmou::close_sync(const Napi::CallbackInfo& info)
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: close_sync id=%d\n", gettid());    
-
     auto env = info.Env();
     try {
         lock_guard l(*this);
@@ -267,9 +257,6 @@ Napi::Value envmou::close_sync(const Napi::CallbackInfo& info)
 
 Napi::Value envmou::copy_to_sync(const Napi::CallbackInfo& info) 
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: copy_to_sync id=%d\n", gettid());
-
     auto env = info.Env();
 
     if (info.Length() < 1 || !info[0].IsString()) {
@@ -302,9 +289,6 @@ Napi::Value envmou::copy_to_sync(const Napi::CallbackInfo& info)
 
 Napi::Value envmou::copy_to(const Napi::CallbackInfo& info) 
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: copy_to id=%d\n", gettid());    
-
     Napi::Env env = info.Env();
 
     if (info.Length() < 1 || !info[0].IsString()) {
@@ -345,9 +329,6 @@ Napi::Value envmou::get_version(const Napi::CallbackInfo& info)
 
 Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, txn_mode mode) 
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    //fprintf(stderr, "TRACE: start_transaction id=%d\n", gettid());    
-
     auto env = info.Env();
     
     try {
@@ -374,9 +355,6 @@ Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, txn_mode m
 
 Napi::Value envmou::query(const Napi::CallbackInfo& info)
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: query id=%d\n", gettid());    
-
     Napi::Env env = info.Env();
 
     txn_mode mode{};
@@ -414,6 +392,50 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
         throw Napi::Error::New(env, e.what());
     } catch (...) {
         throw Napi::Error::New(env, "envmou::query");
+    }
+    return env.Undefined();
+}
+
+Napi::Value envmou::keys(const Napi::CallbackInfo& info)
+{
+    Napi::Env env = info.Env();
+
+    txn_mode mode{};
+
+    if (info.Length() < 1) {
+        throw Napi::TypeError::New(env, 
+            "Expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number }, ...]");
+    }
+
+    if (info.Length() > 1 || info[1].IsNumber()) {
+        mode = txn_mode::parse(info[1].As<Napi::Number>());
+    }
+
+    try
+    {
+        lock_guard lock(*this);
+
+        check();
+
+        auto conf = dbimou::get_env_userctx(*this);
+
+        auto arg0 = info[0];
+        keys_request query = parse_keys(mode, 
+            conf->key_flag, conf->value_flag, arg0);
+
+        auto* worker = new async_keys(env, *this, mode, 
+            std::move(query), arg0.IsObject());
+        auto promise = worker->GetPromise();
+        worker->Queue();
+        
+        // Увеличиваем счетчик транзакций после успешного создания
+        ++(*this);
+
+        return promise;
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    } catch (...) {
+        throw Napi::Error::New(env, "envmou::keys");
     }
     return env.Undefined();
 }

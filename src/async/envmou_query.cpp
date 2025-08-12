@@ -12,23 +12,19 @@ void async_query::Execute()
         {
             mdbx::map_handle dbi{};
             auto db_mode = req.db_mod;
-            //fprintf(stderr, "async_query::db_mode 0x%X\n", db_mode.val);
             if (db_mode.val & db_mode::accede) {
                 dbi = txn.open_map_accede(req.db);
             } else if (db_mode.val & db_mode::create) {
                 dbi = txn.create_map(req.db, req.key_mod, req.val_mod);
             } else {
-                //fprintf(stderr, "async_query::open_map 0x%X 0x%X\n", req.key_mod.val, req.val_mod.val);
                 dbi = txn.open_map(req.db, req.key_mod, req.val_mod);
             }
 
             auto mode = req.mode;
-            //fprintf(stderr, "async_query::choose 0x%X\n", mode.val);
-            if (mode.val & query_mode::del) {
-                // делаем del
-                do_del(txn, dbi, req);
-            } else if (mode.val & query_mode::get) {
+            if (mode.val & query_mode::get) {
                 do_get(txn, dbi, req);
+            } else if (mode.val & query_mode::del) {
+                do_del(txn, dbi, req);
             } else {
                 do_put(txn, dbi, req);
             }
@@ -79,7 +75,7 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
 
         // выдадим флаги удаления и успешности
         if (mode.val & query_mode::del) {
-            js_item.Set("found", Napi::Boolean::New(env, item.rc));
+            js_item.Set("found", Napi::Boolean::New(env, item.found));
         }
         js_arr.Set(j, js_item);
     }
@@ -135,15 +131,13 @@ void async_query::do_del(txnmou_managed& txn,
     {
         auto key = mdbx::is_ordinal(key_mode) ?
             keymou{q.id_buf} : keymou{q.key_buf};
-        q.rc = txn.erase(dbi, key);
+        q.found = txn.erase(dbi, key);
     }
 }
 
 void async_query::do_get(const txnmou_managed& txn, 
     mdbx::map_handle dbi, query_line& arg0)
 {
-    //fprintf(stderr, "async_query::do_get\n");
-
     auto key_mode = arg0.key_mod;
     for (auto& q : arg0.item) 
     {
