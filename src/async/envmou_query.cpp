@@ -76,6 +76,11 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
                     Napi::Buffer<char>::Copy(env, val_buf.data(), val_buf.size()));
             }
         }
+
+        // выдадим флаги удаления и успешности
+        if (mode.val & query_mode::del) {
+            js_item.Set("found", Napi::Boolean::New(env, item.rc));
+        }
         js_arr.Set(j, js_item);
     }
     return js_arr;
