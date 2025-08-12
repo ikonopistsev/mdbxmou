@@ -20,11 +20,11 @@ const test = async () => {
 
   console.log('Opening database...');
 
-  const { value_flag } = MDBX_Param;
+  const { valueFlag } = MDBX_Param;
   await Promise.all([
     db4.open({
       path: path4,
-      value_flag: value_flag.string
+      valueFlag: valueFlag.string
     }),
     db5.open({
       path: path5,
@@ -33,10 +33,10 @@ const test = async () => {
 
   console.log('Start write test...');
   const count = 10;
-  const { key_mode } = MDBX_Param;
+  const { keyMode } = MDBX_Param;
   const txn = db4.startWrite();
   // при изменении типа ключей надо указывать MDBX_CREATE если базы еще нет
-  const dbi = txn.createMap(key_mode.ordinal);
+  const dbi = txn.createMap(keyMode.ordinal);
   for (let i = 0; i < count; i++) {
     dbi.put(i, `value_${i}`);
   }
@@ -49,14 +49,14 @@ const test = async () => {
 
   await db4.open({
     path: path4,
-    value_flag: value_flag.string
+    valueFlag: valueFlag.string
   });
 
   let val = "";
   {
     const txn = db4.startRead();
     // для read транакций не нужно указывать MDBX_CREATE иначе будет Permission denied
-    const dbi = txn.openMap(BigInt(key_mode.ordinal));
+    const dbi = txn.openMap(BigInt(keyMode.ordinal));
     const stat = dbi.stat();
     for (let i = 0; i < count; i++) {
       val = dbi.get(i);
@@ -68,7 +68,7 @@ const test = async () => {
 
   {
     const txn = db4.startRead();
-    const dbi = txn.openMap(BigInt(key_mode.ordinal));
+    const dbi = txn.openMap(BigInt(keyMode.ordinal));
     dbi.forEach((key, value) => {
       console.log(key, value);
     });
@@ -76,10 +76,10 @@ const test = async () => {
   }
 
 
-  const { txn_mode, query_mode, db_mode, key_flag } = MDBX_Param;
+  const { txnMode, queryMode, dbMode, keyFlag } = MDBX_Param;
   const result = await db4.query([
-    { db_mode: db_mode.accede, key_mode: key_mode.ordinal, key_flag: key_flag.bigint, mode: query_mode.get, item: [{ key: 0 }, { key: 1 }, { key: 2 }] },
-    { db_mode: db_mode.accede, key_mode: key_mode.ordinal, key_flag: key_flag.bigint, mode: query_mode.get, item: [{ key: 3 }, { key: 4 }, { key: 5 }] }
+    { dbMode: dbMode.accede, keyMode: keyMode.ordinal, keyFlag: keyFlag.bigint, mode: queryMode.get, item: [{ key: 0 }, { key: 1 }, { key: 2 }] },
+    { dbMode: dbMode.accede, keyMode: keyMode.ordinal, keyFlag: keyFlag.bigint, mode: queryMode.get, item: [{ key: 3 }, { key: 4 }, { key: 5 }] }
   ]);
   console.log('query', JSON.stringify(result));
 

@@ -11,7 +11,7 @@ const test = async () => {
 
   console.log("MDBX_Param:", MDBX_Param);
   // получаем константы
-  const { key_mode, key_flag, query_mode, value_flag } = MDBX_Param;
+  const { keyMode } = MDBX_Param;
 
   const db = new MDBX_Env();
 
@@ -25,7 +25,7 @@ const test = async () => {
   const count = 100000;
   for (let i = 0; i < count; i++) {
     const txn = db.startWrite();
-    const dbi = txn.createMap(key_mode.ordinal);
+    const dbi = txn.createMap(keyMode.ordinal);
     dbi.put(i, `value_${i}`);
     txn.commit();
   }

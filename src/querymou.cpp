@@ -39,36 +39,36 @@ query_line query_line::parse(txn_mode mode, base_flag key_flag,
     // fprintf(stderr, "query_line::parse db_name: %s\n",
     //        rc.db_name.c_str());
 
-    if (obj.Has("db_mode")) {
-        rc.db_mod = db_mode::parse(mode, obj.Get("db_mode").As<Napi::Number>());
+    if (obj.Has("dbMode")) {
+        rc.db_mod = db_mode::parse(mode, obj.Get("dbMode").As<Napi::Number>());
     }
 
     // fprintf(stderr, "query_line::parse db_mode: 0x%X\n",
     //        rc.db_mod.val);
 
-    if (obj.Has("key_flag")) {
-        rc.key_flag = base_flag::parse_key(obj.Get("key_flag").As<Napi::Number>());
+    if (obj.Has("keyFlag")) {
+        rc.key_flag = base_flag::parse_key(obj.Get("keyFlag").As<Napi::Number>());
     }
 
     // fprintf(stderr, "query_line::parse key_flag: 0x%X\n",
     //        rc.key_flag.val);
 
-    if (obj.Has("key_mode")) {
-        rc.key_mod = parse_key_mode(obj.Env(), obj.Get("key_mode").As<Napi::Number>(), rc.key_flag);
+    if (obj.Has("keyMode")) {
+        rc.key_mod = parse_key_mode(obj.Env(), obj.Get("keyMode").As<Napi::Number>(), rc.key_flag);
     }
 
     // fprintf(stderr, "query_line::parse key_mode: 0x%X\n",
     //        rc.key_mod.val);
 
-    if (obj.Has("value_mode")) {
-        rc.val_mod = value_mode::parse(obj.Get("value_mode").As<Napi::Number>());
+    if (obj.Has("valueMode")) {
+        rc.val_mod = value_mode::parse(obj.Get("valueMode").As<Napi::Number>());
     }
 
     // fprintf(stderr, "query_line::parse value_mode: 0x%X\n",
     //        rc.val_mod.val);
 
-    if (obj.Has("value_flag")) {
-        rc.value_flag = base_flag::parse_value(rc.val_mod, obj.Get("value_flag").As<Napi::Number>());
+    if (obj.Has("valueFlag")) {
+        rc.value_flag = base_flag::parse_value(rc.val_mod, obj.Get("valueFlag").As<Napi::Number>());
     }
 
     // fprintf(stderr, "query_line::parse value_flag: 0x%X\n",

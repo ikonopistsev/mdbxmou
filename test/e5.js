@@ -13,21 +13,21 @@ const test = async () => {
 
   console.log("MDBX_Param:", MDBX_Param);
   // получаем константы
-  const { key_mode, key_flag, query_mode, value_flag } = MDBX_Param;
+  const { keyMode, keyFlag, queryMode, valueFlag } = MDBX_Param;
 
   const db = new MDBX_Env();
 
   console.log('Opening database...');
   const rc = await db.open({
       path: path,
-      value_flag: value_flag.string
+      valueFlag: valueFlag.string
   });
 
   const count = 2;
   console.log('Start write');
   const txn = db.startWrite();
   // будем использовать ordinal ключи
-  const dbi = txn.createMap(key_mode.ordinal);
+  const dbi = txn.createMap(keyMode.ordinal);
   for (let i = 0; i < count; i++) {
     dbi.put(i, `val-${i}`, 0);
   }
@@ -39,15 +39,15 @@ const test = async () => {
   // по умолчаниюю query выполняется в режиме wr
   const out = await db.query([
     { 
-      mode: query_mode.get, 
-      key_mode: key_mode.ordinal, 
-      key_flag: key_flag.number,
+      mode: queryMode.get, 
+      keyMode: keyMode.ordinal, 
+      keyFlag: keyFlag.number,
       item: [{ "key": 1 }, { "key": 42 }] 
     },
     { 
-      mode: query_mode.insert_unique, 
-      key_mode: key_mode.ordinal,
-      key_flag: key_flag.number,
+      mode: queryMode.insertUnique, 
+      keyMode: keyMode.ordinal,
+      keyFlag: keyFlag.number,
       item: [{ "key": 2, "value":"val-2" }] 
     }
   ]);
@@ -55,7 +55,7 @@ const test = async () => {
 
   // вычитаем key = 2 - синхронно
   const r = db.startRead();
-  const rdbi = r.openMap(key_mode.ordinal);
+  const rdbi = r.openMap(keyMode.ordinal);
   const keys = rdbi.keys();
   const val = rdbi.get(2);
   console.log("keys", keys);
@@ -71,7 +71,7 @@ const test = async () => {
   // почитаем асинхронно в упрощенном режиме
   console.log("Read key = 2 in simple async mode to out2");
   const out2 = await db.query({
-    key_mode: key_mode.ordinal,
+    keyMode: keyMode.ordinal,
     item: [{ "key": 2 }, { "key": 42 }]  
   });
   console.log("out2", JSON.stringify(out2));
@@ -81,8 +81,8 @@ const test = async () => {
   // удалим все ключи
   const rm = await db.query([
       { 
-        mode: query_mode.del, 
-        key_mode: key_mode.ordinal, 
+        mode: queryMode.del, 
+        keyMode: keyMode.ordinal, 
         item: keys.map(key => ({ "key": key }))
       }
   ]);
@@ -92,7 +92,7 @@ const test = async () => {
   {
     // вычитаем key = 2 - синхронно
     const r = db.startRead();
-    const dbi = r.openMap(key_mode.ordinal);
+    const dbi = r.openMap(keyMode.ordinal);
     console.log("keys", dbi.keys());
     r.commit();
   }

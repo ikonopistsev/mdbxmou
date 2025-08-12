@@ -75,6 +75,7 @@ struct query_mode
     enum type : int {
         get = 0x10000000,
         del = 0x20000000,
+        keys = 0x40000000,
         upsert = MDBX_UPSERT,
         update = MDBX_CURRENT,
         insert_unique = MDBX_NOOVERWRITE,

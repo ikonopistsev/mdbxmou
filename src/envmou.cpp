@@ -34,14 +34,14 @@ mdbx::env::geometry envmou::parse_geometry(const Napi::Value& arg0)
 
     auto obj = arg0.As<Napi::Object>();
 
-    if (obj.Has("fixed_size")) {
-        auto value = obj.Get("fixed_size").As<Napi::Number>();
+    if (obj.Has("fixedSize")) {
+        auto value = obj.Get("fixedSize").As<Napi::Number>();
         auto fixed_size = static_cast<intptr_t>(value.Int64Value());
         return geom.make_fixed(fixed_size);
-    } else if (obj.Has("dynamic_size")) {
-        auto arr = obj.Get("dynamic_size").As<Napi::Array>();
+    } else if (obj.Has("dynamicSize")) {
+        auto arr = obj.Get("dynamicSize").As<Napi::Array>();
         if (arr.Length() != 2) {
-            throw Napi::TypeError::New(obj.Env(), "dynamic_size must be an array of two numbers");
+            throw Napi::TypeError::New(obj.Env(), "dynamicSize must be an array of two numbers");
         }
         auto v1 = arr.Get(0u).As<Napi::Number>();
         auto v2 = arr.Get(1u).As<Napi::Number>();
@@ -49,24 +49,24 @@ mdbx::env::geometry envmou::parse_geometry(const Napi::Value& arg0)
         auto size_upper = static_cast<intptr_t>(v2.Int64Value());
         return geom.make_dynamic(size_lower, size_upper);
     } else {
-        if (obj.Has("size_now")) {
-            auto value = obj.Get("size_now").As<Napi::Number>();
+        if (obj.Has("sizeNow")) {
+            auto value = obj.Get("sizeNow").As<Napi::Number>();
             geom.size_now = static_cast<intptr_t>(value.Int64Value());
         }
-        if (obj.Has("size_upper")) {
-            auto value = obj.Get("size_upper").As<Napi::Number>();
+        if (obj.Has("sizeUpper")) {
+            auto value = obj.Get("sizeUpper").As<Napi::Number>();
             geom.size_upper = static_cast<intptr_t>(value.Int64Value());
         }
-        if (obj.Has("growth_step")) {
-            auto value = obj.Get("growth_step").As<Napi::Number>();
+        if (obj.Has("growthStep")) {
+            auto value = obj.Get("growthStep").As<Napi::Number>();
             geom.growth_step = static_cast<intptr_t>(value.Int64Value());
         }
-        if (obj.Has("shrink_threshold")) {
-            auto value = obj.Get("shrink_threshold").As<Napi::Number>();
+        if (obj.Has("shrinkThreshold")) {
+            auto value = obj.Get("shrinkThreshold").As<Napi::Number>();
             geom.shrink_threshold = static_cast<intptr_t>(value.Int64Value());
         }
-        if (obj.Has("pagesize")) {
-            auto value = obj.Get("pagesize").As<Napi::Number>();
+        if (obj.Has("pageSize")) {
+            auto value = obj.Get("pageSize").As<Napi::Number>();
             geom.pagesize = static_cast<intptr_t>(value.Int64Value());
         }
     }
@@ -80,8 +80,8 @@ env_arg0 envmou::parse(const Napi::Value& arg0)
     auto obj = arg0.As<Napi::Object>();
 
     rc.path = obj.Get("path").As<Napi::String>().Utf8Value();
-    if (obj.Has("max_dbi")) {
-        auto value = obj.Get("max_dbi").As<Napi::Number>();
+    if (obj.Has("maxDbi")) {
+        auto value = obj.Get("maxDbi").As<Napi::Number>();
         rc.max_dbi = static_cast<MDBX_dbi>(value.Uint32Value());
     } 
 
@@ -98,12 +98,12 @@ env_arg0 envmou::parse(const Napi::Value& arg0)
         rc.mode = static_cast<mode_t>(value.Int32Value());
     }
 
-    if (obj.Has("key_flag")) {
-        rc.key_flag = base_flag::parse_key(obj.Get("key_flag"));
+    if (obj.Has("keyFlag")) {
+        rc.key_flag = base_flag::parse_key(obj.Get("keyFlag"));
     }
 
-    if (obj.Has("value_flag")) {
-        rc.value_flag = base_flag::parse_value(obj.Get("value_flag"));
+    if (obj.Has("valueFlag")) {
+        rc.value_flag = base_flag::parse_value(obj.Get("valueFlag"));
     }
 
     return rc;
