@@ -25,7 +25,7 @@ void async_keys::Execute()
     } catch (const std::exception& e) {
         SetError(e.what());
     } catch (...) {
-        SetError("async_query::Execute");
+        SetError("async_keys::Execute");
     }
 }
 
@@ -110,7 +110,7 @@ void async_keys::do_keys(txnmou_managed& txn,
             async_key rc{};
             rc.key_buf.assign(f.key.char_ptr(), f.key.end_char_ptr());
             item.push_back(std::move(rc));
-            return true;
+            return false;
         });
     }
 }
