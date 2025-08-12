@@ -15,7 +15,6 @@ const test = async () => {
   // получаем константы
   const { key_mode, key_flag, query_mode, value_flag } = MDBX_Param;
 
-
   const db = new MDBX_Env();
 
   console.log('Opening database...');
@@ -34,7 +33,6 @@ const test = async () => {
   }
   txn.commit();
   console.log('Write finish');
-
 
   // вычитаем key = 1 - асинхронно
   // запишем при этом key = 2
