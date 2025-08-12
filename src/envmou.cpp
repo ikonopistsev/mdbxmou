@@ -400,11 +400,13 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
         query_request query = parse_query(mode, 
             conf->key_flag, conf->value_flag, info[0]);
 
-        // чтобы не переписывать конструктор использую оператор
-        auto* worker = new async_query(env, 
-            this->operator++(), mode, std::move(query));
+        auto* worker = new async_query(env, *this, mode, std::move(query));
         auto promise = worker->GetPromise();
         worker->Queue();
+        
+        // Увеличиваем счетчик транзакций после успешного создания
+        ++(*this);
+
         return promise;
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, e.what());
