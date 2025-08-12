@@ -35,7 +35,7 @@ private:
     bool is_aborted_{};
     
     // Сохраняем тип транзакции для создания дочерних того же типа
-    MDBX_txn_flags_t flags_{};
+    txn_mode mode_{};
 
     void check_valid() const 
     {
@@ -82,6 +82,8 @@ private:
         children_.push_back(child);
     }
 #endif 
+    Napi::Value get_dbi(const Napi::CallbackInfo&, db_mode);
+
 public:    
     static Napi::FunctionReference ctor;
 
@@ -94,8 +96,12 @@ public:
     // Основные операции (только синхронные)
     Napi::Value commit(const Napi::CallbackInfo&);
     Napi::Value abort(const Napi::CallbackInfo&);
-
-    Napi::Value get_dbi(const Napi::CallbackInfo&);
+    Napi::Value open_map(const Napi::CallbackInfo& info) {
+        return get_dbi(info, db_mode{});
+    }
+    Napi::Value create_map(const Napi::CallbackInfo& info) {
+        return get_dbi(info, {db_mode::create});
+    }
 
     operator MDBX_txn*() const noexcept {
         return txn_.get();
@@ -110,7 +116,7 @@ public:
     Napi::Value is_top_level(const Napi::CallbackInfo&);
 
     void attach(envmou& env, MDBX_txn* txn, 
-        MDBX_txn_flags_t flags, txnmou* parent = nullptr);
+        txn_mode mode, txnmou* parent = nullptr);
 };
 
 } // namespace mdbxmou

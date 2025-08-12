@@ -9,7 +9,8 @@ void txnmou::init(const char *class_name, Napi::Env env) {
     auto func = DefineClass(env, class_name, {
         InstanceMethod("commit", &txnmou::commit),
         InstanceMethod("abort", &txnmou::abort),
-        InstanceMethod("getDbi", &txnmou::get_dbi),
+        InstanceMethod("openMap", &txnmou::open_map),
+        InstanceMethod("createMap", &txnmou::create_map),
         InstanceMethod("isActive", &txnmou::is_active),
         InstanceMethod("isTopLevel", &txnmou::is_top_level),
 #ifdef MDBX_TXN_HAS_CHILD        
@@ -83,41 +84,50 @@ Napi::Value txnmou::abort(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info)
+Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
 {
     Napi::Env env = info.Env();
 
     try
     {
-        std::string tmp{};
-        MDBX_db_flags_t flags{MDBX_DB_DEFAULTS};
-        query_db::key_type id_type{query_db::key_type::key_unknown};
-        auto arg_count = info.Length();
-        if (arg_count == 2) {
-            tmp = info[0].As<Napi::String>().Utf8Value();
-            if (info[1].IsBigInt()) {
-                flags = static_cast<MDBX_db_flags_t>(info[1].As<Napi::BigInt>().Int64Value(nullptr));
-                id_type = query_db::key_type::key_bigint;
-            }
-            flags = static_cast<MDBX_db_flags_t>(info[1].As<Napi::Number>().Int32Value());
-            id_type = query_db::key_type::key_number;
-        } else {
-            if (arg_count == 1) {
-                if (info[0].IsBigInt()) {
-                    bool lossless;
-                    flags = static_cast<MDBX_db_flags_t>(info[0].As<Napi::BigInt>().Int64Value(&lossless));
-                    id_type = query_db::key_type::key_bigint;
-                } else if (info[0].IsNumber()) {
-                    flags = static_cast<MDBX_db_flags_t>(info[0].As<Napi::Number>().Int32Value());
-                    id_type = query_db::key_type::key_number;
-                } else if (info[0].IsString()) {
-                    tmp = info[0].As<Napi::String>().Utf8Value();
-                }
-            }
+        if ((mode_.val & txn_mode::ro) && (db_mode.val & db_mode::create)) {
+            throw std::runtime_error("dbi: cannot open DB in read-only transaction");
         }
-        const char *name{nullptr};
-        if (!tmp.empty()) {
-            name = tmp.c_str();
+
+        std::string db_name{};
+        key_mode key_mode{};
+        value_mode value_mode{};
+        auto conf = dbimou::get_env_userctx(*env_);
+        auto key_flag = conf->key_flag;
+        auto value_flag = conf->value_flag;
+        auto arg_count = info.Length();
+        if (arg_count == 3) {
+            auto arg0 = info[0];
+            auto arg1 = info[1];
+            auto arg2 = info[2];
+            key_mode = parse_key_mode(env, arg0, key_flag);
+            value_mode = value_mode::parse(arg1);
+            db_name = arg2.As<Napi::String>().Utf8Value();
+        } else if (arg_count == 2) {
+            auto arg0 = info[0];
+            auto arg1 = info[1];
+            if (arg0.IsString()) {
+                db_name = arg0.As<Napi::String>().Utf8Value();
+            } else if (arg1.IsNumber()) {
+                value_mode = value_mode::parse(arg1);
+            } else {
+                throw Napi::Error::New(env, "Invalid argument type for db_name or value_mode");
+            }
+            key_mode = parse_key_mode(env, arg1, key_flag);
+        } else if (arg_count == 1) {
+            auto arg0 = info[0];
+            if (arg0.IsString()) {
+                db_name = arg0.As<Napi::String>().Utf8Value();
+            } else {
+                key_mode = parse_key_mode(env, arg0, key_flag);
+            }
+        } else {
+            throw Napi::Error::New(env, "Invalid number of arguments for get_dbi");
         }
 
         check();    
@@ -127,16 +137,13 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info)
         auto ptr = dbimou::Unwrap(obj);        
 
         MDBX_dbi dbi{};
-        auto rc = mdbx_dbi_open(*this, name, flags, &dbi);
+        auto flags = static_cast<MDBX_db_flags_t>(db_mode.val|key_mode.val|value_mode.val);
+        auto rc = mdbx_dbi_open(*this, db_name.empty() ? nullptr : db_name.c_str(), flags, &dbi);
         if (rc != MDBX_SUCCESS) {
-            // чтобы не получить сигфолт
-            if (!name) {
-                name = "null";
-            }
-            throw Napi::Error::New(env, std::string("flags=") + 
-                std::to_string(flags) + ", (db:" + name + "), " + mdbx_strerror(rc));
+            throw std::runtime_error(std::string("mdbx_dbi_open ") + mdbx_strerror(rc));
         }
-        ptr->attach(env_, this, dbi, flags, id_type);
+        ptr->attach(env_, this, dbi, db_mode, key_mode, 
+            value_mode, key_flag, value_flag);
         return obj;
     }
     catch(const std::exception& e)
@@ -202,7 +209,7 @@ Napi::Value txnmou::get_children_count(const Napi::CallbackInfo& info) {
 #endif // MDBX_TXN_HAS_CHILD
 
 void txnmou::attach(envmou& env, MDBX_txn* txn, 
-    MDBX_txn_flags_t flags, txnmou* parent) 
+    txn_mode mode, txnmou* parent) 
 {
     // увеличиваем счетчик транзакций в env
     env_ = &env;
@@ -213,7 +220,7 @@ void txnmou::attach(envmou& env, MDBX_txn* txn,
     }
 
     parent_ = parent;
-    flags_ = flags;
+    mode_ = mode;
     is_committed_ = false;
     is_aborted_ = false;
 

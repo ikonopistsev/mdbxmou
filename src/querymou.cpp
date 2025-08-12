@@ -2,115 +2,137 @@
 
 namespace mdbxmou {
 
-query_item query_item::parse(Napi::Env env, const Napi::Object& item, MDBX_db_flags_t db_flag, int id_type)
+query_request parse_query(txn_mode mode, base_flag key_flag, 
+        base_flag value_flag, const Napi::Value& obj)
 {
-    query_item rc{};
-    auto item_key = item.Get("key");
-    
-    if (item_key.IsString()) {
-        auto str = item_key.As<Napi::String>().Utf8Value();
-        rc.key.assign(str.begin(), str.end());
-    } else if (item_key.IsBuffer()) {
-        auto buf = item_key.As<Napi::Buffer<char>>();
-        rc.key.assign(buf.Data(), buf.Data() + buf.Length());
-    } else if (db_flag & MDBX_INTEGERKEY) {
-        if (item_key.IsBigInt()) {
-            // Проверяем консистентность типов
-            if (id_type == query_db::key_number) { // key_unknown
-                throw Napi::Error::New(env, 
-                    "All keys must be the same type for MDBX_INTEGERKEY");
-            }
-            auto value = item_key.As<Napi::BigInt>();
-            bool lossless{true};
-            rc.id = value.Uint64Value(&lossless);
-            if (!lossless) {
-                throw Napi::Error::New(env, 
-                    "BigInt key must be lossless for MDBX_INTEGERKEY");
-            }
-        } else if (item_key.IsNumber()) {
-            // Проверяем консистентность типов
-            if (id_type == query_db::key_bigint) { // key_unknown
-                throw Napi::Error::New(env, 
-                    "All keys must be the same type for MDBX_INTEGERKEY");
-            }
-            auto value = item_key.As<Napi::Number>();
-            auto num = value.Int64Value();
-            if (num < 0) {
-                throw Napi::Error::New(env, 
-                    "Number key must be non-negative for MDBX_INTEGERKEY");
-            }
-            rc.id = static_cast<std::uint64_t>(num);
-        } else {
-            throw Napi::Error::New(env, 
-                "Expected string, buffer for key or BigInt/Number for MDBX_INTEGERKEY");
+    query_request rc;
+
+    if (obj.IsArray()) {
+        auto arr = obj.As<Napi::Array>();
+        rc.reserve(arr.Length());
+        for (std::size_t i = 0; i < arr.Length(); ++i) {
+            auto line = arr.Get(i).As<Napi::Object>();
+            rc.push_back(query_line::parse(mode, key_flag, value_flag, line));
         }
+    } else if (obj.IsObject()) {
+        rc.push_back(query_line::parse(mode, key_flag, value_flag, obj.As<Napi::Object>()));
     } else {
-        throw Napi::Error::New(env, 
-            "Expected string, buffer for key or BigInt/Number for MDBX_INTEGERKEY");
+        throw Napi::TypeError::New(obj.Env(), "Expected array or object for query");
     }
 
-    if (item.Has("flag")) {
-        rc.flag = static_cast<std::size_t>(
-            item.Get("flag").As<Napi::Number>().Int32Value());
-    }
-    
-    if (item.Has("value") && rc.flag != query_item::MDBXMOU_GET) {
-        auto item_val = item.Get("value");
-        if (item_val.IsString()) {
-            auto str = item_val.As<Napi::String>().Utf8Value();
-            rc.val.assign(str.begin(), str.end());
-        } else if (item_val.IsBuffer()) {
-            auto buf = item_val.As<Napi::Buffer<char>>();
-            rc.val.assign(buf.Data(), buf.Data() + buf.Length());
-        } else {
-            throw Napi::Error::New(env, 
-                "Expected string or buffer for value");
-        }
-    }
     return rc;
 }
 
-query_db query_db::parse(Napi::Env env, const Napi::Object& obj)
+query_line query_line::parse(txn_mode mode, base_flag key_flag, 
+        base_flag value_flag, const Napi::Object& obj)
 {
-    query_db result{};
+    query_line rc{};
+    rc.key_flag = key_flag;
+    rc.value_flag = value_flag;
     
     // Парсим имя базы данных
     if (obj.Has("db")) {
-        result.db = obj.Get("db").As<Napi::String>().Utf8Value();
+        rc.db_name = obj.Get("db").As<Napi::String>().Utf8Value();
+        rc.db = mdbx::slice{rc.db_name};
     }
-    
-    // Парсим флаги базы данных
-    if (obj.Has("flag")) {
-        auto arg_flag = obj.Get("flag");
-        if (arg_flag.IsBigInt()) {
-            bool lossless{true};
-            result.flag = static_cast<MDBX_db_flags_t>(arg_flag.As<Napi::BigInt>().Int64Value(&lossless));
-            if (result.flag & MDBX_INTEGERKEY) {
-                result.id_type = query_db::key_bigint;
-            }
-        } if (arg_flag.IsNumber()) {
-            result.flag = static_cast<MDBX_db_flags_t>(arg_flag.As<Napi::Number>().Int32Value());
-            if (result.flag & MDBX_INTEGERKEY) {
-                result.id_type = query_db::key_number;
-            }
-        }
+
+    // fprintf(stderr, "query_line::parse db_name: %s\n",
+    //        rc.db_name.c_str());
+
+    if (obj.Has("db_mode")) {
+        rc.db_mod = db_mode::parse(mode, obj.Get("db_mode").As<Napi::Number>());
     }
-    
+
+    // fprintf(stderr, "query_line::parse db_mode: 0x%X\n",
+    //        rc.db_mod.val);
+
+    if (obj.Has("key_flag")) {
+        rc.key_flag = base_flag::parse_key(obj.Get("key_flag").As<Napi::Number>());
+    }
+
+    // fprintf(stderr, "query_line::parse key_flag: 0x%X\n",
+    //        rc.key_flag.val);
+
+    if (obj.Has("key_mode")) {
+        rc.key_mod = parse_key_mode(obj.Env(), obj.Get("key_mode").As<Napi::Number>(), rc.key_flag);
+    }
+
+    // fprintf(stderr, "query_line::parse key_mode: 0x%X\n",
+    //        rc.key_mod.val);
+
+    if (obj.Has("value_mode")) {
+        rc.val_mod = value_mode::parse(obj.Get("value_mode").As<Napi::Number>());
+    }
+
+    // fprintf(stderr, "query_line::parse value_mode: 0x%X\n",
+    //        rc.val_mod.val);
+
+    if (obj.Has("value_flag")) {
+        rc.value_flag = base_flag::parse_value(rc.val_mod, obj.Get("value_flag").As<Napi::Number>());
+    }
+
+    // fprintf(stderr, "query_line::parse value_flag: 0x%X\n",
+    //        rc.value_flag.val);
+
+    if (obj.Has("mode")) {
+        rc.mode = query_mode::parse(mode, obj.Get("mode").As<Napi::Number>());
+    }
+
+    // fprintf(stderr, "query_line::parse mode: 0x%X\n",
+    //        rc.mode.val);
+
     // Парсим элементы
     if (obj.Has("item")) {
         auto items_array = obj.Get("item").As<Napi::Array>();
         auto length = items_array.Length();
-        result.item.reserve(length);
-        
-        for (uint32_t i = 0; i < length; ++i) {
+        auto& item = rc.item;
+        item.reserve(length);
+        for (std::size_t i = 0; i < length; ++i) {
             const auto& item_obj = items_array.Get(i).As<Napi::Object>();
-            result.item.push_back(query_item::parse(env, item_obj, result.flag, result.id_type));
+            item.emplace_back(query_element::parse(rc, item_obj));
         }
     } else {
-        throw Napi::Error::New(env, "query: 'item' array");
+        throw std::runtime_error("query: no item");
     }
     
-    return result;
+    // fprintf(stderr, "query_line::parse db_name: %s, db_mode: 0x%X, key_flag: 0x%X, key_mode: 0x%X, value_flag: 0x%X, value_mode: 0x%X, mode: 0x%X\n",
+    //        rc.db_name.c_str(), rc.db_mod.val, rc.key_flag.val, rc.key_mod.val, rc.value_flag.val, rc.val_mod.val, rc.mode.val);
+    return rc;
+}
+
+query_element query_element::parse(const query_line& line, const Napi::Object& item)
+{
+    query_element rc{line};
+    auto key_flag = line.key_flag;
+    auto key_mode = line.key_mod;
+    auto val_flag = line.value_flag;
+    auto mode = line.mode;
+    
+    keymou key{};
+    // ключ всегда есть
+    auto item_key = item.Get("key");
+    if (key_mode.val & key_mode::ordinal) {
+        if (key_flag.val & base_flag::number) {
+            key = keymou{item_key.As<Napi::Number>(), rc.id_buf};
+        } else if (key_flag.val & base_flag::bigint) {
+            key = keymou{item_key.As<Napi::BigInt>(), rc.id_buf};
+        }
+    } else {
+        key = (key_flag.val & base_flag::string) ?
+           keymou{item_key.As<Napi::String>(), item_key.Env(), rc.key_buf} :
+           keymou{item_key.As<Napi::Buffer<char>>(), rc.key_buf};
+    }
+
+    // проверяем надо ли что-то писать
+    if (mode.val & query_mode::write_mask) {
+        valuemou val{};
+        auto item_val = item.Get("value");
+        val = (val_flag.val & base_flag::string) ?
+            valuemou{item_val.As<Napi::String>(), item_val.Env(), rc.val_buf} :
+            valuemou{item_val.As<Napi::Buffer<char>>(), rc.val_buf};
+    }
+
+    return rc;
 }
 
 } // namespace mdbxmou
