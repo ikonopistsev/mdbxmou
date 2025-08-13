@@ -97,7 +97,7 @@ env_arg0 envmou::parse(const Napi::Value& arg0)
 
     if (obj.Has("mode")) {
         auto value = obj.Get("mode").As<Napi::Number>();
-        rc.mode = static_cast<mode_t>(value.Int32Value());
+        rc.file_mode = static_cast<mode_t>(value.Int32Value());
     }
 
     if (obj.Has("keyFlag")) {
@@ -187,7 +187,13 @@ MDBX_env* envmou::create_and_open(const env_arg0& arg0)
         throw std::runtime_error(mdbx_strerror(rc));
     }
 
-    rc = mdbx_env_open(env, arg0.path.c_str(), arg0.flag, arg0.mode);
+    auto id = static_cast<std::uint32_t>(pthread_self());
+    // выдадим параметры mode, flag и id потока в котором открывается env
+    mode_t mode = arg0.file_mode;
+    fprintf(stderr, "Opening MDBX env: path=%s, mode=%d, flags=0x%x, max_dbi=%u, max_readers=%u, thread_id=%u\n",
+           arg0.path.c_str(), mode, arg0.flag.val, arg0.max_dbi, arg0.max_readers, id);
+
+    rc = mdbx_env_open(env, arg0.path.c_str(), arg0.flag, mode);
     if (rc != MDBX_SUCCESS) {
         mdbx_env_close(env);
         throw std::runtime_error(mdbx_strerror(rc));
