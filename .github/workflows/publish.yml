@@ -1,0 +1,33 @@
+name: "Publish to NPM"
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger only on version tags
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'stable'
+          registry-url: https://registry.npmjs.org
+      
+      - name: Install and build
+        run: npm install
+      
+      - name: Run tests
+        run: npm test
+      
+      - name: Publish to NPM
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
