@@ -9,19 +9,22 @@ namespace mdbxmou {
 
 using buffer_type = std::vector<char>;
 
-class txnmou_managed final
+struct txnmou_managed final
     : public mdbx::txn_managed
 {
-public:
-    txnmou_managed() = delete;
-    txnmou_managed(const txnmou_managed &) = delete;
-    txnmou_managed &operator=(const txnmou_managed &) = delete;
-    txnmou_managed(txnmou_managed &&) = default;
-    txnmou_managed &operator=(txnmou_managed &&other) noexcept = default;
     txnmou_managed(MDBX_txn* txn)
     {  
         txn::handle_ = txn; 
     }
+};
+
+struct cursormou_managed final
+    : public mdbx::cursor_managed
+{
+    cursormou_managed(MDBX_cursor* cursor) noexcept
+    {  
+        cursor::handle_ = cursor; 
+    }    
 };
 
 

@@ -134,66 +134,65 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
     }
     auto fn = info[0].As<Napi::Function>();
     
-    MDBX_cursor* cursor;
-    auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor);
+    MDBX_cursor* cursor_ptr;
+    auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
     if (rc != MDBX_SUCCESS) {
         throw Napi::Error::New(env, mdbx_strerror(rc));
     }
-    // сохраняем курсор в уникальном указателе
-    cursor_ptr cursor_guard(cursor);
+    
+    std::size_t index{};
 
-    keymou key{};
-    valuemou val{};
-    // Получаем первую запись
-    rc = mdbx_cursor_get(cursor, key, val, MDBX_FIRST);
-    if (rc == MDBX_NOTFOUND) {
-        return env.Undefined();
-    }
-    if (rc != MDBX_SUCCESS) {
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }        
     try {
-        std::size_t index{};
-        // Перебираем все записи
-        do {
-            // Конвертируем ключ
-            Napi::Value rc_key;
-            if (key_mode_.val & key_mode::ordinal) {
-                rc_key = (key_flag_.val & base_flag::bigint) ?
-                    key.to_bigint(env) : key.to_number(env);
-            } else {
+        cursormou_managed cursor{ cursor_ptr };
+
+        if (key_mode_.val & key_mode::ordinal) {
+            cursor.scan([&](const mdbx::pair& f) {
+                keymou key{f.key};
+                valuemou val{f.value};
+                // Конвертируем ключ
+                Napi::Value rc_key;
+                    rc_key = (key_flag_.val & base_flag::bigint) ?
+                        key.to_bigint(env) : key.to_number(env);
+                // Конвертируем значение
+                Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
+                    val.to_string(env) : val.to_buffer(env);
+
+                Napi::Value result = fn.Call({ rc_key, rc_val, 
+                    Napi::Number::New(env, index) });
+
+                index++;
+
+                return result.IsBoolean() ? 
+                    result.ToBoolean() : false;
+            });
+        } else {
+            cursor.scan([&](const mdbx::pair& f) {
+                keymou key{f.key};
+                valuemou val{f.value};
+                // Конвертируем ключ
+                Napi::Value rc_key;
                 rc_key = (key_flag_.val & base_flag::string) ?
                     key.to_string(env) : key.to_buffer(env);
-            }
 
-            // Конвертируем значение
-            Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
-                val.to_string(env) : val.to_buffer(env);
-            
-            // Вызываем callback(value, key, index)
-            Napi::Value result = fn.Call({ rc_key, rc_val, 
-                Napi::Number::New(env, index) });
-            
-            // Проверяем, если callback вернул false - прерываем итерацию
-            if (result.IsBoolean() && !result.ToBoolean()) {
-                break;
-            }
-            
-            ++index;
-            
-            // Переходим к следующей записи
-            rc = mdbx_cursor_get(cursor, key, val, MDBX_NEXT);
-            
-        } while (rc == MDBX_SUCCESS);
-        
-        if (!((rc == MDBX_NOTFOUND) || (rc == MDBX_SUCCESS))) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
+                // Конвертируем значение
+                Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
+                    val.to_string(env) : val.to_buffer(env);
+                
+                Napi::Value result = fn.Call({ rc_key, rc_val, 
+                    Napi::Number::New(env, index) });
+
+                index++;
+
+                return result.IsBoolean() ? 
+                    result.ToBoolean() : false;
+            });
         }
+
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("forEach: ") + e.what());
     }
 
-    return env.Undefined();
+    return Napi::Number::New(env, index);
 }
 
 Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
@@ -227,13 +226,13 @@ Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
 Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     
-    MDBX_cursor* cursor;
-    auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor);
+    MDBX_cursor* cursor_ptr;
+    auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
     if (rc != MDBX_SUCCESS) {
         throw Napi::Error::New(env, mdbx_strerror(rc));
     }
     // сохраняем курсор в уникальном указателе
-    cursor_ptr cursor_guard(cursor);
+    cursormou_managed cursor{ cursor_ptr };
 
     try {
         auto arg0 = get_env_userctx(*env_);

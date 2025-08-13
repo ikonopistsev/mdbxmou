@@ -27,13 +27,6 @@ class dbimou final
     buffer_type val_buf_{};
     std::uint64_t id_buf_{};
     
-    struct close_cursor {
-        void operator()(MDBX_cursor *cursor) const noexcept {
-            mdbx_cursor_close(cursor);
-        }
-    };
-    using cursor_ptr = std::unique_ptr<MDBX_cursor, close_cursor>;
-
 public:
     static inline MDBX_stat get_stat(MDBX_txn* txn, MDBX_dbi dbi) 
     {
