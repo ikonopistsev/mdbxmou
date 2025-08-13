@@ -2,7 +2,7 @@
   "main": "lib/nativemou.js",
   "files": [
     "lib/**/*",
-    "src/**/*", 
+    "src/**/*",
     "deps/**/*",
     "!deps/**/.git",
     "build.js",
@@ -26,7 +26,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "description": "Node bindings for mdbx",
   "repository": {
     "type": "git",
