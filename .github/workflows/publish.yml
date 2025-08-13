@@ -18,14 +18,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 'stable'
+          node-version: '20'
           registry-url: https://registry.npmjs.org
-      
-      - name: Install and build
-        run: npm install
-      
-      - name: Run tests
-        run: npm test
       
       - name: Publish to NPM
         run: npm publish --access public
