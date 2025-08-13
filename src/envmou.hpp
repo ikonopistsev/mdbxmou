@@ -61,13 +61,11 @@ public:
 
     envmou& operator++() noexcept {
         auto i = ++trx_count_;
-        //fprintf(stderr, "TRACE: trx_count: %zu\n", i);
         return *this;
     }
 
     envmou& operator--() noexcept {
         auto i = --trx_count_;
-        //fprintf(stderr, "TRACE: trx_count: %zu\n", i);
         return *this;
     }
 
@@ -94,22 +92,16 @@ public:
     using lock_guard = std::lock_guard<envmou>;
     //  для защиты асинхронных операций
     void lock() {
-        //fprintf(stderr, "TRACE: envmou lock: %zu\n", trx_count_.load());
         auto rc = lock_.try_lock();
         if (!rc) {
             throw std::runtime_error("operation in progress");
         }
     }
     void unlock()  {
-        //fprintf(stderr, "TRACE: envmou unlock: %zu\n", trx_count_.load());
         lock_.unlock();
     }
     bool try_lock() {
         bool locked = lock_.try_lock();
-        if (locked) {
-            //fprintf(stderr, "TRACE: envmou try_lock: %s %zu\n", 
-            //    locked ? "true" : "false", trx_count_.load());
-        }
         return locked;
     }
 
