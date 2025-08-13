@@ -1,5 +1,14 @@
 {
   "main": "lib/nativemou.js",
+  "files": [
+    "lib/**/*",
+    "src/**/*", 
+    "deps/**/*",
+    "build.js",
+    "CMakeLists.txt",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "cmake-js": "^7.3.1",
     "node-addon-api": "^8.5.0"
@@ -10,7 +19,8 @@
     "e5": "node ./test/e5.js",
     "test": "node ./test/e3.js && node ./test/e4.js && node ./test/e5.js",
     "build": "node build.js",
-    "install": "node build.js"
+    "install": "node build.js",
+    "prepublishOnly": "./prepare-npm.sh"
   },
   "gypfile": true,
   "name": "mdbxmou",
