@@ -22,7 +22,7 @@
     "build": "node build.js",
     "install-1": "git submodule update --init --recursive 2>/dev/null || true && node build.js",
     "install": "node build.js",
-    "prepublishOnly": "./prepare-npm.sh"
+    "!prepublishOnly": "./prepare-npm.sh"
   },
   "gypfile": true,
   "name": "mdbxmou",
