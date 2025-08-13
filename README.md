@@ -497,7 +497,6 @@ async function queryExample() {
     {
       db: "users",
       dbMode: MDBX_Param.dbMode.create | MDBX_Param.dbMode.accede,
-      keyMode: 0, // default string/binary keys
       mode: MDBX_Param.queryMode.put,
       item: [
         { key: "user1", value: JSON.stringify({ name: "Alice" }) },
@@ -507,7 +506,6 @@ async function queryExample() {
     {
       db: "users", 
       dbMode: MDBX_Param.dbMode.accede,
-      keyMode: 0, // default string/binary keys
       mode: MDBX_Param.queryMode.get,
       item: [
         { key: "user1" },
