@@ -5,7 +5,7 @@ High-performance Node.js binding for libmdbx — a fast, lightweight, embedded k
 ## Features
 
 - **Synchronous API** — Direct MDBX operations in main thread
-- **Asynchronous API** — Background operations via Worker Threads
+- **Asynchronous API** — Background operations via single Worker Thread
 - **Transactions** — ACID transactions with read/write modes
 - **Multiple key/value types** — String, binary, ordinal (integer) keys
 - **Batch operations** — Efficient multi-key read/write
@@ -24,7 +24,11 @@ const { MDBX_Env, MDBX_Param } = require('mdbxmou');
 
 // Create environment
 const env = new MDBX_Env();
-await env.open({ path: './data' });
+await env.open({ 
+  path: './data',
+  keyFlag: MDBX_Param.keyFlag.string,    // Default key encoding (optional)
+  valueFlag: MDBX_Param.valueFlag.string // Default value encoding (optional)
+});
 
 // Write data
 const txn = env.startWrite();
@@ -58,10 +62,23 @@ const env = new MDBX_Env();
 ```javascript
 await env.open({
   path: './database',           // Database directory
-  valueFlag: MDBX_Param.valueFlag.string,  // Value encoding
+  keyFlag: MDBX_Param.keyFlag.string,    // Default key encoding (optional)
+  valueFlag: MDBX_Param.valueFlag.string, // Default value encoding (optional)
   envFlag: MDBX_Param.envFlag.nostickythreads
 });
 ```
+
+Options:
+- `path` - Database directory path
+- `keyFlag` - Default key encoding for all operations (optional, defaults to Buffer)
+  - Only `string` can be set (ordinal mode uses `number`/`bigint` separately)
+- `valueFlag` - Default value encoding for all operations (optional, defaults to Buffer)
+- `envFlag` - Environment flags
+- `mapSize` - Maximum database size
+- `maxReaders` - Maximum number of readers
+- `maxDbs` - Maximum number of databases
+
+Note: When `keyFlag` or `valueFlag` are set at environment level, they become defaults for all subsequent operations unless explicitly overridden.
 
 **close() → Promise**
 ```javascript
@@ -125,6 +142,8 @@ const namedDbi = txn.createMap("my-table", MDBX_Param.keyMode.ordinal);
 const namedDbi = txn.createMap("my-table", MDBX_Param.keyMode.ordinal, MDBX_Param.valueMode.multi);
 ```
 
+> **Note**: Use `createMap` in write transactions - it will create the database if it doesn't exist, or open it if it does. This is safer for new environments.
+
 **openMap(keyMode, [name]) → DBI**
 ```javascript
 // No arguments - default keyMode (0) 
@@ -140,6 +159,8 @@ const dbi = txn.openMap(BigInt(MDBX_Param.keyMode.ordinal));
 const namedDbi = txn.openMap("my-table", MDBX_Param.keyMode.ordinal);
 const namedDbiBigInt = txn.openMap("my-table", BigInt(MDBX_Param.keyMode.ordinal));
 ```
+
+> **Note**: Use `openMap` in read transactions or when you're sure the database already exists. For write transactions on new environments, prefer `createMap`.
 
 > **Note**: When using ordinal keyMode, the key type in results depends on how you specify keyMode:
 > - `keyMode: number` → keys returned as `number`
@@ -218,7 +239,8 @@ const equalKeys = dbi.keysFrom(5, 10, 'keyEqual');
 ```javascript
 dbi.forEach((key, value, index) => {
   console.log(`${key}: ${value}`);
-  return true; // continue iteration
+  // return false; // continue iteration (or undefined)
+  // return true; // stop iteration
 });
 ```
 
@@ -226,7 +248,7 @@ dbi.forEach((key, value, index) => {
 
 ### Key Modes (MDBX_Param.keyMode)
 
-- **Default (0)** - String/binary keys (no flags)
+- **Default (0)** - Buffer keys (no flags, default behavior)
 - **reverse** - Keys sorted in reverse order
 - **ordinal** - Integer keys (4 or 8 bytes, native endian)
 
@@ -272,7 +294,7 @@ function syncExample() {
   // Iterate with cursor
   readDbi.forEach((key, value, index) => {
     console.log(`Key ${key} (type: ${typeof key}): ${value}`); // key is number
-    return index >= 10; // stop after 10 items
+    return index >= 9; // stop after 10 items (indices 0-9)
   });
   
   // Get specific keys
@@ -308,7 +330,7 @@ async function asyncExample() {
   // Iterate with BigInt keys
   readDbi.forEach((key, value, index) => {
     console.log(`Key ${key} (type: ${typeof key}): ${value}`); // key is bigint
-    return index >= 10; // stop after 10 items
+    return index >= 9; // stop after 10 items (indices 0-9)
   });
   
   // Get BigInt keys
@@ -499,35 +521,51 @@ async function queryExample() {
 }
 ```
 
-### Worker Pool Example
+### Worker Thread Example
 
 ```javascript
 const { MDBX_Async_Env } = require('mdbxmou/lib/mdbx_evn_async');
 
 async function workerExample() {
-  // Each transaction runs in dedicated worker thread
-  const env = new MDBX_Async_Env(4); // 4 worker threads
+  // Single worker thread for all async operations
+  const env = new MDBX_Async_Env();
   await env.open({ path: './worker-data' });
 
-  // Multiple concurrent transactions
-  const promises = [];
-  for (let i = 0; i < 10; i++) {
-    promises.push(async () => {
-      const txn = await env.startWrite();
-      const dbi = await txn.openMap({ 
-        keyMode: MDBX_Param.keyMode.ordinal, 
-        create: true 
-      });
-      await dbi.put(BigInt(i), `worker-value-${i}`);
-      await txn.commit();
-    }());
-  }
+  // Each transaction runs in the same worker thread
+  const txn1 = await env.startWrite();
+  const dbi1 = await txn1.openMap({ 
+    keyMode: MDBX_Param.keyMode.ordinal, 
+    create: true 
+  });
+  await dbi1.put(1n, "worker-value-1");
+  await txn1.commit();
 
-  await Promise.all(promises);
-  console.log('All transactions completed');
+  // Another transaction in the same worker
+  const txn2 = await env.startWrite();
+  const dbi2 = await txn2.openMap({ 
+    keyMode: MDBX_Param.keyMode.ordinal,
+    create: true 
+  });
+  await dbi2.put(2n, "worker-value-2");
+  await txn2.commit();
+
+  // Read transaction
+  const readTxn = await env.startRead();
+  const readDbi = await readTxn.openMap({ 
+    keyMode: MDBX_Param.keyMode.ordinal 
+  });
+  
+  const results = await readDbi.getBatch([1n, 2n]);
+  results.forEach(r => {
+    if (r.found) {
+      console.log(`Key ${r.key}: ${r.value}`);
+    }
+  });
+  
+  await readTxn.commit();
 
   await env.close();
-  await env.terminate();
+  await env.terminate(); // Terminate the worker thread
 }
 ```
 
@@ -560,24 +598,16 @@ const { MDBX_Param } = require('mdbxmou');
 
 // Key modes
 MDBX_Param.keyMode.reverse    // MDBX_REVERSEKEY - reverse key order
-MDBX_Param.keyMode.ordinal    // MDBX_INTEGERKEY - integer keys
-// Default (0) - string/binary keys
+MDBX_Param.keyMode.ordinal    // MDBX_INTEGERKEY - integer keys (use with number/bigint)
+// Default (0) - Buffer keys (no flags)
 
-// Value modes  
-MDBX_Param.valueMode.multi                    // MDBX_DUPSORT
-MDBX_Param.valueMode.multiReverse            // MDBX_DUPSORT | MDBX_REVERSEDUP
-MDBX_Param.valueMode.multiSamelength         // MDBX_DUPSORT | MDBX_DUPFIXED
-MDBX_Param.valueMode.multiOrdinal            // MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP
-MDBX_Param.valueMode.multiReverseSamelength  // MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED
-// Default (0) - single value per key
-
-// Value flags
-MDBX_Param.valueFlag.string   // UTF-8 string encoding
-
-// Key flags
+// Key flags (optional, control key representation)
 MDBX_Param.keyFlag.string     // UTF-8 string encoding
-MDBX_Param.keyFlag.number     // Number type
-MDBX_Param.keyFlag.bigint     // BigInt type
+MDBX_Param.keyFlag.number     // Number type (used with ordinal mode)
+MDBX_Param.keyFlag.bigint     // BigInt type (used with ordinal mode)
+// Default - Buffer representation
+
+Note: For ordinal (integer) keys, use keyFlag.number or keyFlag.bigint to specify the data type.
 ```
 
 ### Environment Flags
@@ -596,14 +626,14 @@ MDBX_Param.keyFlag.bigint     // BigInt type
 ## Performance Tips
 
 1. **Use ordinal keys** for integer data - much faster than string keys
-2. **Batch operations** - Use query API or worker threads for bulk operations
+2. **Batch operations** - Use query API or async worker thread for bulk operations
 3. **Reuse transactions** - Keep read transactions open for multiple operations
-4. **Worker threads** - Use async API for CPU-intensive or I/O operations
+4. **Worker thread** - Use async API for CPU-intensive or I/O operations
 5. **Memory mapping** - MDBX uses memory-mapped files for zero-copy access
 
 ## License
 
-MIT
+Apache License 2.0
 
 ---
 
