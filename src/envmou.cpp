@@ -119,11 +119,11 @@ Napi::Value envmou::open(const Napi::CallbackInfo& info)
     try {
         // асинхронный вызов разлочится внутри worker'a
         if (!try_lock()) {
-            throw std::runtime_error("Env: in progress");
+            throw std::runtime_error("in progress");
         }
 
         if (is_open()) {
-            throw std::runtime_error("Env already opened");
+            throw std::runtime_error("already opened");
         }          
 
         auto* worker = new async_open(env, *this, arg0);
@@ -149,7 +149,7 @@ Napi::Value envmou::open_sync(const Napi::CallbackInfo& info)
     try {
         lock_guard l(*this);
         if (is_open()) {
-            throw std::runtime_error("Env: already opened");
+            throw std::runtime_error("already opened");
         }
         attach(create_and_open(arg0), arg0);
     } catch (const std::exception& e) {
@@ -217,7 +217,7 @@ Napi::Value envmou::close(const Napi::CallbackInfo& info)
     try {
         // асинхронный вызов разлочится внутри worker'a
         if (!try_lock()) {
-            throw std::runtime_error("Env: in progress");
+            throw std::runtime_error("in progress");
         }
 
         if (!is_open()) {
@@ -225,7 +225,7 @@ Napi::Value envmou::close(const Napi::CallbackInfo& info)
         }
 
         if (trx_count_.load() > 0) {
-            throw std::runtime_error("Env: active transactions");
+            throw std::runtime_error("active transactions");
         }
 
         auto* worker = new async_close(env, *this);
@@ -262,7 +262,7 @@ Napi::Value envmou::copy_to_sync(const Napi::CallbackInfo& info)
     auto env = info.Env();
 
     if (info.Length() < 1 || !info[0].IsString()) {
-        throw Napi::TypeError::New(env, "Expected a string argument for the destination path.");
+        throw Napi::TypeError::New(env, "expected a string argument for the destination path");
     }
 
     MDBX_copy_flags_t flags{MDBX_CP_COMPACT};
@@ -306,7 +306,7 @@ Napi::Value envmou::copy_to(const Napi::CallbackInfo& info)
         auto dest = info[0].As<Napi::String>().Utf8Value();
 
         if (!try_lock()) {
-            throw std::runtime_error("Env in progress");
+            throw std::runtime_error("in progress");
         }
 
         check();
@@ -363,7 +363,7 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
 
     if (info.Length() < 1) {
         throw Napi::TypeError::New(env, 
-            "Expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number, mode: Number, item: [] }, ...]");
+            "expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number, mode: Number, item: [] }, ...]");
     }
 
     if (info.Length() > 1 || info[1].IsNumber()) {
@@ -406,7 +406,7 @@ Napi::Value envmou::keys(const Napi::CallbackInfo& info)
 
     if (info.Length() < 1) {
         throw Napi::TypeError::New(env, 
-            "Expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number }, ...]");
+            "expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number }, ...]");
     }
 
     if (info.Length() > 1 || info[1].IsNumber()) {

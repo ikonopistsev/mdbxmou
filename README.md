@@ -1,3 +1,611 @@
 # mdbxmou
 
-Nodejs binding for libmdbx
+High-performance Node.js binding for libmdbx — a fast, lightweight, embedded key-value database.
+
+## Features
+
+- **Synchronous API** — Direct MDBX operations in main thread
+- **Asynchronous API** — Background operations via Worker Threads
+- **Transactions** — ACID transactions with read/write modes
+- **Multiple key/value types** — String, binary, ordinal (integer) keys
+- **Batch operations** — Efficient multi-key read/write
+- **Memory-mapped** — Zero-copy data access
+
+## Installation
+
+```bash
+npm install mdbxmou
+```
+
+## Quick Start
+
+```javascript
+const { MDBX_Env, MDBX_Param } = require('mdbxmou');
+
+// Create environment
+const env = new MDBX_Env();
+await env.open({ path: './data' });
+
+// Write data
+const txn = env.startWrite();
+const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
+dbi.put(1, "hello");
+dbi.put(2, "world");
+txn.commit();
+
+// Read data
+const readTxn = env.startRead();
+const readDbi = readTxn.openMap(BigInt(MDBX_Param.keyMode.ordinal));
+const value = readDbi.get(1);
+console.log(value); // "hello"
+readTxn.commit();
+
+await env.close();
+```
+
+## API Reference
+
+### Environment (MDBX_Env)
+
+#### Constructor
+```javascript
+const env = new MDBX_Env();
+```
+
+#### Methods
+
+**open(options) → Promise**
+```javascript
+await env.open({
+  path: './database',           // Database directory
+  valueFlag: MDBX_Param.valueFlag.string,  // Value encoding
+  envFlag: MDBX_Param.envFlag.nostickythreads
+});
+```
+
+**close() → Promise**
+```javascript
+await env.close();
+```
+
+**openSync(options)**
+```javascript
+env.openSync({
+  path: './database',
+  valueFlag: MDBX_Param.valueFlag.string
+});
+```
+
+**closeSync()**
+```javascript
+env.closeSync();
+```
+
+**startWrite() → Transaction**
+```javascript
+const txn = env.startWrite();
+```
+
+**startRead() → Transaction**
+```javascript
+const txn = env.startRead();
+```
+
+**query(requests) → Promise<Array>** (Async batch operations)
+```javascript
+const result = await env.query([
+  {
+    dbMode: MDBX_Param.dbMode.accede,
+    keyMode: MDBX_Param.keyMode.ordinal,
+    mode: MDBX_Param.queryMode.get,
+    item: [{ key: 1 }, { key: 2 }]
+  }
+]);
+```
+
+### Transaction
+
+#### Methods
+
+**createMap(keyMode, [valueMode], [flags], [name]) → DBI**
+```javascript
+// No arguments - default keyMode (0) and valueMode (0)
+const dbi = txn.createMap();
+
+// One argument - keyMode only
+const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
+
+// Two arguments - keyMode + valueMode
+const dbi = txn.createMap(MDBX_Param.keyMode.ordinal, MDBX_Param.valueMode.multi);
+
+// Two arguments - db_name + keyMode
+const namedDbi = txn.createMap("my-table", MDBX_Param.keyMode.ordinal);
+
+// Three arguments - db_name + keyMode + valueMode  
+const namedDbi = txn.createMap("my-table", MDBX_Param.keyMode.ordinal, MDBX_Param.valueMode.multi);
+```
+
+**openMap(keyMode, [name]) → DBI**
+```javascript
+// No arguments - default keyMode (0) 
+const dbi = txn.openMap();
+
+// One argument - keyMode only
+// Number keyMode - keys returned as numbers
+const dbi = txn.openMap(MDBX_Param.keyMode.ordinal);
+// BigInt keyMode - keys returned as BigInts
+const dbi = txn.openMap(BigInt(MDBX_Param.keyMode.ordinal));
+
+// Two arguments - db_name + keyMode
+const namedDbi = txn.openMap("my-table", MDBX_Param.keyMode.ordinal);
+const namedDbiBigInt = txn.openMap("my-table", BigInt(MDBX_Param.keyMode.ordinal));
+```
+
+> **Note**: When using ordinal keyMode, the key type in results depends on how you specify keyMode:
+> - `keyMode: number` → keys returned as `number`
+> - `keyMode: BigInt(number)` → keys returned as `BigInt`
+
+**commit()**
+```javascript
+txn.commit();
+```
+
+**abort()**
+```javascript
+txn.abort();
+```
+
+### DBI (Database Instance)
+
+#### Methods
+
+**put(key, value, [flags])**
+```javascript
+dbi.put(123, "value");
+dbi.put("key", Buffer.from("binary data"));
+```
+
+**get(key) → value**
+```javascript
+const value = dbi.get(123);
+const binary = dbi.get("key");
+```
+
+**del(key) → boolean**
+```javascript
+const deleted = dbi.del(123);
+```
+
+**stat() → Object**
+```javascript
+const stats = dbi.stat();
+// { pageSize: 4096, depth: 1, entries: 10, ... }
+```
+
+**forEach(callback)**
+```javascript
+dbi.forEach((key, value, index) => {
+  console.log(`${key}: ${value}`);
+  return false; // continue iteration (or undefined)
+  // return true; // stop iteration
+});
+```
+
+> **Note**: forEach continues scanning while callback returns `undefined` or `false`, and stops when callback returns `true`.
+
+**keys() → Array**
+```javascript
+// Get all keys
+const allKeys = dbi.keys();
+```
+
+**keysFrom(startKey, [limit], [cursorMode]) → Array**
+```javascript
+// Get keys starting from specific key
+const keys = dbi.keysFrom(42, 50); // 50 keys starting from 42
+
+// With cursor mode
+const keys = dbi.keysFrom(42, 50, 'keyGreaterOrEqual');
+
+// BigInt keys
+const bigIntKeys = dbi.keysFrom(42n, 50);
+
+// Key equal mode (for multi-value databases)
+const equalKeys = dbi.keysFrom(5, 10, 'keyEqual');
+```
+
+**query(requests) → Promise<Array>** (Async batch operations)
+```javascript
+dbi.forEach((key, value, index) => {
+  console.log(`${key}: ${value}`);
+  return true; // continue iteration
+});
+```
+
+## Key and Value Types
+
+### Key Modes (MDBX_Param.keyMode)
+
+- **Default (0)** - String/binary keys (no flags)
+- **reverse** - Keys sorted in reverse order
+- **ordinal** - Integer keys (4 or 8 bytes, native endian)
+
+### Value Modes (MDBX_Param.valueMode)
+
+- **single** - Single value per key (default)
+- **multi** - Multiple values per key (dupsort)
+
+### Value Flags (MDBX_Param.valueFlag)
+
+- **binary** - Raw binary data (default)
+- **string** - UTF-8 strings
+
+## Examples
+
+### Basic Usage (Synchronous)
+
+```javascript
+const { MDBX_Env, MDBX_Param } = require('mdbxmou');
+
+function syncExample() {
+  const env = new MDBX_Env();
+  
+  // Synchronous open
+  env.openSync({ path: './data' });
+
+  // Write transaction
+  const writeTxn = env.startWrite();
+  const dbi = writeTxn.createMap(MDBX_Param.keyMode.ordinal);
+  
+  for (let i = 0; i < 1000; i++) {
+    dbi.put(i, `value_${i}`);
+  }
+  writeTxn.commit();
+
+  // Read transaction with number keys
+  const readTxn = env.startRead();
+  const readDbi = readTxn.openMap(MDBX_Param.keyMode.ordinal); // keys as numbers
+  
+  const value = readDbi.get(42);
+  console.log(value); // "value_42"
+  
+  // Iterate with cursor
+  readDbi.forEach((key, value, index) => {
+    console.log(`Key ${key} (type: ${typeof key}): ${value}`); // key is number
+    return index >= 10; // stop after 10 items
+  });
+  
+  // Get specific keys
+  const someKeys = readDbi.keysFrom(100, { limit: 50 });
+  console.log(`Keys 100-149:`, someKeys); // array of numbers
+  
+  readTxn.commit();
+  
+  // Synchronous close
+  env.closeSync();
+}
+
+async function asyncExample() {
+  const env = new MDBX_Env();
+  await env.open({ path: './data-async' });
+
+  // Write transaction  
+  const writeTxn = env.startWrite();
+  const dbi = writeTxn.createMap(MDBX_Param.keyMode.ordinal);
+  
+  for (let i = 0; i < 1000; i++) {
+    dbi.put(i, `value_${i}`);
+  }
+  writeTxn.commit();
+
+  // Read transaction with BigInt keys
+  const readTxn = env.startRead();
+  const readDbi = readTxn.openMap(BigInt(MDBX_Param.keyMode.ordinal)); // keys as BigInts
+  
+  const value = readDbi.get(42);
+  console.log(value); // "value_42"
+  
+  // Iterate with BigInt keys
+  readDbi.forEach((key, value, index) => {
+    console.log(`Key ${key} (type: ${typeof key}): ${value}`); // key is bigint
+    return index >= 10; // stop after 10 items
+  });
+  
+  // Get BigInt keys
+  const bigIntKeys = readDbi.keysFrom(100n, { limit: 50 });
+  console.log(`Keys 100n-149n:`, bigIntKeys); // array of BigInts
+  
+  readTxn.commit();
+  await env.close();
+}
+```
+
+### Key Type Behavior
+
+```javascript
+const { MDBX_Env, MDBX_Param } = require('mdbxmou');
+
+function keyTypesExample() {
+  const env = new MDBX_Env();
+  env.openSync({ path: './key-types' });
+
+  const txn = env.startWrite();
+  const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
+  
+  // Store some data
+  dbi.put(1, "one");
+  dbi.put(2, "two");
+  dbi.put(3, "three");
+  txn.commit();
+
+  // Read with number keyMode
+  const readTxn1 = env.startRead();
+  const numberDbi = readTxn1.openMap(MDBX_Param.keyMode.ordinal);
+  
+  numberDbi.forEach((key, value) => {
+    console.log(`Number key: ${key} (${typeof key})`); // number
+    // return undefined; // continue iteration (default)
+  });
+  readTxn1.commit();
+
+  // Read with BigInt keyMode  
+  const readTxn2 = env.startRead();
+  const bigintDbi = readTxn2.openMap(BigInt(MDBX_Param.keyMode.ordinal));
+  
+  bigintDbi.forEach((key, value) => {
+    console.log(`BigInt key: ${key} (${typeof key})`); // bigint
+    // return false; // continue iteration
+  });
+  readTxn2.commit();
+
+  env.closeSync();
+}
+```
+
+### Cursor Operations
+
+```javascript
+const { MDBX_Env, MDBX_Param } = require('mdbxmou');
+
+function cursorExample() {
+  const env = new MDBX_Env();
+  env.openSync({ path: './cursor-data' });
+
+  const txn = env.startWrite();
+  const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
+  
+  // Store test data
+  for (let i = 0; i < 100; i++) {
+    dbi.put(i, `value_${i}`);
+  }
+  txn.commit();
+
+  const readTxn = env.startRead();
+  const readDbi = readTxn.openMap(MDBX_Param.keyMode.ordinal);
+  
+  // Get all keys
+  const allKeys = readDbi.keys();
+  console.log(`Total keys: ${allKeys.length}`);
+  
+  // Get limited keys - use keysFrom with limit
+  const firstTen = readDbi.keysFrom(0, 10);
+  console.log(`First 10 keys:`, firstTen);
+  
+  // Get keys from specific position
+  const fromFifty = readDbi.keysFrom(50, 20);
+  console.log(`Keys 50-69:`, fromFifty);
+  
+  // Reverse iteration - need manual logic or forEach
+  const allKeysForReverse = readDbi.keys();
+  const lastTen = allKeysForReverse.slice(-10).reverse();
+  console.log(`Last 10 keys:`, lastTen);
+  
+  // Manual iteration with forEach
+  let count = 0;
+  readDbi.forEach((key, value, index) => {
+    if (key >= 80) {
+      console.log(`Key ${key}: ${value}`);
+      count++;
+    }
+    return count >= 5; // stop after 5 items >= 80
+  });
+  
+  readTxn.commit();
+  env.closeSync();
+}
+```
+
+### Batch Operations (Asynchronous)
+
+```javascript
+const { MDBX_Async_Env } = require('mdbxmou/lib/mdbx_evn_async');
+const { MDBX_Param } = require('mdbxmou');
+
+async function batchExample() {
+  const env = new MDBX_Async_Env();
+  await env.open({ path: './async-data' });
+
+  // Write transaction in worker thread
+  const writeTxn = await env.startWrite();
+  const dbi = await writeTxn.openMap({ 
+    keyMode: MDBX_Param.keyMode.ordinal, 
+    create: true 
+  });
+
+  // Batch write
+  await dbi.putBatch([
+    { key: 1n, value: "one" },
+    { key: 2n, value: "two" },
+    { key: 3n, value: "three" }
+  ]);
+  
+  await writeTxn.commit();
+
+  // Read transaction in worker thread
+  const readTxn = await env.startRead();
+  const readDbi = await readTxn.openMap({ 
+    keyMode: MDBX_Param.keyMode.ordinal 
+  });
+
+  // Batch read
+  const results = await readDbi.getBatch([1n, 2n, 3n]);
+  results.forEach((result, i) => {
+    if (result.found) {
+      console.log(`Key ${result.key}: ${result.value}`);
+    }
+  });
+
+  await readTxn.commit();
+  await env.close();
+  await env.terminate();
+}
+```
+
+### Query API (Advanced Async)
+
+```javascript
+const { MDBX_Env, MDBX_Param } = require('mdbxmou');
+
+async function queryExample() {
+  const env = new MDBX_Env();
+  await env.open({ path: './query-data' });
+
+  // Async query with multiple databases
+  const results = await env.query([
+    {
+      db: "users",
+      dbMode: MDBX_Param.dbMode.create | MDBX_Param.dbMode.accede,
+      keyMode: 0, // default string/binary keys
+      mode: MDBX_Param.queryMode.put,
+      item: [
+        { key: "user1", value: JSON.stringify({ name: "Alice" }) },
+        { key: "user2", value: JSON.stringify({ name: "Bob" }) }
+      ]
+    },
+    {
+      db: "users", 
+      dbMode: MDBX_Param.dbMode.accede,
+      keyMode: 0, // default string/binary keys
+      mode: MDBX_Param.queryMode.get,
+      item: [
+        { key: "user1" },
+        { key: "user2" }
+      ]
+    }
+  ]);
+
+  console.log('Query results:', JSON.stringify(results, null, 2));
+  await env.close();
+}
+```
+
+### Worker Pool Example
+
+```javascript
+const { MDBX_Async_Env } = require('mdbxmou/lib/mdbx_evn_async');
+
+async function workerExample() {
+  // Each transaction runs in dedicated worker thread
+  const env = new MDBX_Async_Env(4); // 4 worker threads
+  await env.open({ path: './worker-data' });
+
+  // Multiple concurrent transactions
+  const promises = [];
+  for (let i = 0; i < 10; i++) {
+    promises.push(async () => {
+      const txn = await env.startWrite();
+      const dbi = await txn.openMap({ 
+        keyMode: MDBX_Param.keyMode.ordinal, 
+        create: true 
+      });
+      await dbi.put(BigInt(i), `worker-value-${i}`);
+      await txn.commit();
+    }());
+  }
+
+  await Promise.all(promises);
+  console.log('All transactions completed');
+
+  await env.close();
+  await env.terminate();
+}
+```
+
+## Error Handling
+
+```javascript
+try {
+  const env = new MDBX_Env();
+  await env.open({ path: './data' });
+  
+  const txn = env.startWrite();
+  const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
+  
+  // This might throw if key already exists with MDBX_NOOVERWRITE
+  dbi.put(123, "value", MDBX_Param.putFlag.nooverwrite);
+  
+  txn.commit();
+} catch (error) {
+  console.error('Database error:', error.message);
+  if (txn) txn.abort();
+}
+```
+
+## Configuration Options
+
+### Available Constants (MDBX_Param)
+
+```javascript
+const { MDBX_Param } = require('mdbxmou');
+
+// Key modes
+MDBX_Param.keyMode.reverse    // MDBX_REVERSEKEY - reverse key order
+MDBX_Param.keyMode.ordinal    // MDBX_INTEGERKEY - integer keys
+// Default (0) - string/binary keys
+
+// Value modes  
+MDBX_Param.valueMode.multi                    // MDBX_DUPSORT
+MDBX_Param.valueMode.multiReverse            // MDBX_DUPSORT | MDBX_REVERSEDUP
+MDBX_Param.valueMode.multiSamelength         // MDBX_DUPSORT | MDBX_DUPFIXED
+MDBX_Param.valueMode.multiOrdinal            // MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP
+MDBX_Param.valueMode.multiReverseSamelength  // MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED
+// Default (0) - single value per key
+
+// Value flags
+MDBX_Param.valueFlag.string   // UTF-8 string encoding
+
+// Key flags
+MDBX_Param.keyFlag.string     // UTF-8 string encoding
+MDBX_Param.keyFlag.number     // Number type
+MDBX_Param.keyFlag.bigint     // BigInt type
+```
+
+### Environment Flags
+- `MDBX_Param.envFlag.nostickythreads` - Don't stick reader transactions to threads
+- `MDBX_Param.envFlag.readonly` - Open database in read-only mode
+
+### Database Modes  
+- `MDBX_Param.dbMode.create` - Create database if it doesn't exist
+- `MDBX_Param.dbMode.accede` - Open existing database with any flags
+
+### Query Modes
+- `MDBX_Param.queryMode.get` - Read operations
+- `MDBX_Param.queryMode.put` - Write operations  
+- `MDBX_Param.queryMode.del` - Delete operations
+
+## Performance Tips
+
+1. **Use ordinal keys** for integer data - much faster than string keys
+2. **Batch operations** - Use query API or worker threads for bulk operations
+3. **Reuse transactions** - Keep read transactions open for multiple operations
+4. **Worker threads** - Use async API for CPU-intensive or I/O operations
+5. **Memory mapping** - MDBX uses memory-mapped files for zero-copy access
+
+## License
+
+MIT
+
+---
+
+**Documentation generated by GitHub Copilot (Claude 3.5 Sonnet) on August 13, 2025**  
+**Reviewed and approved by the library author**
