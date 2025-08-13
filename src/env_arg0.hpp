@@ -11,7 +11,7 @@ struct env_arg0 {
     MDBX_dbi max_dbi{32};
     mdbx::env::geometry geom{};
     env_flag flag{};
-    mode_t mode{0664};
+    mode_t file_mode{0664};
     std::uint32_t max_readers{128};
     base_flag key_flag{};
     base_flag value_flag{};

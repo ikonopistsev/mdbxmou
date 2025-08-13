@@ -21,7 +21,7 @@ class envmou final
         void operator()(MDBX_env* env) const {
             auto rc = mdbx_env_close(env);
             if (rc != MDBX_SUCCESS) {
-                fprintf(stderr, "mdbx_env_close failed: %s\n", mdbx_strerror(rc));
+                fprintf(stderr, "mdbx_env_close %s\n", mdbx_strerror(rc));
             }
         }
     };
@@ -60,12 +60,12 @@ public:
     static void init(const char *class_name, Napi::Env env, Napi::Object exports);
 
     envmou& operator++() noexcept {
-        auto i = ++trx_count_;
+        ++trx_count_;
         return *this;
     }
 
     envmou& operator--() noexcept {
-        auto i = --trx_count_;
+        --trx_count_;
         return *this;
     }
 
@@ -107,7 +107,7 @@ public:
 
     void do_close() {
         if (trx_count_.load() > 0) {
-            throw std::runtime_error("Env: transaction in progress");
+            throw std::runtime_error("transaction in progress");
         }
         env_.reset();
     }
