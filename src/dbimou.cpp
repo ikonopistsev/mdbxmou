@@ -234,48 +234,39 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
     if (rc != MDBX_SUCCESS) {
         throw Napi::Error::New(env, mdbx_strerror(rc));
     }
-    // сохраняем курсор в уникальном указателе
-    cursormou_managed cursor{ cursor_ptr };
 
     try {
-        auto arg0 = get_env_userctx(*env_);
+        cursormou_managed cursor{ cursor_ptr };
         auto stat = get_stat(*txn_, dbi_);
+        
         // Создаем массив для ключей
         Napi::Array keys = Napi::Array::New(env, stat.ms_entries);
         if (stat.ms_entries == 0) {
             return keys;
         }
-            
-        keymou key{};
-        // Получаем первую запись
-        rc = mdbx_cursor_get(cursor, key, nullptr, MDBX_FIRST);
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
 
-        std::size_t index = 0;
-        do {
-            // Конвертируем ключ
-            Napi::Value rc_key;
-            if (key_mode_.val & key_mode::ordinal) {
-                rc_key = (key_flag_.val & base_flag::bigint) ?
-                    key.to_bigint(env) : key.to_number(env);
-            } else {
-                rc_key = (key_flag_.val & base_flag::string) ?
-                    key.to_string(env) : key.to_buffer(env);
-            }
-
-            keys.Set(index++, rc_key);
-            
-            // Переходим к следующей записи
-            rc = mdbx_cursor_get(cursor, key, nullptr, MDBX_NEXT);
-        } while (rc == MDBX_SUCCESS);
+        std::size_t index{};
         
-        if (!((rc == MDBX_NOTFOUND) || (rc == MDBX_SUCCESS))) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
-        if (index != stat.ms_entries) {
-            throw Napi::Error::New(env, "Keys count mismatch?");
+        if (key_mode_.val & key_mode::ordinal) {
+            cursor.scan([&](const mdbx::pair& f) {
+                keymou key{f.key};
+                // Конвертируем ключ
+                Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
+                    key.to_bigint(env) : key.to_number(env);
+                
+                keys.Set(index++, rc_key);
+                return false; // продолжаем сканирование
+            });
+        } else {
+            cursor.scan([&](const mdbx::pair& f) {
+                keymou key{f.key};
+                // Конвертируем ключ
+                Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
+                    key.to_string(env) : key.to_buffer(env);
+                
+                keys.Set(index++, rc_key);
+                return false; // продолжаем сканирование
+            });
         }
 
         return keys;
