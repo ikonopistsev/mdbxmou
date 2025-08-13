@@ -1,3 +1,3 @@
 [submodule "deps/libmdbx"]
 	path = deps/libmdbx
-	url = https://github.com/erthink/libmdbx
+	url = https://github.com/erthink/libmdbx.git
