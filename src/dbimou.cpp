@@ -144,7 +144,6 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
 
     try {
         cursormou_managed cursor{ cursor_ptr };
-
         if (key_mode_.val & key_mode::ordinal) {
             cursor.scan([&](const mdbx::pair& f) {
                 keymou key{f.key};

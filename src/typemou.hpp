@@ -27,7 +27,6 @@ struct cursormou_managed final
     }    
 };
 
-
 struct env_flag {
     enum type : int {
         validation = MDBX_VALIDATION,
