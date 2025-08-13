@@ -151,14 +151,12 @@ void async_keys::do_keys_from(txnmou_managed& txn,
             break;
     }
 
-    fprintf(stderr, "cursor_mode: %d\n", cursor_mode);
     bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
         cursor_mode == move_operation::multi_exactkey_value_equal);    
 
     std::size_t index{};
     if (mdbx::is_ordinal(arg0.key_mod)) {
         // Создаем ключ для позиционирования
-        fprintf(stderr, "from_key: %lu\n", from_key.as_int64());
         cursor.scan_from([&](const mdbx::pair& f) {
             if (index >= arg0.limit) {
                 return true; // останавливаем сканирование
@@ -166,7 +164,6 @@ void async_keys::do_keys_from(txnmou_managed& txn,
             
             keymou key{f.key};
             if (is_key_equal_mode) {
-                fprintf(stderr, "from_key: %lu != %lu\n", arg0.id_buf, key.as_int64());
                 if (arg0.id_buf != key.as_int64()) {
                     return true; // останавливаем сканирование
                 }

@@ -459,8 +459,6 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
                                   cursor_mode == move_operation::multi_exactkey_value_equal);
         
         if (key_mode_.val & key_mode::ordinal) {
-            fprintf(stderr, "keysFrom: cursor_mode=%d, turn_mode=%d, is_key_equal_mode=%d\n", 
-                    static_cast<int>(cursor_mode), static_cast<int>(turn_mode), is_key_equal_mode);
             cursor.scan_from([&](const mdbx::pair& f) {
                 if (index >= count) {
                     return true; // останавливаем сканирование
