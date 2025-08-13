@@ -211,4 +211,32 @@ struct db_mode
     }
 };
 
+static inline auto parse_cursor_mode(const Napi::Value& arg0) {
+    if (arg0.IsNumber()) {
+        return static_cast<mdbx::cursor::move_operation>(
+            arg0.As<Napi::Number>().Int32Value());
+    } else if (arg0.IsString()) {
+        std::string mode = arg0.As<Napi::String>().Utf8Value();
+        if (mode == "first") return mdbx::cursor::move_operation::first;
+        if (mode == "last") return mdbx::cursor::move_operation::last;
+        if (mode == "next") return mdbx::cursor::move_operation::next;
+        if (mode == "prev") return mdbx::cursor::move_operation::previous;
+        if (mode == "keyLesser" || mode == "key_lesser_than") 
+            return mdbx::cursor::move_operation::key_lesser_than;
+        if (mode == "keyLesserOrEqual" || mode == "key_lesser_or_equal") 
+            return mdbx::cursor::move_operation::key_lesser_or_equal;
+        if (mode == "keyEqual" || mode == "key_equal") 
+            return mdbx::cursor::move_operation::key_equal;
+        if (mode == "keyGreaterOrEqual" || mode == "key_greater_or_equal") 
+            return mdbx::cursor::move_operation::key_greater_or_equal;
+        if (mode == "keyGreater" || mode == "key_greater_than") 
+            return mdbx::cursor::move_operation::key_greater_than;
+        // Если не найдено, используем по умолчанию
+        return mdbx::cursor::move_operation::key_greater_or_equal;
+    } else {
+        return static_cast<mdbx::cursor::move_operation>(
+            arg0.As<Napi::Number>().Int32Value());
+    }
+}
+
 } // namespace mdbxmou

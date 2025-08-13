@@ -65,6 +65,37 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     MDBXMOU_DECLARE_FLAG_NAME(query_mode, "del", mdbxmou::query_mode::del);
     mdbx_mou.Set("queryMode", query_mode);
 
+    Napi::Object cursor_mode = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "first", 
+        mdbx::cursor::move_operation::first);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "last", 
+        mdbx::cursor::move_operation::last);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "next", 
+        mdbx::cursor::move_operation::next);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "prev", 
+        mdbx::cursor::move_operation::previous);    
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_lesser_than", 
+        mdbx::cursor::move_operation::key_lesser_than);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_lesser_or_equal", 
+        mdbx::cursor::move_operation::key_lesser_or_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_equal", 
+        mdbx::cursor::move_operation::key_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_greater_or_equal", 
+        mdbx::cursor::move_operation::key_greater_or_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_greater_than", 
+        mdbx::cursor::move_operation::key_greater_than);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_lesser_than", 
+        mdbx::cursor::move_operation::multi_exactkey_value_lesser_than);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_lesser_or_equal", 
+        mdbx::cursor::move_operation::multi_exactkey_value_lesser_or_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_equal", 
+        mdbx::cursor::move_operation::multi_exactkey_value_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_greater_or_equal", 
+        mdbx::cursor::move_operation::multi_exactkey_value_greater_or_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_greater", 
+        mdbx::cursor::move_operation::multi_exactkey_value_greater);
+    mdbx_mou.Set("cursorMode", cursor_mode);
+
     exports.Set("MDBX_Param", mdbx_mou);
 
 #undef MDBXMOU_DECLARE_FLAG_NAME
