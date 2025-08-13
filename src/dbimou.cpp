@@ -161,6 +161,8 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
 
                 index++;
 
+                // true will stop the scan
+                // false will continue the scan
                 return result.IsBoolean() ? 
                     result.ToBoolean() : false;
             });
@@ -182,6 +184,8 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
 
                 index++;
 
+                // true will stop the scan
+                // false will continue the scan
                 return result.IsBoolean() ? 
                     result.ToBoolean() : false;
             });
