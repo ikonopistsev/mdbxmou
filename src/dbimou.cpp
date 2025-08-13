@@ -229,44 +229,50 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
         cursormou_managed cursor{ cursor_ptr };
         
         // Парсим начальный ключ
-        keymou from_key = (key_mode_.val & key_mode::ordinal) ?
+        keymou from_key = mdbx::is_ordinal(key_mode_) ?
             keymou::from(info[0], env, id_buf_) : 
             keymou::from(info[0], env, key_buf_);
         
         // Парсим cursor mode (если передан)
-        auto cursor_mode = mdbx::cursor::move_operation::key_greater_or_equal;
-        auto turn_mode = mdbx::cursor::move_operation::next;
-        
+        using move_operation = mdbx::cursor::move_operation;
+        auto cursor_mode = move_operation::key_greater_or_equal;
+        auto turn_mode = move_operation::next;
+
         if (info.Length() == 3 && !info[1].IsUndefined()) {
             cursor_mode = parse_cursor_mode(info[1]);
             
             // Определяем направление сканирования на основе операции
             switch (cursor_mode) {
-                case mdbx::cursor::move_operation::key_lesser_than:
-                case mdbx::cursor::move_operation::key_lesser_or_equal:
-                case mdbx::cursor::move_operation::multi_exactkey_value_lesser_than:
-                case mdbx::cursor::move_operation::multi_exactkey_value_lesser_or_equal:
-                    turn_mode = mdbx::cursor::move_operation::previous;
+                case move_operation::key_lesser_than:
+                case move_operation::key_lesser_or_equal:
+                case move_operation::multi_exactkey_value_lesser_than:
+                case move_operation::multi_exactkey_value_lesser_or_equal:
+                    turn_mode = move_operation::previous;
                     break;
-                case mdbx::cursor::move_operation::key_equal:
-                case mdbx::cursor::move_operation::multi_exactkey_value_equal:
+                case move_operation::key_equal:
+                case move_operation::multi_exactkey_value_equal:
                     // Для точного совпадения останавливаемся на первом найденном элементе
-                    turn_mode = mdbx::cursor::move_operation::next;
+                    turn_mode = move_operation::next;
                     break;
                 default:
-                    turn_mode = mdbx::cursor::move_operation::next;
+                    turn_mode = move_operation::next;
                     break;
             }
         }
         
         std::size_t index{};
-        bool is_key_equal_mode = (cursor_mode == mdbx::cursor::move_operation::key_equal || 
-                                  cursor_mode == mdbx::cursor::move_operation::multi_exactkey_value_equal);
-        
+        bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
+                                  cursor_mode == move_operation::multi_exactkey_value_equal);
         if (key_mode_.val & key_mode::ordinal) {
             cursor.scan_from([&](const mdbx::pair& f) {
                 keymou key{f.key};
                 valuemou val{f.value};
+                if (is_key_equal_mode) {
+                    if (id_buf_ != key.as_int64()) {
+                        return true; // останавливаем сканирование
+                    }
+                }
+
                 // Конвертируем ключ
                 Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
                     key.to_bigint(env) : key.to_number(env);
@@ -279,11 +285,6 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
 
                 index++;
 
-                // Для key_equal останавливаемся после первого найденного элемента
-                if (is_key_equal_mode) {
-                    return true; // останавливаем сканирование
-                }
-
                 // true will stop the scan, false will continue
                 return result.IsBoolean() ? result.ToBoolean() : false;
             }, from_key, cursor_mode, turn_mode);
@@ -291,6 +292,12 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
             cursor.scan_from([&](const mdbx::pair& f) {
                 keymou key{f.key};
                 valuemou val{f.value};
+                if (is_key_equal_mode) {
+                    if (from_key != key) {
+                        return true; // останавливаем сканирование
+                    }
+                }
+
                 // Конвертируем ключ
                 Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
                     key.to_string(env) : key.to_buffer(env);
@@ -303,11 +310,6 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
                     Napi::Number::New(env, index) });
 
                 index++;
-
-                // Для key_equal останавливаемся после первого найденного элемента
-                if (is_key_equal_mode) {
-                    return true; // останавливаем сканирование
-                }
 
                 // true will stop the scan, false will continue
                 return result.IsBoolean() ? result.ToBoolean() : false;
@@ -368,7 +370,6 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
         }
 
         std::size_t index{};
-        
         if (key_mode_.val & key_mode::ordinal) {
             cursor.scan([&](const mdbx::pair& f) {
                 keymou key{f.key};
@@ -416,7 +417,7 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
         cursormou_managed cursor{ cursor_ptr };
         
         // Парсим аргументы: from, limit, cursorMode
-        keymou from_key = (key_mode_.val & key_mode::ordinal) ?
+        keymou from_key = mdbx::is_ordinal(key_mode_) ?
             keymou::from(info[0], env, id_buf_) : 
             keymou::from(info[0], env, key_buf_);
         
@@ -425,27 +426,28 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
             count = info[1].As<Napi::Number>().Uint32Value();
         }
         
-        auto cursor_mode = mdbx::cursor::move_operation::key_greater_or_equal;
-        auto turn_mode = mdbx::cursor::move_operation::next;
-        
+        using move_operation = mdbx::cursor::move_operation;
+        auto cursor_mode = move_operation::key_greater_or_equal;
+        auto turn_mode = move_operation::next;
+
         if (info.Length() > 2 && !info[2].IsUndefined()) {
             cursor_mode = parse_cursor_mode(info[2]);
             
             // Определяем направление сканирования на основе операции
             switch (cursor_mode) {
-                case mdbx::cursor::move_operation::key_lesser_than:
-                case mdbx::cursor::move_operation::key_lesser_or_equal:
-                case mdbx::cursor::move_operation::multi_exactkey_value_lesser_than:
-                case mdbx::cursor::move_operation::multi_exactkey_value_lesser_or_equal:
-                    turn_mode = mdbx::cursor::move_operation::previous;
+                case move_operation::key_lesser_than:
+                case move_operation::key_lesser_or_equal:
+                case move_operation::multi_exactkey_value_lesser_than:
+                case move_operation::multi_exactkey_value_lesser_or_equal:
+                    turn_mode = move_operation::previous;
                     break;
-                case mdbx::cursor::move_operation::key_equal:
-                case mdbx::cursor::move_operation::multi_exactkey_value_equal:
+                case move_operation::key_equal:
+                case move_operation::multi_exactkey_value_equal:
                     // Для точного совпадения останавливаемся на первом найденном элементе
-                    turn_mode = mdbx::cursor::move_operation::next;
+                    turn_mode = move_operation::next;
                     break;
                 default:
-                    turn_mode = mdbx::cursor::move_operation::next;
+                    turn_mode = move_operation::next;
                     break;
             }
         }
@@ -453,44 +455,50 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
         // Создаем массив для ключей
         Napi::Array keys = Napi::Array::New(env);
         std::size_t index{};
-        bool is_key_equal_mode = (cursor_mode == mdbx::cursor::move_operation::key_equal || 
-                                  cursor_mode == mdbx::cursor::move_operation::multi_exactkey_value_equal);
+        bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
+                                  cursor_mode == move_operation::multi_exactkey_value_equal);
         
         if (key_mode_.val & key_mode::ordinal) {
+            fprintf(stderr, "keysFrom: cursor_mode=%d, turn_mode=%d, is_key_equal_mode=%d\n", 
+                    static_cast<int>(cursor_mode), static_cast<int>(turn_mode), is_key_equal_mode);
             cursor.scan_from([&](const mdbx::pair& f) {
                 if (index >= count) {
                     return true; // останавливаем сканирование
                 }
+                
                 keymou key{f.key};
+                if (is_key_equal_mode) {
+                    if (id_buf_ != key.as_int64()) {
+                        return true; // останавливаем сканирование
+                    }
+                }
+
                 // Конвертируем ключ
                 Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
                     key.to_bigint(env) : key.to_number(env);
                 
                 keys.Set(index++, rc_key);
-                
-                // Для key_equal останавливаемся после первого найденного элемента
-                if (is_key_equal_mode) {
-                    return true; // останавливаем сканирование
-                }
-                
+                                
                 return false; // продолжаем сканирование
             }, from_key, cursor_mode, turn_mode);
-        } else {
+        } else {     
             cursor.scan_from([&](const mdbx::pair& f) {
                 if (index >= count) {
                     return true; // останавливаем сканирование
                 }
+
                 keymou key{f.key};
+                if (is_key_equal_mode) {
+                    if (from_key != key) {
+                        return true; // останавливаем сканирование
+                    }
+                }                
+
                 // Конвертируем ключ
                 Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
                     key.to_string(env) : key.to_buffer(env);
                 
                 keys.Set(index++, rc_key);
-                
-                // Для key_equal останавливаемся после первого найденного элемента
-                if (is_key_equal_mode) {
-                    return true; // останавливаем сканирование
-                }
                 
                 return false; // продолжаем сканирование
             }, from_key, cursor_mode, turn_mode);

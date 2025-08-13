@@ -92,26 +92,112 @@ void async_keys::do_keys(txnmou_managed& txn,
     mdbx::map_handle dbi, keys_line& arg0)
 {
     auto& item = arg0.item;
-    auto stat = dbimou::get_stat(txn, dbi);
-    // резервируем место в item
-    item.reserve(stat.ms_entries);
-    // открываем курсор
-    auto cursor = txn.open_cursor(dbi);
-    // получаем все ключи и схраняем из в arg0.item
-    if (mdbx::is_ordinal(arg0.key_mod)) {
-        cursor.scan([&](const mdbx::pair& f) {
-            async_key rc{};
-            rc.id_buf = f.key.as_uint64();
-            item.push_back(std::move(rc));
-            return false;
-        });
+    if (!arg0.has_from_key) {
+        // Обычный режим - получаем все ключи
+        auto stat = dbimou::get_stat(txn, dbi);
+        item.reserve(stat.ms_entries);
+        
+        auto cursor = txn.open_cursor(dbi);        
+        if (mdbx::is_ordinal(arg0.key_mod)) {
+            cursor.scan([&](const mdbx::pair& f) {
+                async_key rc{};
+                rc.id_buf = f.key.as_uint64();
+                item.push_back(std::move(rc));
+                return false;
+            });
+        } else {
+            cursor.scan([&](const mdbx::pair& f) {
+                async_key rc{};
+                rc.key_buf.assign(f.key.char_ptr(), f.key.end_char_ptr());
+                item.push_back(std::move(rc));
+                return false;
+            });
+        }
     } else {
-        cursor.scan([&](const mdbx::pair& f) {
+        do_keys_from(txn, dbi, arg0);
+    }
+}
+
+void async_keys::do_keys_from(txnmou_managed& txn, 
+    mdbx::map_handle dbi, keys_line& arg0)
+{
+    // сыллка на массив результатов
+    auto& item = arg0.item;
+    std::size_t count = 0;
+    using move_operation = mdbx::cursor::move_operation;
+
+    auto cursor = txn.open_cursor(dbi);
+
+    keymou from_key = mdbx::is_ordinal(arg0.key_mod) ?
+        keymou{arg0.id_buf} : 
+        keymou{mdbx::slice{arg0.key_buf.data(), arg0.key_buf.size()}};
+
+    // Определяем направление сканирования
+    auto turn_mode = move_operation::next;
+    auto cursor_mode = arg0.cursor_mode;
+    switch (cursor_mode) {
+        case move_operation::key_lesser_than:
+        case move_operation::key_lesser_or_equal:
+        case move_operation::multi_exactkey_value_lesser_than:
+        case move_operation::multi_exactkey_value_lesser_or_equal:
+            turn_mode = move_operation::previous;
+            break;
+        case move_operation::key_equal:
+        case move_operation::multi_exactkey_value_equal:
+            turn_mode = move_operation::next;
+            break;
+        default:
+            turn_mode = move_operation::next;
+            break;
+    }
+
+    fprintf(stderr, "cursor_mode: %d\n", cursor_mode);
+    bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
+        cursor_mode == move_operation::multi_exactkey_value_equal);    
+
+    std::size_t index{};
+    if (mdbx::is_ordinal(arg0.key_mod)) {
+        // Создаем ключ для позиционирования
+        fprintf(stderr, "from_key: %lu\n", from_key.as_int64());
+        cursor.scan_from([&](const mdbx::pair& f) {
+            if (index >= arg0.limit) {
+                return true; // останавливаем сканирование
+            }
+            
+            keymou key{f.key};
+            if (is_key_equal_mode) {
+                fprintf(stderr, "from_key: %lu != %lu\n", arg0.id_buf, key.as_int64());
+                if (arg0.id_buf != key.as_int64()) {
+                    return true; // останавливаем сканирование
+                }
+            }
+            
             async_key rc{};
-            rc.key_buf.assign(f.key.char_ptr(), f.key.end_char_ptr());
+            rc.id_buf = key.as_uint64();
             item.push_back(std::move(rc));
-            return false;
-        });
+            index++;                            
+            return false; // продолжаем сканирование
+        }, from_key, arg0.cursor_mode, turn_mode);
+    } else {
+        // Создаем ключ для позиционирования
+        cursor.scan_from([&](const mdbx::pair& f) {
+            if (index >= arg0.limit) {
+                return true; // останавливаем сканирование
+            }
+            
+            keymou key{f.key};
+            if (is_key_equal_mode) {
+                if (from_key != key) {
+                    return true; // останавливаем сканирование
+                }
+            }
+            
+            async_key rc{};
+            rc.id_buf = key.as_uint64();
+            item.push_back(std::move(rc));
+            index++;                            
+            return false; // продолжаем сканирование
+        }, from_key, arg0.cursor_mode, turn_mode);
     }
 }
 

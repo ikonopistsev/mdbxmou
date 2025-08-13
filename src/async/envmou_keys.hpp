@@ -17,7 +17,7 @@ class async_keys
     // упрощенный режим 1 массив
     bool single_{false};
 
-    public:
+public:
     async_keys(Napi::Env env, envmou& e, 
         txn_mode txn_mode, keys_request query, bool single = false)
         : Napi::AsyncWorker{env}
@@ -41,7 +41,10 @@ class async_keys
     txnmou_managed start_transaction();
 
     void do_keys(txnmou_managed& txn, 
-        mdbx::map_handle dbi, keys_line& arg0);    
+        mdbx::map_handle dbi, keys_line& arg0);
+
+    void do_keys_from(txnmou_managed& txn, 
+        mdbx::map_handle dbi, keys_line& arg0);
 };
 
 } // namespace mdbxmou

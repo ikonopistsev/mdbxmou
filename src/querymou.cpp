@@ -27,24 +27,22 @@ void async_common::parse(txn_mode txn, const Napi::Object& obj)
     }    
 }
 
-void async_key::parse(const async_common& common, const Napi::Object& item)
+void async_key::parse(const async_common& common, const Napi::Value& item)
 {
     // утснавлиаем общие параметры
     auto key_flag = common.key_flag;
-    
+
     keymou key{};
-    // ключ всегда есть
-    auto item_key = item.Get("key");
     if (common.key_mod.val & key_mode::ordinal) {
-        if (item_key.IsBigInt()) {
-            key = keymou{item_key.As<Napi::BigInt>(), id_buf};
-        } else if (item_key.IsNumber()) {
-            key = keymou{item_key.As<Napi::Number>(), id_buf};
+        if (item.IsBigInt()) {
+            key = keymou{item.As<Napi::BigInt>(), id_buf};
+        } else if (item.IsNumber()) {
+            key = keymou{item.As<Napi::Number>(), id_buf};
         }
     } else {
         key = (key_flag.val & base_flag::string) ?
-           keymou{item_key.As<Napi::String>(), item_key.Env(), key_buf} :
-           keymou{item_key.As<Napi::Buffer<char>>(), key_buf};
+           keymou{item.As<Napi::String>(), item.Env(), key_buf} :
+           keymou{item.As<Napi::Buffer<char>>(), key_buf};
     }
 }
 
@@ -134,6 +132,24 @@ void keys_line::parse(txn_mode txn,
 
     // парсим общие параметры
     async_common::parse(txn, obj);
+
+    // парсим параметры scan_from
+    if (obj.Has("from")) {
+        keymou key{};
+        has_from_key = true;
+        async_key::parse(*this, obj.Get("from"));
+    }
+    
+    if (obj.Has("limit")) {
+        auto limit_val = obj.Get("limit");
+        if (limit_val.IsNumber()) {
+            limit = limit_val.As<Napi::Number>().Uint32Value();
+        }
+    }
+    
+    if (obj.Has("cursorMode")) {
+        cursor_mode = parse_cursor_mode(obj.Get("cursorMode"));
+    }    
 }
 
 keys_request parse_keys(txn_mode txn, base_flag key_flag, 

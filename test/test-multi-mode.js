@@ -53,11 +53,10 @@ const testMultiMode = async () => {
   });
   console.log(`Total processed: ${count} items`);
 
-  // 2. forEach с key_equal для ключа 5 - должен показать только первую запись
-  console.log('\n2. forEach(key=5, "keyEqual", fn) - только первая запись для ключа 5:');
+  // 2. forEach с key_equal для ключа 5 - должен показать все три записи
+  console.log('\n2. forEach(key=5, "keyEqual", fn) - три записи для ключа 5:');
   count = dbi.forEach(5, 'keyEqual', (k, v, i) => {
     console.log(`  ${i}: key=${k} value=${v}`);
-    return false; // пытаемся продолжить, но должно остановиться автоматически
   });
   console.log(`Processed: ${count} items`);
 
@@ -69,8 +68,8 @@ const testMultiMode = async () => {
   });
   console.log(`Processed: ${count} items`);
 
-  // 4. keysFrom с key_equal - должен вернуть только один ключ
-  console.log('\n4. keysFrom(key=5, limit=10, "keyEqual") - только один ключ:');
+  // 4. keysFrom с key_equal - должен вернуть три ключа
+  console.log('\n4. keysFrom(key=5, limit=10, "keyEqual") - три ключа:');
   const keysEqual = dbi.keysFrom(5, 10, 'keyEqual');
   console.log(`Keys: [${keysEqual.join(', ')}]`);
 
