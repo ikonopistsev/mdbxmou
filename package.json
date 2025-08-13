@@ -14,7 +14,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "Node bindings for mdbx",
   "repository": {
     "type": "git",
