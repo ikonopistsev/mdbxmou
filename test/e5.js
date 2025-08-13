@@ -66,6 +66,16 @@ const test = async () => {
     console.log(`[${index}]`, key, value);
   });
 
+  console.log("forEach from key 1");
+  rdbi.forEach(1, (key, value, index) => {
+    console.log(`[${index}]`, key, value);
+  });
+
+  {
+    const out = rdbi.keysFrom(1);
+    console.log("keysFrom()", out);
+  }  
+
   r.commit();
 
   {
@@ -77,6 +87,7 @@ const test = async () => {
     });
     console.log("out2", JSON.stringify(out2));
   }
+  
   {
     // почитаем асинхронно в упрощенном режиме
     const out = await db.keys({
@@ -84,6 +95,7 @@ const test = async () => {
     });
     console.log("await keys()", out);
   }
+
   // добавим не существующий ключ
   keys.push(42);
   // удалим все ключи
@@ -95,6 +107,46 @@ const test = async () => {
       }
   ]);
   console.log("rm keys", JSON.stringify(rm));
+
+  // Тестируем forEach с cursorMode
+  {
+    console.log("=== Testing forEach with cursorMode ===");
+    
+    // добавим тестовые данные
+    const w = db.startWrite();
+    const wdbi = w.createMap(keyMode.ordinal);
+    for (let i = 1; i <= 10; i++) {
+      wdbi.put(i, `value${i}`);
+    }
+    w.commit();
+    
+    // читаем заново
+    const r = db.startRead();
+    const dbi = r.openMap(keyMode.ordinal);
+    
+    // forEach(fn) - обычный вызов
+    console.log("forEach(fn):");
+    dbi.forEach((k, v, i) => {
+      console.log(`  ${i}: ${k} = ${v}`);
+      return i >= 2; // останавливаем после 3 элементов
+    });
+    
+    // forEach(fromKey, fn) - с начального ключа
+    console.log("forEach(fromKey=5, fn):");
+    dbi.forEach(5, (k, v, i) => {
+      console.log(`  ${i}: ${k} = ${v}`);
+      return i >= 2; // останавливаем после 3 элементов
+    });
+    
+    // forEach(fromKey, cursorMode, fn) - с cursorMode
+    console.log("forEach(fromKey=7, cursorMode=keyGreater, fn):");
+    dbi.forEach(7, 'keyGreater', (k, v, i) => {
+      console.log(`  ${i}: ${k} = ${v}`);
+      return i >= 1; // останавливаем после 2 элементов
+    });
+    
+    r.commit();
+  }
 
   // вычитаем все ключи
   {

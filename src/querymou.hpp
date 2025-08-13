@@ -1,6 +1,7 @@
 #pragma once
 
 #include "valuemou.hpp"
+#include <mdbx.h++>
 
 namespace mdbxmou {
 
@@ -26,8 +27,12 @@ struct async_key
 {
     buffer_type key_buf{};
     std::uint64_t id_buf{};
-
-    void parse(const async_common& common, const Napi::Object& obj);
+    void parse(const async_common& common, const Napi::Value& item);
+    
+    void parse(const async_common& common, const Napi::Object& item)
+    {  
+        parse(common, item.Get("key"));
+    }
 };
 
 struct async_keyval
@@ -68,10 +73,15 @@ query_request parse_query(txn_mode txn, base_flag key_flag,
 
 struct keys_line 
     : async_common
+    , async_key
 {
-    // буффер для запроса / ответа
+    using move_operation = mdbx::cursor::move_operation;
+    bool has_from_key{false};
+    std::size_t limit{SIZE_MAX};
+    move_operation cursor_mode{move_operation::key_greater_or_equal};  // режим курсора
+    // буффер для ответов
     std::vector<async_key> item{};
-    
+
     void parse(txn_mode txn, base_flag key_flag,
         const Napi::Object& obj);
 };

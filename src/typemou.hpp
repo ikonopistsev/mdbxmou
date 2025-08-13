@@ -211,4 +211,29 @@ struct db_mode
     }
 };
 
+static inline auto parse_cursor_mode(const Napi::Value& arg0) {
+    using move_operation = mdbx::cursor::move_operation;
+    if (arg0.IsString()) {
+        std::string mode = arg0.As<Napi::String>().Utf8Value();
+        if (mode == "first") return move_operation::first;
+        if (mode == "last") return move_operation::last;
+        if (mode == "next") return move_operation::next;
+        if (mode == "prev") return move_operation::previous;
+        if (mode == "keyLesser" || mode == "key_lesser_than") 
+            return move_operation::key_lesser_than;
+        if (mode == "keyLesserOrEqual" || mode == "key_lesser_or_equal") 
+            return move_operation::key_lesser_or_equal;
+        if (mode == "keyEqual" || mode == "key_equal") 
+            return move_operation::key_equal;
+        if (mode == "keyGreaterOrEqual" || mode == "key_greater_or_equal") 
+            return move_operation::key_greater_or_equal;
+        if (mode == "keyGreater" || mode == "key_greater_than") 
+            return move_operation::key_greater_than;
+        // Если не найдено, используем по умолчанию
+        return move_operation::key_greater_or_equal;
+    }
+    return static_cast<move_operation>(
+        arg0.As<Napi::Number>().Int32Value());
+}
+
 } // namespace mdbxmou

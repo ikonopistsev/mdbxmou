@@ -54,6 +54,13 @@ public:
     Napi::Value for_each(const Napi::CallbackInfo&);
     Napi::Value stat(const Napi::CallbackInfo&);
     Napi::Value keys(const Napi::CallbackInfo&);
+    Napi::Value keys_from(const Napi::CallbackInfo&);
+
+private:
+    // Внутренний метод для forEach с начальным ключом
+    Napi::Value for_each_from(const Napi::CallbackInfo&);
+
+public:
 
     void attach(envmou* env, txnmou* txn, MDBX_dbi dbi, 
         db_mode mode, key_mode key_mode, value_mode value_mode, 

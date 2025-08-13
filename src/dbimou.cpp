@@ -1,6 +1,7 @@
 #include "dbimou.hpp"
 #include "envmou.hpp"
 #include "txnmou.hpp"
+#include "typemou.hpp"
 
 namespace mdbxmou {
 
@@ -16,6 +17,7 @@ void dbimou::init(const char *class_name, Napi::Env env)
         InstanceMethod("forEach", &dbimou::for_each),
         InstanceMethod("stat", &dbimou::stat),
         InstanceMethod("keys", &dbimou::keys),
+        InstanceMethod("keysFrom", &dbimou::keys_from),
     });
 
     ctor = Napi::Persistent(func);
@@ -129,10 +131,93 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
 Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     
-    if (!info[0].IsFunction()) {
-        throw Napi::TypeError::New(env, "Expected function");
+    if (info.Length() < 1) {
+        throw Napi::TypeError::New(env, "Expected at least one argument");
     }
-    auto fn = info[0].As<Napi::Function>();
+
+    // Проверяем тип вызова: forEach(fn), forEach(fromKey, fn) или forEach(fromKey, cursorMode, fn)
+    if (info.Length() == 1 && info[0].IsFunction()) {
+        // Обычный forEach(fn)
+        auto fn = info[0].As<Napi::Function>();
+        
+        MDBX_cursor* cursor_ptr;
+        auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
+        if (rc != MDBX_SUCCESS) {
+            throw Napi::Error::New(env, mdbx_strerror(rc));
+        }
+        
+        std::size_t index{};
+
+        try {
+            cursormou_managed cursor{ cursor_ptr };
+            if (key_mode_.val & key_mode::ordinal) {
+                cursor.scan([&](const mdbx::pair& f) {
+                    keymou key{f.key};
+                    valuemou val{f.value};
+                    // Конвертируем ключ
+                    Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
+                        key.to_bigint(env) : key.to_number(env);
+                    // Конвертируем значение
+                    Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
+                        val.to_string(env) : val.to_buffer(env);
+
+                    Napi::Value result = fn.Call({ rc_key, rc_val, 
+                        Napi::Number::New(env, index) });
+
+                    index++;
+
+                    // true will stop the scan, false will continue
+                    return result.IsBoolean() ? result.ToBoolean() : false;
+                });
+            } else {
+                cursor.scan([&](const mdbx::pair& f) {
+                    keymou key{f.key};
+                    valuemou val{f.value};
+                    // Конвертируем ключ
+                    Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
+                        key.to_string(env) : key.to_buffer(env);
+
+                    // Конвертируем значение
+                    Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
+                        val.to_string(env) : val.to_buffer(env);
+                    
+                    Napi::Value result = fn.Call({ rc_key, rc_val, 
+                        Napi::Number::New(env, index) });
+
+                    index++;
+
+                    // true will stop the scan, false will continue
+                    return result.IsBoolean() ? result.ToBoolean() : false;
+                });
+            }
+        } catch (const std::exception& e) {
+            throw Napi::Error::New(env, std::string("forEach: ") + e.what());
+        }
+
+        return Napi::Number::New(env, index);
+        
+    } else if ((info.Length() == 2 && info[1].IsFunction()) || 
+               (info.Length() == 3 && info[2].IsFunction())) {
+        // forEach(fromKey, fn) или forEach(fromKey, cursorMode, fn) - делегируем внутреннему методу
+        return for_each_from(info);
+        
+    } else {
+        throw Napi::TypeError::New(env, "Expected function, (key, function) or (key, cursorMode, function)");
+    }
+}
+
+Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    // Определяем позицию функции: info[1] или info[2]
+    Napi::Function fn;
+    if (info.Length() == 2 && info[1].IsFunction()) {
+        fn = info[1].As<Napi::Function>();
+    } else if (info.Length() == 3 && info[2].IsFunction()) {
+        fn = info[2].As<Napi::Function>();
+    } else {
+        throw Napi::TypeError::New(env, "Function argument required");
+    }
     
     MDBX_cursor* cursor_ptr;
     auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
@@ -140,18 +225,57 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
         throw Napi::Error::New(env, mdbx_strerror(rc));
     }
     
-    std::size_t index{};
-
     try {
         cursormou_managed cursor{ cursor_ptr };
+        
+        // Парсим начальный ключ
+        keymou from_key = mdbx::is_ordinal(key_mode_) ?
+            keymou::from(info[0], env, id_buf_) : 
+            keymou::from(info[0], env, key_buf_);
+        
+        // Парсим cursor mode (если передан)
+        using move_operation = mdbx::cursor::move_operation;
+        auto cursor_mode = move_operation::key_greater_or_equal;
+        auto turn_mode = move_operation::next;
+
+        if (info.Length() == 3 && !info[1].IsUndefined()) {
+            cursor_mode = parse_cursor_mode(info[1]);
+            
+            // Определяем направление сканирования на основе операции
+            switch (cursor_mode) {
+                case move_operation::key_lesser_than:
+                case move_operation::key_lesser_or_equal:
+                case move_operation::multi_exactkey_value_lesser_than:
+                case move_operation::multi_exactkey_value_lesser_or_equal:
+                    turn_mode = move_operation::previous;
+                    break;
+                case move_operation::key_equal:
+                case move_operation::multi_exactkey_value_equal:
+                    // Для точного совпадения останавливаемся на первом найденном элементе
+                    turn_mode = move_operation::next;
+                    break;
+                default:
+                    turn_mode = move_operation::next;
+                    break;
+            }
+        }
+        
+        std::size_t index{};
+        bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
+                                  cursor_mode == move_operation::multi_exactkey_value_equal);
         if (key_mode_.val & key_mode::ordinal) {
-            cursor.scan([&](const mdbx::pair& f) {
+            cursor.scan_from([&](const mdbx::pair& f) {
                 keymou key{f.key};
                 valuemou val{f.value};
+                if (is_key_equal_mode) {
+                    if (id_buf_ != key.as_int64()) {
+                        return true; // останавливаем сканирование
+                    }
+                }
+
                 // Конвертируем ключ
-                Napi::Value rc_key;
-                    rc_key = (key_flag_.val & base_flag::bigint) ?
-                        key.to_bigint(env) : key.to_number(env);
+                Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
+                    key.to_bigint(env) : key.to_number(env);
                 // Конвертируем значение
                 Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
                     val.to_string(env) : val.to_buffer(env);
@@ -161,18 +285,21 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
 
                 index++;
 
-                // true will stop the scan
-                // false will continue the scan
-                return result.IsBoolean() ? 
-                    result.ToBoolean() : false;
-            });
+                // true will stop the scan, false will continue
+                return result.IsBoolean() ? result.ToBoolean() : false;
+            }, from_key, cursor_mode, turn_mode);
         } else {
-            cursor.scan([&](const mdbx::pair& f) {
+            cursor.scan_from([&](const mdbx::pair& f) {
                 keymou key{f.key};
                 valuemou val{f.value};
+                if (is_key_equal_mode) {
+                    if (from_key != key) {
+                        return true; // останавливаем сканирование
+                    }
+                }
+
                 // Конвертируем ключ
-                Napi::Value rc_key;
-                rc_key = (key_flag_.val & base_flag::string) ?
+                Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
                     key.to_string(env) : key.to_buffer(env);
 
                 // Конвертируем значение
@@ -184,18 +311,15 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
 
                 index++;
 
-                // true will stop the scan
-                // false will continue the scan
-                return result.IsBoolean() ? 
-                    result.ToBoolean() : false;
-            });
+                // true will stop the scan, false will continue
+                return result.IsBoolean() ? result.ToBoolean() : false;
+            }, from_key, cursor_mode, turn_mode);
         }
-
+        
+        return Napi::Number::New(env, index);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("forEach: ") + e.what());
     }
-
-    return Napi::Number::New(env, index);
 }
 
 Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
@@ -246,7 +370,6 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
         }
 
         std::size_t index{};
-        
         if (key_mode_.val & key_mode::ordinal) {
             cursor.scan([&](const mdbx::pair& f) {
                 keymou key{f.key};
@@ -272,6 +395,116 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
         return keys;
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("keys: ") + e.what());
+    }
+
+    return env.Undefined();
+}
+
+Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (info.Length() < 1) {
+        throw Napi::Error::New(env, "keysFrom: 'from' key required");
+    }
+    
+    MDBX_cursor* cursor_ptr;
+    auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
+    if (rc != MDBX_SUCCESS) {
+        throw Napi::Error::New(env, mdbx_strerror(rc));
+    }
+
+    try {
+        cursormou_managed cursor{ cursor_ptr };
+        
+        // Парсим аргументы: from, limit, cursorMode
+        keymou from_key = mdbx::is_ordinal(key_mode_) ?
+            keymou::from(info[0], env, id_buf_) : 
+            keymou::from(info[0], env, key_buf_);
+        
+        std::size_t count = SIZE_MAX;
+        if (info.Length() > 1 && !info[1].IsUndefined()) {
+            count = info[1].As<Napi::Number>().Uint32Value();
+        }
+        
+        using move_operation = mdbx::cursor::move_operation;
+        auto cursor_mode = move_operation::key_greater_or_equal;
+        auto turn_mode = move_operation::next;
+
+        if (info.Length() > 2 && !info[2].IsUndefined()) {
+            cursor_mode = parse_cursor_mode(info[2]);
+            
+            // Определяем направление сканирования на основе операции
+            switch (cursor_mode) {
+                case move_operation::key_lesser_than:
+                case move_operation::key_lesser_or_equal:
+                case move_operation::multi_exactkey_value_lesser_than:
+                case move_operation::multi_exactkey_value_lesser_or_equal:
+                    turn_mode = move_operation::previous;
+                    break;
+                case move_operation::key_equal:
+                case move_operation::multi_exactkey_value_equal:
+                    // Для точного совпадения останавливаемся на первом найденном элементе
+                    turn_mode = move_operation::next;
+                    break;
+                default:
+                    turn_mode = move_operation::next;
+                    break;
+            }
+        }
+        
+        // Создаем массив для ключей
+        Napi::Array keys = Napi::Array::New(env);
+        std::size_t index{};
+        bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
+                                  cursor_mode == move_operation::multi_exactkey_value_equal);
+        
+        if (key_mode_.val & key_mode::ordinal) {
+            cursor.scan_from([&](const mdbx::pair& f) {
+                if (index >= count) {
+                    return true; // останавливаем сканирование
+                }
+                
+                keymou key{f.key};
+                if (is_key_equal_mode) {
+                    if (id_buf_ != key.as_int64()) {
+                        return true; // останавливаем сканирование
+                    }
+                }
+
+                // Конвертируем ключ
+                Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
+                    key.to_bigint(env) : key.to_number(env);
+                
+                keys.Set(index++, rc_key);
+                                
+                return false; // продолжаем сканирование
+            }, from_key, cursor_mode, turn_mode);
+        } else {     
+            cursor.scan_from([&](const mdbx::pair& f) {
+                if (index >= count) {
+                    return true; // останавливаем сканирование
+                }
+
+                keymou key{f.key};
+                if (is_key_equal_mode) {
+                    if (from_key != key) {
+                        return true; // останавливаем сканирование
+                    }
+                }                
+
+                // Конвертируем ключ
+                Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
+                    key.to_string(env) : key.to_buffer(env);
+                
+                keys.Set(index++, rc_key);
+                
+                return false; // продолжаем сканирование
+            }, from_key, cursor_mode, turn_mode);
+        }
+        
+        return keys;
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, std::string("keysFrom: ") + e.what());
     }
 
     return env.Undefined();

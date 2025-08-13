@@ -9,61 +9,95 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
 
     Napi::Object mdbx_mou = Napi::Object::New(env);
 
+    using mdbxmou::env_flag;
     Napi::Object envFlag = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "validation", mdbxmou::env_flag::validation);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "rdonly", mdbxmou::env_flag::rdonly);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "exclusive", mdbxmou::env_flag::exclusive);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "accede", mdbxmou::env_flag::accede);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "writemap", mdbxmou::env_flag::writemap);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "nostickythreads", mdbxmou::env_flag::nostickythreads);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "nordahead", mdbxmou::env_flag::nordahead);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "nomeminit", mdbxmou::env_flag::nomeminit);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "liforeclaim", mdbxmou::env_flag::liforeclaim);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "nometasync", mdbxmou::env_flag::nometasync);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "safeNosync", mdbxmou::env_flag::safe_nosync);
-    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "utterlyNosync", mdbxmou::env_flag::utterly_nosync);
-
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "validation", env_flag::validation);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "rdonly", env_flag::rdonly);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "exclusive", env_flag::exclusive);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "accede", env_flag::accede);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "writemap", env_flag::writemap);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "nostickythreads", env_flag::nostickythreads);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "nordahead", env_flag::nordahead);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "nomeminit", env_flag::nomeminit);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "liforeclaim", env_flag::liforeclaim);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "nometasync", env_flag::nometasync);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "safeNosync", env_flag::safe_nosync);
+    MDBXMOU_DECLARE_FLAG_NAME(envFlag, "utterlyNosync", env_flag::utterly_nosync);
     mdbx_mou.Set("envFlag", envFlag);
 
+    using mdbxmou::txn_mode;
     Napi::Object txn_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(txn_mode, "ro", mdbxmou::txn_mode::ro);
+    MDBXMOU_DECLARE_FLAG_NAME(txn_mode, "ro", txn_mode::ro);
     mdbx_mou.Set("txnMode", txn_mode);
 
+    using mdbxmou::key_mode;
     Napi::Object key_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(key_mode, "reverse", mdbxmou::key_mode::reverse);
-    MDBXMOU_DECLARE_FLAG_NAME(key_mode, "ordinal", mdbxmou::key_mode::ordinal);
+    MDBXMOU_DECLARE_FLAG_NAME(key_mode, "reverse", key_mode::reverse);
+    MDBXMOU_DECLARE_FLAG_NAME(key_mode, "ordinal", key_mode::ordinal);
     mdbx_mou.Set("keyMode", key_mode);
 
+    using mdbxmou::base_flag;
     Napi::Object key_flag = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(key_flag, "string", mdbxmou::base_flag::string);
-    MDBXMOU_DECLARE_FLAG_NAME(key_flag, "number", mdbxmou::base_flag::number);
-    MDBXMOU_DECLARE_FLAG_NAME(key_flag, "bigint", mdbxmou::base_flag::bigint);
+    MDBXMOU_DECLARE_FLAG_NAME(key_flag, "string", base_flag::string);
+    MDBXMOU_DECLARE_FLAG_NAME(key_flag, "number", base_flag::number);
+    MDBXMOU_DECLARE_FLAG_NAME(key_flag, "bigint", base_flag::bigint);
     mdbx_mou.Set("keyFlag", key_flag);
 
+    using mdbxmou::value_mode;
     Napi::Object value_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multi", mdbxmou::value_mode::multi);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiReverse", mdbxmou::value_mode::multi_reverse);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiSamelength", mdbxmou::value_mode::multi_samelength);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiOrdinal", mdbxmou::value_mode::multi_ordinal);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiReverseSamelength", mdbxmou::value_mode::multi_reverse_samelength);
+    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multi", value_mode::multi);
+    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiReverse", value_mode::multi_reverse);
+    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiSamelength", value_mode::multi_samelength);
+    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiOrdinal", value_mode::multi_ordinal);
+    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiReverseSamelength", 
+        value_mode::multi_reverse_samelength);
     mdbx_mou.Set("valueMode", value_mode);
 
     Napi::Object value_flag = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(value_flag, "string", mdbxmou::base_flag::string);
+    MDBXMOU_DECLARE_FLAG_NAME(value_flag, "string", base_flag::string);
     mdbx_mou.Set("valueFlag", value_flag);
 
+    using mdbxmou::db_mode;
     Napi::Object db_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(db_mode, "create", mdbxmou::db_mode::create);
-    MDBXMOU_DECLARE_FLAG_NAME(db_mode, "accede", mdbxmou::db_mode::accede);
+    MDBXMOU_DECLARE_FLAG_NAME(db_mode, "create", db_mode::create);
+    MDBXMOU_DECLARE_FLAG_NAME(db_mode, "accede", db_mode::accede);
     mdbx_mou.Set("dbMode", db_mode);
 
+    using mdbxmou::query_mode;
     Napi::Object query_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "upsert", mdbxmou::query_mode::upsert);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "update", mdbxmou::query_mode::update);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "insertUnique", mdbxmou::query_mode::insert_unique);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "get", mdbxmou::query_mode::get);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "del", mdbxmou::query_mode::del);
+    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "upsert", query_mode::upsert);
+    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "update", query_mode::update);
+    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "insertUnique", query_mode::insert_unique);
+    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "get", query_mode::get);
+    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "del", query_mode::del);
     mdbx_mou.Set("queryMode", query_mode);
+
+    using move_operation = mdbx::cursor::move_operation;
+    Napi::Object cursor_mode = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "first", move_operation::first);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "last", move_operation::last);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "next", move_operation::next);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "prev", move_operation::previous);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_lesser_than", 
+        move_operation::key_lesser_than);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_lesser_or_equal", 
+        move_operation::key_lesser_or_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_equal", move_operation::key_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_greater_or_equal", 
+        move_operation::key_greater_or_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_greater_than", 
+        move_operation::key_greater_than);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_lesser_than", 
+        move_operation::multi_exactkey_value_lesser_than);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_lesser_or_equal", 
+        move_operation::multi_exactkey_value_lesser_or_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_equal", 
+        move_operation::multi_exactkey_value_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_greater_or_equal", 
+        move_operation::multi_exactkey_value_greater_or_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_greater", 
+        move_operation::multi_exactkey_value_greater);
+    mdbx_mou.Set("cursorMode", cursor_mode);
 
     exports.Set("MDBX_Param", mdbx_mou);
 
