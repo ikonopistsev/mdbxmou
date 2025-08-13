@@ -19,8 +19,7 @@
     "e5": "node ./test/e5.js",
     "test": "node ./test/e3.js && node ./test/e4.js && node ./test/e5.js",
     "build": "node build.js",
-    "install": "node build.js",
-    "prepublishOnly": "./prepare-npm.sh"
+    "install": "node build.js"
   },
   "gypfile": true,
   "name": "mdbxmou",
