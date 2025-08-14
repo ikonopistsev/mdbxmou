@@ -182,7 +182,7 @@ public:
 
     Napi::Value to_number(const Napi::Env& env) const
     {
-        return Napi::Number::New(env, as_int64());
+        return Napi::Number::New(env, static_cast<double>(as_int64()));
     }
 
     Napi::Value to_bigint(const Napi::Env& env) const

@@ -47,15 +47,22 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
     auto js_arr = Napi::Array::New(env, param.size());
     for (std::size_t j = 0; j < param.size(); ++j) {
         const auto& item = param[j];
+        Napi::Value key_value;
         Napi::Object js_item = Napi::Object::New(env);
         if (key_mode.val & key_mode::ordinal) {
-            js_item.Set("key", (key_flag.val & base_flag::number) ?
-                Napi::Number::New(env, item.id_buf) : Napi::BigInt::New(env, item.id_buf));
+            if (key_flag.val & base_flag::number) {
+                key_value = Napi::Number::New(env, static_cast<double>(item.id_buf));
+            } else {
+                key_value = Napi::BigInt::New(env, item.id_buf);
+            }
         } else {
-            js_item.Set("key", (key_flag.val & base_flag::string) ?
-                Napi::String::New(env, item.key_buf.data(), item.key_buf.size()) :
-                Napi::Buffer<char>::Copy(env, item.key_buf.data(), item.key_buf.size()));
+            if (key_flag.val & base_flag::string) {
+                key_value = Napi::String::New(env, item.key_buf.data(), item.key_buf.size());
+            } else {
+                key_value = Napi::Buffer<char>::Copy(env, item.key_buf.data(), item.key_buf.size());
+            }
         }
+        js_item.Set("key", key_value);
 
         // все методы которые должны показать value в результате
         const auto mask{query_mode::get|query_mode::upsert|
@@ -67,9 +74,13 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
                 js_item.Set("value", env.Null());
             } else {
                 auto value_flag = row.value_flag;
-                js_item.Set("value", (value_flag.val & base_flag::string) ?
-                    Napi::String::New(env, val_buf.data(), val_buf.size()) :
-                    Napi::Buffer<char>::Copy(env, val_buf.data(), val_buf.size()));
+                Napi::Value val_value;
+                if (value_flag.val & base_flag::string) {
+                    val_value = Napi::String::New(env, val_buf.data(), val_buf.size());
+                } else {
+                    val_value = Napi::Buffer<char>::Copy(env, val_buf.data(), val_buf.size());
+                }
+                js_item.Set("value", val_value);
             }
         }
 
@@ -77,7 +88,7 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
         if (mode.val & query_mode::del) {
             js_item.Set("found", Napi::Boolean::New(env, item.found));
         }
-        js_arr.Set(j, js_item);
+        js_arr.Set(static_cast<uint32_t>(j), js_item);
     }
     return js_arr;
 }
@@ -103,7 +114,7 @@ void async_query::OnOK()
         if (!row.db.empty()) {
             js_row.Set("db", Napi::String::New(env, row.db_name));
         }
-        result.Set(i, write_row(env, row));
+        result.Set(static_cast<uint32_t>(i), write_row(env, row));
     }
 
     deferred_.Resolve(result);

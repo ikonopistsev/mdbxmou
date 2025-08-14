@@ -1,8 +1,9 @@
 #pragma once
 
 #include "valuemou.hpp"
-// #include <sys/syscall.h>
-// #include <unistd.h>
+#ifdef _WIN32
+typedef unsigned short mode_t;
+#endif
 
 namespace mdbxmou {
 
@@ -16,9 +17,5 @@ struct env_arg0 {
     base_flag key_flag{};
     base_flag value_flag{};
 };
-
-// static inline pid_t gettid() {
-//     return static_cast<pid_t>(syscall(SYS_gettid));
-// }
 
 } // namespace mdbxmou

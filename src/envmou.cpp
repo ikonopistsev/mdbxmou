@@ -6,6 +6,12 @@
 #include "async/envmou_keys.hpp"
 #include "async/envmou_close.hpp"
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
+
 namespace mdbxmou {
 
 Napi::FunctionReference envmou::ctor{};
@@ -187,7 +193,11 @@ MDBX_env* envmou::create_and_open(const env_arg0& arg0)
         throw std::runtime_error(mdbx_strerror(rc));
     }
 
+#ifdef _WIN32
+    auto id = static_cast<std::uint32_t>(GetCurrentThreadId());
+#else
     auto id = static_cast<std::uint32_t>(pthread_self());
+#endif
     // выдадим параметры mode, flag и id потока в котором открывается env
     rc = mdbx_env_open(env, arg0.path.c_str(), arg0.flag, arg0.file_mode);
     if (rc != MDBX_SUCCESS) {

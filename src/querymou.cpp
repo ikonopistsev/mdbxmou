@@ -91,7 +91,7 @@ void query_line::parse(txn_mode txn, base_flag kf,
         auto items_array = obj.Get("item").As<Napi::Array>();
         auto length = items_array.Length();
         item.reserve(length);
-        for (std::size_t i = 0; i < length; ++i) {
+        for (uint32_t i = 0; i < length; ++i) {
             auto item_obj = items_array.Get(i).As<Napi::Object>();
             async_keyval keyval{};
             keyval.parse(*this, item_obj);
@@ -109,7 +109,7 @@ query_request parse_query(txn_mode mode, base_flag key_flag,
     if (obj.IsArray()) {
         auto arr = obj.As<Napi::Array>();
         rc.reserve(arr.Length());
-        for (std::size_t i = 0; i < arr.Length(); ++i) {
+        for (uint32_t i = 0; i < arr.Length(); ++i) {
             query_line row{};
             row.parse(mode, key_flag, value_flag, arr.Get(i).As<Napi::Object>());
             rc.push_back(std::move(row));
@@ -159,7 +159,7 @@ keys_request parse_keys(txn_mode txn, base_flag key_flag,
     if (obj.IsArray()) {
         auto arr = obj.As<Napi::Array>();
         rc.reserve(arr.Length());
-        for (std::size_t i = 0; i < arr.Length(); ++i) {
+        for (uint32_t i = 0; i < arr.Length(); ++i) {
             keys_line row{};
             row.parse(txn, key_flag, arr.Get(i).As<Napi::Object>());
             rc.push_back(std::move(row));

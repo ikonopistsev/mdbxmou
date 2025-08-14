@@ -26,15 +26,15 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     mdbx_mou.Set("envFlag", envFlag);
 
     using mdbxmou::txn_mode;
-    Napi::Object txn_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(txn_mode, "ro", txn_mode::ro);
-    mdbx_mou.Set("txnMode", txn_mode);
+    Napi::Object txnMode = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(txnMode, "ro", txn_mode::ro);
+    mdbx_mou.Set("txnMode", txnMode);
 
     using mdbxmou::key_mode;
-    Napi::Object key_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(key_mode, "reverse", key_mode::reverse);
-    MDBXMOU_DECLARE_FLAG_NAME(key_mode, "ordinal", key_mode::ordinal);
-    mdbx_mou.Set("keyMode", key_mode);
+    Napi::Object keyMode = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(keyMode, "reverse", key_mode::reverse);
+    MDBXMOU_DECLARE_FLAG_NAME(keyMode, "ordinal", key_mode::ordinal);
+    mdbx_mou.Set("keyMode", keyMode);
 
     using mdbxmou::base_flag;
     Napi::Object key_flag = Napi::Object::New(env);
@@ -44,33 +44,33 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     mdbx_mou.Set("keyFlag", key_flag);
 
     using mdbxmou::value_mode;
-    Napi::Object value_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multi", value_mode::multi);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiReverse", value_mode::multi_reverse);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiSamelength", value_mode::multi_samelength);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiOrdinal", value_mode::multi_ordinal);
-    MDBXMOU_DECLARE_FLAG_NAME(value_mode, "multiReverseSamelength", 
+    Napi::Object valueMode = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(valueMode, "multi", value_mode::multi);
+    MDBXMOU_DECLARE_FLAG_NAME(valueMode, "multiReverse", value_mode::multi_reverse);
+    MDBXMOU_DECLARE_FLAG_NAME(valueMode, "multiSamelength", value_mode::multi_samelength);
+    MDBXMOU_DECLARE_FLAG_NAME(valueMode, "multiOrdinal", value_mode::multi_ordinal);
+    MDBXMOU_DECLARE_FLAG_NAME(valueMode, "multiReverseSamelength", 
         value_mode::multi_reverse_samelength);
-    mdbx_mou.Set("valueMode", value_mode);
+    mdbx_mou.Set("valueMode", valueMode);
 
     Napi::Object value_flag = Napi::Object::New(env);
     MDBXMOU_DECLARE_FLAG_NAME(value_flag, "string", base_flag::string);
     mdbx_mou.Set("valueFlag", value_flag);
 
     using mdbxmou::db_mode;
-    Napi::Object db_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(db_mode, "create", db_mode::create);
-    MDBXMOU_DECLARE_FLAG_NAME(db_mode, "accede", db_mode::accede);
-    mdbx_mou.Set("dbMode", db_mode);
+    Napi::Object dbMode = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(dbMode, "create", db_mode::create);
+    MDBXMOU_DECLARE_FLAG_NAME(dbMode, "accede", db_mode::accede);
+    mdbx_mou.Set("dbMode", dbMode);
 
     using mdbxmou::query_mode;
-    Napi::Object query_mode = Napi::Object::New(env);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "upsert", query_mode::upsert);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "update", query_mode::update);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "insertUnique", query_mode::insert_unique);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "get", query_mode::get);
-    MDBXMOU_DECLARE_FLAG_NAME(query_mode, "del", query_mode::del);
-    mdbx_mou.Set("queryMode", query_mode);
+    Napi::Object queryMode = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(queryMode, "upsert", query_mode::upsert);
+    MDBXMOU_DECLARE_FLAG_NAME(queryMode, "update", query_mode::update);
+    MDBXMOU_DECLARE_FLAG_NAME(queryMode, "insertUnique", query_mode::insert_unique);
+    MDBXMOU_DECLARE_FLAG_NAME(queryMode, "get", query_mode::get);
+    MDBXMOU_DECLARE_FLAG_NAME(queryMode, "del", query_mode::del);
+    mdbx_mou.Set("queryMode", queryMode);
 
     using move_operation = mdbx::cursor::move_operation;
     Napi::Object cursor_mode = Napi::Object::New(env);

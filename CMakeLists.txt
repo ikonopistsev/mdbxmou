@@ -7,6 +7,10 @@ add_definitions(-DNAPI_CPP_EXCEPTIONS)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if (MSVC)
+  add_compile_options(/Zc:__cplusplus)
+endif()
+
 add_subdirectory("deps/libmdbx")
 
 add_library(${PROJECT_NAME} SHARED

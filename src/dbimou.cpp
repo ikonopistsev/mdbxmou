@@ -146,7 +146,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
             throw Napi::Error::New(env, mdbx_strerror(rc));
         }
         
-        std::size_t index{};
+        uint32_t index{};
 
         try {
             cursormou_managed cursor{ cursor_ptr };
@@ -162,7 +162,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
                         val.to_string(env) : val.to_buffer(env);
 
                     Napi::Value result = fn.Call({ rc_key, rc_val, 
-                        Napi::Number::New(env, index) });
+                        Napi::Number::New(env, static_cast<double>(index)) });
 
                     index++;
 
@@ -182,7 +182,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
                         val.to_string(env) : val.to_buffer(env);
                     
                     Napi::Value result = fn.Call({ rc_key, rc_val, 
-                        Napi::Number::New(env, index) });
+                        Napi::Number::New(env, static_cast<double>(index)) });
 
                     index++;
 
@@ -194,8 +194,8 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
             throw Napi::Error::New(env, std::string("forEach: ") + e.what());
         }
 
-        return Napi::Number::New(env, index);
-        
+        return Napi::Number::New(env, static_cast<double>(index));
+
     } else if ((info.Length() == 2 && info[1].IsFunction()) || 
                (info.Length() == 3 && info[2].IsFunction())) {
         // forEach(fromKey, fn) или forEach(fromKey, cursorMode, fn) - делегируем внутреннему методу
@@ -281,7 +281,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
                     val.to_string(env) : val.to_buffer(env);
 
                 Napi::Value result = fn.Call({ rc_key, rc_val, 
-                    Napi::Number::New(env, index) });
+                    Napi::Number::New(env, static_cast<double>(index)) });
 
                 index++;
 
@@ -307,7 +307,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
                     val.to_string(env) : val.to_buffer(env);
                 
                 Napi::Value result = fn.Call({ rc_key, rc_val, 
-                    Napi::Number::New(env, index) });
+                    Napi::Number::New(env, static_cast<double>(index)) });
 
                 index++;
 
@@ -315,8 +315,8 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
                 return result.IsBoolean() ? result.ToBoolean() : false;
             }, from_key, cursor_mode, turn_mode);
         }
-        
-        return Napi::Number::New(env, index);
+
+        return Napi::Number::New(env, static_cast<double>(index));
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("forEach: ") + e.what());
     }
@@ -369,7 +369,7 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
             return keys;
         }
 
-        std::size_t index{};
+        uint32_t index{};
         if (key_mode_.val & key_mode::ordinal) {
             cursor.scan([&](const mdbx::pair& f) {
                 keymou key{f.key};
@@ -454,7 +454,7 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
         
         // Создаем массив для ключей
         Napi::Array keys = Napi::Array::New(env);
-        std::size_t index{};
+        uint32_t index{};
         bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
                                   cursor_mode == move_operation::multi_exactkey_value_equal);
         
