@@ -29,7 +29,7 @@ const test = async () => {
   // будем использовать ordinal ключи
   const dbi = txn.createMap(keyMode.ordinal);
   for (let i = 0; i < count; i++) {
-    dbi.put(i, `val-${i}`, 0);
+    dbi.put(txn, i, `val-${i}`, 0);
   }
   txn.commit();
   console.log('Write finish');
@@ -56,23 +56,23 @@ const test = async () => {
   // вычитаем key = 2 - синхронно
   const r = db.startRead();
   const rdbi = r.openMap(keyMode.ordinal);
-  const keys = rdbi.keys();
-  const val = rdbi.get(2);
+  const keys = rdbi.keys(r);
+  const val = rdbi.get(r, 2);
   console.log("keys", keys);
   console.log("read 2", val);
 
   console.log("forEach");
-  rdbi.forEach((key, value, index) => {
+  rdbi.forEach(r, (key, value, index) => {
     console.log(`[${index}]`, key, value);
   });
 
   console.log("forEach from key 1");
-  rdbi.forEach(1, (key, value, index) => {
+  rdbi.forEach(r, 1, (key, value, index) => {
     console.log(`[${index}]`, key, value);
   });
 
   {
-    const out = rdbi.keysFrom(1);
+    const out = rdbi.keysFrom(r, 1);
     console.log("keysFrom()", out);
   }  
 
@@ -116,7 +116,7 @@ const test = async () => {
     const w = db.startWrite();
     const wdbi = w.createMap(keyMode.ordinal);
     for (let i = 1; i <= 10; i++) {
-      wdbi.put(i, `value${i}`);
+      wdbi.put(w, i, `value${i}`);
     }
     w.commit();
     
@@ -126,21 +126,21 @@ const test = async () => {
     
     // forEach(fn) - обычный вызов
     console.log("forEach(fn):");
-    dbi.forEach((k, v, i) => {
+    dbi.forEach(r, (k, v, i) => {
       console.log(`  ${i}: ${k} = ${v}`);
       return i >= 2; // останавливаем после 3 элементов
     });
     
     // forEach(fromKey, fn) - с начального ключа
     console.log("forEach(fromKey=5, fn):");
-    dbi.forEach(5, (k, v, i) => {
+    dbi.forEach(r, 5, (k, v, i) => {
       console.log(`  ${i}: ${k} = ${v}`);
       return i >= 2; // останавливаем после 3 элементов
     });
     
     // forEach(fromKey, cursorMode, fn) - с cursorMode
     console.log("forEach(fromKey=7, cursorMode=keyGreater, fn):");
-    dbi.forEach(7, 'keyGreater', (k, v, i) => {
+    dbi.forEach(r, 7, 'keyGreater', (k, v, i) => {
       console.log(`  ${i}: ${k} = ${v}`);
       return i >= 1; // останавливаем после 2 элементов
     });
@@ -153,7 +153,7 @@ const test = async () => {
     // вычитаем key = 2 - синхронно
     const r = db.startRead();
     const dbi = r.openMap(keyMode.ordinal);
-    console.log("keys", dbi.keys());
+    console.log("keys", dbi.keys(r));
     r.commit();
   }
   await db.close();

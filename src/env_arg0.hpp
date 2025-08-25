@@ -18,4 +18,13 @@ struct env_arg0 {
     base_flag value_flag{};
 };
 
+static inline const env_arg0* get_env_userctx(MDBX_env* env_ptr)
+{
+    assert(env_ptr);
+    auto rc = static_cast<env_arg0*>(mdbx_env_get_userctx(env_ptr));
+    if (!rc)
+        throw std::runtime_error("env: userctx not set");
+    return rc;
+}
+
 } // namespace mdbxmou

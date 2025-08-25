@@ -37,8 +37,14 @@ const test = async () => {
   const txn = db4.startWrite();
   // при изменении типа ключей надо указывать MDBX_CREATE если базы еще нет
   const dbi = txn.createMap(keyMode.ordinal);
+  console.log('dbi', dbi.id);       // ID базы данных
+  console.log(dbi.dbMode);    // режим базы данных
+  console.log(dbi.keyMode);   // режим ключей
+  console.log(dbi.valueMode); // режим значений
+  console.log(dbi.keyFlag);   // флаги ключей
+  console.log(dbi.valueFlag); // флаги значений
   for (let i = 0; i < count; i++) {
-    dbi.put(i, `value_${i}`);
+    dbi.put(txn, i, `value_${i}`);
   }
   txn.commit();
   console.log('Start write finish');
@@ -57,9 +63,9 @@ const test = async () => {
     const txn = db4.startRead();
     // для read транакций не нужно указывать MDBX_CREATE иначе будет Permission denied
     const dbi = txn.openMap(BigInt(keyMode.ordinal));
-    const stat = dbi.stat();
+    const stat = dbi.stat(txn);
     for (let i = 0; i < count; i++) {
-      val = dbi.get(i);
+      val = dbi.get(txn, i);
     }
     console.log('last value:', val.toString());
     console.log('stat:', JSON.stringify(stat));
@@ -69,7 +75,7 @@ const test = async () => {
   {
     const txn = db4.startRead();
     const dbi = txn.openMap(BigInt(keyMode.ordinal));
-    dbi.forEach((key, value) => {
+    dbi.forEach(txn, (key, value) => {
       console.log(key, value);
     });
     txn.commit();
