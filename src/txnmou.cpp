@@ -97,7 +97,7 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
         key_mode key_mode{};
         value_mode value_mode{};
         std::string db_name{};
-        auto conf = dbimou::get_env_userctx(*env_);
+        auto conf = get_env_userctx(*env_);
         auto key_flag = conf->key_flag;
         auto value_flag = conf->value_flag;
         auto arg_count = info.Length();
@@ -145,7 +145,7 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
         if (rc != MDBX_SUCCESS) {
             throw std::runtime_error(std::string("mdbx_dbi_open ") + mdbx_strerror(rc));
         }
-        ptr->attach(env_, this, dbi, db_mode, key_mode, 
+        ptr->attach(dbi, db_mode, key_mode, 
             value_mode, key_flag, value_flag);
         return obj;
     }
@@ -248,6 +248,14 @@ void txnmou::free_txn::operator()(MDBX_txn* txn) const noexcept {
     if (that.parent_ == nullptr) {
         //fprintf(stderr, "free_txn: --env\n");
         --(*that.env_);
+    }
+}
+
+void txnmou::drop(MDBX_dbi id, bool del)
+{
+    auto rc = mdbx_drop(*this, id, del);
+    if (rc != MDBX_SUCCESS) {
+        throw std::runtime_error(mdbx_strerror(rc));
     }
 }
 

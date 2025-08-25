@@ -1,6 +1,6 @@
 #pragma once
 
-#include "valuemou.hpp"
+#include "dbi.hpp"
 #include "querymou.hpp"
 #include "env_arg0.hpp"
 #include <memory>
@@ -13,36 +13,50 @@ struct env_arg0;
 
 class dbimou final
     : public Napi::ObjectWrap<dbimou>
+    , public dbi
 {
-    // мы должны отслеживать время жизни evn
-    envmou* env_{nullptr};
-    txnmou* txn_{nullptr};
-    MDBX_dbi dbi_{};
     db_mode mode_{};
     key_mode key_mode_{};
     value_mode value_mode_{};
+
     base_flag key_flag_{};
     base_flag value_flag_{};
+
     buffer_type key_buf_{};
     buffer_type val_buf_{};
     std::uint64_t id_buf_{};
     
-public:
-    static inline MDBX_stat get_stat(MDBX_txn* txn, MDBX_dbi dbi) 
-    {
-        MDBX_stat stat;
-        auto rc = mdbx_dbi_stat(txn, dbi, &stat, sizeof(stat));
-        if (rc != MDBX_SUCCESS) {
-            throw std::runtime_error(mdbx_strerror(rc));
-        }
-        return stat;
-    }    
-    
+public:   
     static Napi::FunctionReference ctor;
 
     dbimou(const Napi::CallbackInfo& info)
-        : Napi::ObjectWrap<dbimou>(info) 
-    {  }
+        : Napi::ObjectWrap<dbimou>{info}
+        , dbi{}
+    {   }
+
+    Napi::Value get_id(const Napi::CallbackInfo& info) {
+        return Napi::BigInt::New(info.Env(), static_cast<int64_t>(id_));
+    }
+
+    Napi::Value get_mode(const Napi::CallbackInfo& info) {
+        return Napi::Number::New(info.Env(), static_cast<double>(mode_.val));
+    }
+    
+    Napi::Value get_key_mode(const Napi::CallbackInfo& info) {
+        return Napi::Number::New(info.Env(), static_cast<double>(key_mode_.val));
+    }
+    
+    Napi::Value get_value_mode(const Napi::CallbackInfo& info) {
+        return Napi::Number::New(info.Env(), static_cast<double>(value_mode_.val));
+    }
+    
+    Napi::Value get_key_flag(const Napi::CallbackInfo& info) {
+        return Napi::Number::New(info.Env(), static_cast<double>(key_flag_.val));
+    }
+    
+    Napi::Value get_value_flag(const Napi::CallbackInfo& info) {
+        return Napi::Number::New(info.Env(), static_cast<double>(value_flag_.val));
+    }    
 
     static void init(const char *class_name, Napi::Env env);
 
@@ -55,6 +69,7 @@ public:
     Napi::Value stat(const Napi::CallbackInfo&);
     Napi::Value keys(const Napi::CallbackInfo&);
     Napi::Value keys_from(const Napi::CallbackInfo&);
+    Napi::Value drop(const Napi::CallbackInfo& info);
 
 private:
     // Внутренний метод для forEach с начальным ключом
@@ -62,13 +77,11 @@ private:
 
 public:
 
-    void attach(envmou* env, txnmou* txn, MDBX_dbi dbi, 
-        db_mode mode, key_mode key_mode, value_mode value_mode, 
+    void attach(MDBX_dbi id, db_mode mode, 
+        key_mode key_mode, value_mode value_mode, 
         base_flag key_flag, base_flag value_flag)
     {
-        env_ = env;
-        txn_ = txn;
-        dbi_ = dbi;
+        dbi::attach(id);
         mode_ = mode;
         key_mode_ = key_mode;
         value_mode_ = value_mode;
@@ -76,7 +89,9 @@ public:
         value_flag_ = value_flag;
     }
 
-    static const env_arg0* get_env_userctx(MDBX_env* env_ptr);
+    operator MDBX_put_flags_t() const noexcept {
+        return static_cast<MDBX_put_flags_t>(key_mode_.val & value_mode_.val);
+    }
 };
 
 } // namespace mdbxmou

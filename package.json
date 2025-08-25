@@ -16,17 +16,16 @@
   },
   "scripts": {
     "e3": "node ./test/e3.js",
+    "e33": "node ./test/e33.js",
     "e4": "node ./test/e4.js",
     "e5": "node ./test/e5.js",
-    "test": "node ./test/e3.js && node ./test/e4.js && node ./test/e5.js",
     "build": "node build.js",
-    "install-1": "git submodule update --init --recursive 2>/dev/null || true && node build.js",
-    "install": "node build.js",
-    "!prepublishOnly": "./prepare-npm.sh"
+    "build-dev": "node build-dev.js",
+    "install": "node build.js"
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.1.35",
+  "version": "0.2.0",
   "description": "Node bindings for mdbx",
   "repository": {
     "type": "git",

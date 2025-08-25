@@ -20,15 +20,17 @@ const test = async () => {
   await db.open({
       path: db_dir
     });
+  let txn = db.startWrite();
+  const dbi = txn.createMap(keyMode.ordinal);
+  txn.commit();
 
   console.log('Start write');
   const count = 100000;
+  txn = db.startWrite();
   for (let i = 0; i < count; i++) {
-    const txn = db.startWrite();
-    const dbi = txn.createMap(keyMode.ordinal);
     dbi.put(txn, i, `value_${i}`);
-    txn.commit();
   }
+  txn.commit();
   
   console.log('Write finish');
 

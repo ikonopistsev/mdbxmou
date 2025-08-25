@@ -18,30 +18,41 @@ void dbimou::init(const char *class_name, Napi::Env env)
         InstanceMethod("stat", &dbimou::stat),
         InstanceMethod("keys", &dbimou::keys),
         InstanceMethod("keysFrom", &dbimou::keys_from),
+        InstanceMethod("drop", &dbimou::drop),
+        
+        // Свойства только для чтения
+        InstanceAccessor("id", &dbimou::get_id, nullptr),
+        InstanceAccessor("dbMode", &dbimou::get_mode, nullptr),
+        InstanceAccessor("keyMode", &dbimou::get_key_mode, nullptr),
+        InstanceAccessor("valueMode", &dbimou::get_value_mode, nullptr),
+        InstanceAccessor("keyFlag", &dbimou::get_key_flag, nullptr),
+        InstanceAccessor("valueFlag", &dbimou::get_value_flag, nullptr),
     });
 
     ctor = Napi::Persistent(func);
     ctor.SuppressDestruct();
 }
 
-Napi::Value dbimou::put(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::put(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
-    
     auto arg_len = info.Length();
-    if (arg_len < 2) {
-        throw Napi::Error::New(env, "put: key and value required");
+    if (arg_len < 3) {
+        throw Napi::Error::New(env, "put: txnmou, key and value required");
     }
-
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "put: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
     try {
+        std::uint64_t t;
         auto key = (key_mode_.val & key_mode::ordinal) ?
-            keymou::from(info[0], env, id_buf_) : 
-            keymou::from(info[0], env, key_buf_);
-        auto val = valuemou::from(info[1], env, val_buf_);
-        auto flag = static_cast<MDBX_put_flags_t>(key_mode_.val & value_mode_.val);
-        auto rc = mdbx_put(*txn_, dbi_, key, val, flag);
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
+            keymou::from(info[1], env, t) : 
+            keymou::from(info[1], env, key_buf_);
+        auto val = valuemou::from(info[2], env, val_buf_);
+        dbi::put(*txn, key, val, *this);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("put: ") + e.what());
     }
@@ -51,22 +62,28 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info) {
 
 Napi::Value dbimou::get(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-
-    if (info.Length() < 1) {
-        throw Napi::Error::New(env, "get: key required");
+    auto arg_len = info.Length();
+    if (arg_len < 2) {
+        throw Napi::Error::New(env, "get: txnmou and key required");
     }
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "get: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
 
     try {
-        valuemou val{};
+        std::uint64_t t;
         auto key = (key_mode_.val & key_mode::ordinal) ?
-            keymou::from(info[0], env, id_buf_) : 
-            keymou::from(info[0], env, key_buf_);
-        auto rc = mdbx_get(*txn_, dbi_, key, val);
-        if (rc == MDBX_NOTFOUND)
+            keymou::from(info[1], env, t) : 
+            keymou::from(info[1], env, key_buf_);
+        
+        auto val = dbi::get(*txn, key);
+        if (val.is_null()) {
             return env.Undefined();
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
         }
+        
         return (value_flag_.val & base_flag::string) ? 
             val.to_string(env) : val.to_buffer(env);
     } catch (const std::exception& e) {
@@ -78,23 +95,25 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info) {
 
 Napi::Value dbimou::del(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-
-    if (info.Length() < 1) {
-        throw Napi::Error::New(env, "del: key required");
+    auto arg_len = info.Length();
+    if (arg_len < 2) {
+        throw Napi::Error::New(env, "del: txnmou and key required");
     }
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "del: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
 
     try {
+        std::uint64_t t;
         auto key = (key_mode_.val & key_mode::ordinal) ?
-            keymou::from(info[0], env, id_buf_) : 
-            keymou::from(info[0], env, key_buf_);
-        auto rc = mdbx_del(*txn_, dbi_, key, nullptr);
-        if (rc == MDBX_NOTFOUND) {
-            return Napi::Value::From(env, false);
-        }
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
-        return Napi::Value::From(env, true);
+            keymou::from(info[1], env, t) : 
+            keymou::from(info[1], env, key_buf_);
+        
+        bool result = dbi::del(*txn, key);
+        return Napi::Value::From(env, result);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("del: ") + e.what());
     }
@@ -104,23 +123,25 @@ Napi::Value dbimou::del(const Napi::CallbackInfo& info) {
 
 Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    
-    if (info.Length() < 1) {
-        throw Napi::Error::New(env, "Key is required");
+    auto arg_len = info.Length();
+    if (arg_len < 2) {
+        throw Napi::Error::New(env, "has: txnmou and key required");
     }
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "has: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
 
     try {
+        std::uint64_t t;
         auto key = (key_mode_.val & key_mode::ordinal) ?
-            keymou::from(info[0], env, id_buf_) : 
-            keymou::from(info[0], env, key_buf_);
-        auto rc = mdbx_get(*txn_, dbi_, key, nullptr);
-        if (rc == MDBX_NOTFOUND) {
-            return Napi::Value::From(env, false);
-        }
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
-        return Napi::Value::From(env, true);
+            keymou::from(info[1], env, t) : 
+            keymou::from(info[1], env, key_buf_);
+        
+        bool result = dbi::has(*txn, key);
+        return Napi::Value::From(env, result);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("has: ") + e.what());
     }
@@ -130,26 +151,26 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
 
 Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    
-    if (info.Length() < 1) {
-        throw Napi::TypeError::New(env, "Expected at least one argument");
+    auto arg_len = info.Length();
+    if (arg_len < 2) {
+        throw Napi::Error::New(env, "for_each: txnmou and function required");
     }
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "for_each: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
 
-    // Проверяем тип вызова: forEach(fn), forEach(fromKey, fn) или forEach(fromKey, cursorMode, fn)
-    if (info.Length() == 1 && info[0].IsFunction()) {
-        // Обычный forEach(fn)
-        auto fn = info[0].As<Napi::Function>();
+    // Проверяем тип вызова: forEach(txn, fn), forEach(txn, fromKey, fn) или forEach(txn, fromKey, cursorMode, fn)
+    if (info.Length() == 2 && info[1].IsFunction()) {
+        // Обычный forEach(txn, fn)
+        auto fn = info[1].As<Napi::Function>();
         
-        MDBX_cursor* cursor_ptr;
-        auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
-        
-        uint32_t index{};
-
         try {
-            cursormou_managed cursor{ cursor_ptr };
+            auto cursor = dbi::open_cursor(*txn);
+            uint32_t index{};
+
             if (key_mode_.val & key_mode::ordinal) {
                 cursor.scan([&](const mdbx::pair& f) {
                     keymou key{f.key};
@@ -190,56 +211,63 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
                     return result.IsBoolean() ? result.ToBoolean() : false;
                 });
             }
+
+            return Napi::Number::New(env, static_cast<double>(index));
         } catch (const std::exception& e) {
             throw Napi::Error::New(env, std::string("forEach: ") + e.what());
         }
 
-        return Napi::Number::New(env, static_cast<double>(index));
-
-    } else if ((info.Length() == 2 && info[1].IsFunction()) || 
-               (info.Length() == 3 && info[2].IsFunction())) {
-        // forEach(fromKey, fn) или forEach(fromKey, cursorMode, fn) - делегируем внутреннему методу
+    } else if ((info.Length() == 3 && info[2].IsFunction()) || 
+               (info.Length() == 4 && info[3].IsFunction())) {
+        // forEach(txn, fromKey, fn) или forEach(txn, fromKey, cursorMode, fn) - делегируем внутреннему методу
         return for_each_from(info);
         
     } else {
-        throw Napi::TypeError::New(env, "Expected function, (key, function) or (key, cursorMode, function)");
+        throw Napi::TypeError::New(env, "Expected (txn, function), (txn, key, function) or (txn, key, cursorMode, function)");
     }
 }
 
 Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+    auto arg_len = info.Length();
     
-    // Определяем позицию функции: info[1] или info[2]
+    if (arg_len < 3) {
+        throw Napi::Error::New(env, "for_each_from: txnmou, fromKey and function required");
+    }
+    
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "for_each_from: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    
+    // Определяем позицию функции: info[2] или info[3]
     Napi::Function fn;
-    if (info.Length() == 2 && info[1].IsFunction()) {
-        fn = info[1].As<Napi::Function>();
-    } else if (info.Length() == 3 && info[2].IsFunction()) {
+    if (info.Length() == 3 && info[2].IsFunction()) {
         fn = info[2].As<Napi::Function>();
+    } else if (info.Length() == 4 && info[3].IsFunction()) {
+        fn = info[3].As<Napi::Function>();
     } else {
         throw Napi::TypeError::New(env, "Function argument required");
     }
     
-    MDBX_cursor* cursor_ptr;
-    auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
-    if (rc != MDBX_SUCCESS) {
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
-    
     try {
-        cursormou_managed cursor{ cursor_ptr };
+        auto cursor = dbi::open_cursor(*txn);
         
         // Парсим начальный ключ
-        keymou from_key = mdbx::is_ordinal(key_mode_) ?
-            keymou::from(info[0], env, id_buf_) : 
-            keymou::from(info[0], env, key_buf_);
+        std::uint64_t t;
+        keymou from_key = (key_mode_.val & key_mode::ordinal) ?
+            keymou::from(info[1], env, t) : 
+            keymou::from(info[1], env, key_buf_);
         
         // Парсим cursor mode (если передан)
         using move_operation = mdbx::cursor::move_operation;
         auto cursor_mode = move_operation::key_greater_or_equal;
         auto turn_mode = move_operation::next;
 
-        if (info.Length() == 3 && !info[1].IsUndefined()) {
-            cursor_mode = parse_cursor_mode(info[1]);
+        if (info.Length() == 4 && !info[2].IsUndefined()) {
+            cursor_mode = parse_cursor_mode(info[2]);
             
             // Определяем направление сканирования на основе операции
             switch (cursor_mode) {
@@ -268,7 +296,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
                 keymou key{f.key};
                 valuemou val{f.value};
                 if (is_key_equal_mode) {
-                    if (id_buf_ != key.as_int64()) {
+                    if (t != key.as_int64()) {
                         return true; // останавливаем сканирование
                     }
                 }
@@ -318,15 +346,25 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
 
         return Napi::Number::New(env, static_cast<double>(index));
     } catch (const std::exception& e) {
-        throw Napi::Error::New(env, std::string("forEach: ") + e.what());
+        throw Napi::Error::New(env, std::string("forEach_from: ") + e.what());
     }
 }
 
 Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+    auto arg_len = info.Length();
+    if (arg_len < 1) {
+        throw Napi::Error::New(env, "stat: txnmou required");
+    }
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "stat: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
     
     try {
-        auto stat = get_stat(*txn_, dbi_);
+        auto stat = dbi::get_stat(*txn);
         
         Napi::Object result = Napi::Object::New(env);
         
@@ -352,16 +390,20 @@ Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
 
 Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    
-    MDBX_cursor* cursor_ptr;
-    auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
-    if (rc != MDBX_SUCCESS) {
-        throw Napi::Error::New(env, mdbx_strerror(rc));
+    auto arg_len = info.Length();
+    if (arg_len < 1) {
+        throw Napi::Error::New(env, "keys: txnmou required");
     }
-
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "keys: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    
     try {
-        cursormou_managed cursor{ cursor_ptr };
-        auto stat = get_stat(*txn_, dbi_);
+        auto cursor = dbi::open_cursor(*txn);
+        auto stat = dbi::get_stat(*txn);
         
         // Создаем массив для ключей
         Napi::Array keys = Napi::Array::New(env, stat.ms_entries);
@@ -402,36 +444,37 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
 
 Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    
-    if (info.Length() < 1) {
-        throw Napi::Error::New(env, "keysFrom: 'from' key required");
+    auto arg_len = info.Length();
+    if (arg_len < 2) {
+        throw Napi::Error::New(env, "keysFrom: txnmou and 'from' key required");
     }
-    
-    MDBX_cursor* cursor_ptr;
-    auto rc = mdbx_cursor_open(*txn_, dbi_, &cursor_ptr);
-    if (rc != MDBX_SUCCESS) {
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
+    auto arg0 = info[0].As<Napi::Object>();
+    // Дополнительная проверка - есть ли у объекта нужный constructor
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "keysFrom: first argument must be MDBX_Txn instance");
+    }    
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
 
     try {
-        cursormou_managed cursor{ cursor_ptr };
+        auto cursor = dbi::open_cursor(*txn);
         
-        // Парсим аргументы: from, limit, cursorMode
-        keymou from_key = mdbx::is_ordinal(key_mode_) ?
-            keymou::from(info[0], env, id_buf_) : 
-            keymou::from(info[0], env, key_buf_);
+        // Парсим аргументы: txn, from, limit, cursorMode
+        std::uint64_t t;
+        keymou from_key = (key_mode_.val & key_mode::ordinal) ?
+            keymou::from(info[1], env, t) : 
+            keymou::from(info[1], env, key_buf_);
         
         std::size_t count = SIZE_MAX;
-        if (info.Length() > 1 && !info[1].IsUndefined()) {
-            count = info[1].As<Napi::Number>().Uint32Value();
+        if (info.Length() > 2 && !info[2].IsUndefined()) {
+            count = info[2].As<Napi::Number>().Uint32Value();
         }
         
         using move_operation = mdbx::cursor::move_operation;
         auto cursor_mode = move_operation::key_greater_or_equal;
         auto turn_mode = move_operation::next;
 
-        if (info.Length() > 2 && !info[2].IsUndefined()) {
-            cursor_mode = parse_cursor_mode(info[2]);
+        if (info.Length() > 3 && !info[3].IsUndefined()) {
+            cursor_mode = parse_cursor_mode(info[3]);
             
             // Определяем направление сканирования на основе операции
             switch (cursor_mode) {
@@ -466,7 +509,7 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
                 
                 keymou key{f.key};
                 if (is_key_equal_mode) {
-                    if (id_buf_ != key.as_int64()) {
+                    if (t != key.as_int64()) {
                         return true; // останавливаем сканирование
                     }
                 }
@@ -510,13 +553,28 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-const env_arg0* dbimou::get_env_userctx(MDBX_env* e) 
-{
-    assert(e);
-    auto rc = static_cast<env_arg0*>(mdbx_env_get_userctx(e));
-    if (!rc)
-        throw std::runtime_error("env: userctx not set");
-    return rc;
-} 
+Napi::Value dbimou::drop(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        Napi::TypeError::New(env, "First argument must be a transaction").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    auto arg0 = info[0].As<Napi::Object>();
+    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
+        Napi::TypeError::New(env, "First argument must be a txnmou instance").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    bool delete_db = false;
+    if (info.Length() > 1 && info[1].IsBoolean()) {
+        delete_db = info[1].As<Napi::Boolean>().Value();
+    }
+    try {
+        dbi::drop(*txn, delete_db);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, std::string("drop: ") + e.what());
+    }
+    return env.Undefined();
+}
 
 } // namespace mdbxmou

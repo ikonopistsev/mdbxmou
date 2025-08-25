@@ -386,7 +386,7 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
 
         check();
 
-        auto conf = dbimou::get_env_userctx(*this);
+        auto conf = get_env_userctx(*this);
 
         auto arg0 = info[0];
         query_request query = parse_query(mode, 
@@ -429,7 +429,7 @@ Napi::Value envmou::keys(const Napi::CallbackInfo& info)
 
         check();
 
-        auto conf = dbimou::get_env_userctx(*this);
+        auto conf = get_env_userctx(*this);
 
         auto arg0 = info[0];
         keys_request query = parse_keys(mode, 
