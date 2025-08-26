@@ -169,6 +169,13 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
         
         try {
             auto cursor = dbi::open_cursor(*txn);
+            auto stat = dbi::get_stat(*txn);
+            
+            // Проверяем, есть ли записи в базе данных
+            if (stat.ms_entries == 0) {
+                return Napi::Number::New(env, 0);
+            }
+            
             uint32_t index{};
 
             if (key_mode_.val & key_mode::ordinal) {
@@ -254,6 +261,12 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
     
     try {
         auto cursor = dbi::open_cursor(*txn);
+        auto stat = dbi::get_stat(*txn);
+        
+        // Проверяем, есть ли записи в базе данных
+        if (stat.ms_entries == 0) {
+            return Napi::Number::New(env, 0);
+        }
         
         // Парсим начальный ключ
         std::uint64_t t;
