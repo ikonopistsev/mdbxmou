@@ -10,7 +10,7 @@ namespace mdbxmou {
 using buffer_type = std::vector<char>;
 
 struct txnmou_managed final
-    : public mdbx::txn_managed
+    : mdbx::txn_managed
 {
     txnmou_managed(MDBX_txn* txn)
     {  
@@ -19,7 +19,7 @@ struct txnmou_managed final
 };
 
 struct cursormou_managed final
-    : public mdbx::cursor_managed
+    : mdbx::cursor_managed
 {
     cursormou_managed(MDBX_cursor* cursor) noexcept
     {  

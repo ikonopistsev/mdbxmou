@@ -8,8 +8,6 @@ const test = async () => {
     const dbDir = 'e2';
 
     await fs.promises.rm(dbDir, { recursive: true, force: true });
-
-    console.log("MDBX_Param:", MDBX_Param);
     // получаем константы
     const { keyMode } = MDBX_Param;
 
