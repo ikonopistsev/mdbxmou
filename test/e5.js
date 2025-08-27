@@ -102,8 +102,6 @@ const test = async () => {
     ]);
     console.log("await keys()", out);
   }
-return;
-
   // добавим не существующий ключ
   keys.push(42);
   // удалим все ключи
