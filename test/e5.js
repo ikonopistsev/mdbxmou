@@ -84,24 +84,27 @@ const test = async () => {
   }
 
   {
-    // почитаем асинхронно в упрощенном режиме
-    const out = await db.keys({dbi: dbi});
-    console.log("await keys()", out);
+    const out = await db.keys(dbi);
+    console.log("await keys(dbi)", out);
   }
 
   {
-    // почитаем асинхронно в упрощенном режиме
+    const out = await db.keys({dbi: dbi});
+    console.log("await keys({dbi: dbi})", out);
+  }
+
+  {
     const out = await db.keys([dbi, dbi]);
-    console.log("await dbi keys()", out);
+    console.log("await dbi keys([dbi, dbi])", out);
   }  
 
   {
-    // почитаем асинхронно в упрощенном режиме
     const out = await db.keys([
       { dbi: dbi, limit: 1, from:1}
     ]);
-    console.log("await keys()", out);
+    console.log("await keys({ dbi: dbi, limit: 1, from:1})", out);
   }
+  
   // добавим не существующий ключ
   keys.push(42);
   // удалим все ключи

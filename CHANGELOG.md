@@ -16,7 +16,13 @@ All notable changes to this project will be documented in this file.
   - All examples now properly show transaction parameter as first argument
   - Removed outdated MDBX_Async_Env references
   - Added comprehensive API reference with correct syntax
+- **Async Keys API**: Updated documentation for `env.keys()` method variants
+  - `await env.keys(dbi)`: Direct DBI object passing
+  - `await env.keys({dbi: dbi})`: Object parameter with DBI
+  - `await env.keys([dbi, dbi])`: Multiple DBI objects
+  - `await env.keys([{dbi: dbi, limit: 1, from: 1}])`: Advanced configuration
 - **forEach method**: Added entry count check before cursor operations to prevent MDBX_NOTFOUND errors on empty databases
+- **CursorMode constants**: Updated to camelCase naming convention (e.g., `keyGreaterThan` instead of `key_greater_than`)
 
 ### Fixed
 - **Empty database handling**: forEach no longer throws exceptions when called on empty databases
@@ -29,8 +35,12 @@ All notable changes to this project will be documented in this file.
 
 ## Test Results
 - ✅ test/e2.js: Basic functionality test (passes)
+- ✅ test/e5.js: Async keys API test (passes)
 - ✅ test/e6.js: Drop method comprehensive test (passes)
 - ✅ All existing tests remain functional
 
 ## Migration Guide
-No breaking changes in this release. The drop() method is a new addition that doesn't affect existing code.
+### From previous version:
+- **Query API**: Replace database name strings with DBI objects in async operations
+- **CursorMode**: Update constant names to camelCase if used directly
+- No breaking changes for existing synchronous API usage
