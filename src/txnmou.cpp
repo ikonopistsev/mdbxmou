@@ -251,12 +251,4 @@ void txnmou::free_txn::operator()(MDBX_txn* txn) const noexcept {
     }
 }
 
-void txnmou::drop(MDBX_dbi id, bool del)
-{
-    auto rc = mdbx_drop(*this, id, del);
-    if (rc != MDBX_SUCCESS) {
-        throw std::runtime_error(mdbx_strerror(rc));
-    }
-}
-
 } // namespace mdbxmou

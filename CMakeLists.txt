@@ -23,8 +23,8 @@ add_library(${PROJECT_NAME} SHARED
     "src/querymou.cpp"
     "src/envmou.cpp" 
     "src/txnmou.cpp"
-    "src/dbi.cpp"
-    "src/dbimou.cpp")
+    "src/dbimou.cpp"
+    "src/dbi.cpp")
 
 # Gives our library file a .node extension without any "lib" prefix
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "" SUFFIX ".node")

@@ -10,16 +10,7 @@ void async_keys::Execute()
         // стартуем транзакцию
         auto txn = start_transaction();
         for (auto& req : query_) 
-        {
-            mdbx::map_handle dbi{};
-            auto db_mode = req.db_mod;
-            if (db_mode.val & db_mode::accede) {
-                dbi = txn.open_map_accede(req.db);
-            } else {
-                dbi = txn.open_map(req.db, req.key_mod, req.val_mod);
-            }
-            do_keys(txn, dbi, req);
-        }
+            do_keys(txn, {req.id}, req);
 
         txn.commit();
     } catch (const std::exception& e) {
@@ -72,9 +63,6 @@ void async_keys::OnOK()
     for (std::uint32_t i = 0; i < query_.size(); ++i) {
         Napi::Object js_row = Napi::Object::New(env);
         const auto& row = query_[i];
-        if (!row.db.empty()) {
-            js_row.Set("db", Napi::String::New(env, row.db_name));
-        }
         result.Set(i, write_row(env, row));
     }
 

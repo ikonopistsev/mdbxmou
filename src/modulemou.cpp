@@ -78,24 +78,24 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "last", move_operation::last);
     MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "next", move_operation::next);
     MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "prev", move_operation::previous);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_lesser_than", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "keyLesserThan", 
         move_operation::key_lesser_than);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_lesser_or_equal", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "keyLesserOrEqual", 
         move_operation::key_lesser_or_equal);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_equal", move_operation::key_equal);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_greater_or_equal", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "keyEqual", move_operation::key_equal);
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "keyGreaterOrEqual", 
         move_operation::key_greater_or_equal);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "key_greater_than", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "keyGreaterThan", 
         move_operation::key_greater_than);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_lesser_than", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multiExactKeyValueLesserThan", 
         move_operation::multi_exactkey_value_lesser_than);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_lesser_or_equal", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multiExactKeyValueLesserOrEqual", 
         move_operation::multi_exactkey_value_lesser_or_equal);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_equal", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multiExactKeyValueEqual", 
         move_operation::multi_exactkey_value_equal);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_greater_or_equal", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multiExactKeyValueGreaterOrEqual", 
         move_operation::multi_exactkey_value_greater_or_equal);
-    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multi_exactkey_value_greater", 
+    MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "multiExactKeyValueGreater", 
         move_operation::multi_exactkey_value_greater);
     mdbx_mou.Set("cursorMode", cursor_mode);
 

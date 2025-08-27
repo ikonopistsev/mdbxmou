@@ -117,8 +117,6 @@ public:
 
     void attach(envmou& env, MDBX_txn* txn, 
         txn_mode mode, txnmou* parent = nullptr);
-
-    void drop(MDBX_dbi id, bool del);
 };
 
 } // namespace mdbxmou

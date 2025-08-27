@@ -39,20 +39,15 @@ const test = async () => {
   // по умолчаниюю query выполняется в режиме wr
   const out = await db.query([
     { 
-      mode: queryMode.get, 
-      keyMode: keyMode.ordinal, 
-      keyFlag: keyFlag.number,
+      mode: queryMode.get, dbi: dbi,
       item: [{ "key": 1 }, { "key": 42 }] 
     },
     { 
-      mode: queryMode.insertUnique, 
-      keyMode: keyMode.ordinal,
-      keyFlag: keyFlag.number,
+      mode: queryMode.insertUnique, dbi: dbi,
       item: [{ "key": 2, "value":"val-2" }] 
     }
   ]);
   console.log('q1', JSON.stringify(out));
-
   // вычитаем key = 2 - синхронно
   const r = db.startRead();
   const rdbi = r.openMap(keyMode.ordinal);
@@ -82,19 +77,32 @@ const test = async () => {
     // почитаем асинхронно в упрощенном режиме
     console.log("Read key = 2 in simple async mode to out2");
     const out2 = await db.query({
-      keyMode: keyMode.ordinal,
+      dbi: dbi,
       item: [{ "key": 2 }, { "key": 42 }]  
     });
     console.log("out2", JSON.stringify(out2));
   }
-  
+
   {
     // почитаем асинхронно в упрощенном режиме
-    const out = await db.keys({
-      keyMode: BigInt(keyMode.ordinal),
-    });
+    const out = await db.keys({dbi: dbi});
     console.log("await keys()", out);
   }
+
+  {
+    // почитаем асинхронно в упрощенном режиме
+    const out = await db.keys([dbi, dbi]);
+    console.log("await dbi keys()", out);
+  }  
+
+  {
+    // почитаем асинхронно в упрощенном режиме
+    const out = await db.keys([
+      { dbi: dbi, limit: 1, from:1}
+    ]);
+    console.log("await keys()", out);
+  }
+return;
 
   // добавим не существующий ключ
   keys.push(42);
@@ -102,7 +110,7 @@ const test = async () => {
   const rm = await db.query([
       { 
         mode: queryMode.del, 
-        keyMode: keyMode.ordinal, 
+        dbi: dbi,
         item: keys.map(key => ({ "key": key }))
       }
   ]);
