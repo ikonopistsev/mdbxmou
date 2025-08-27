@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
   - All examples now properly show transaction parameter as first argument
   - Removed outdated MDBX_Async_Env references
   - Added comprehensive API reference with correct syntax
+  - **Fixed argument order**: Corrected `createMap` and `openMap` method signatures to match actual implementation
 - **Async Keys API**: Updated documentation for `env.keys()` method variants
   - `await env.keys(dbi)`: Direct DBI object passing
   - `await env.keys({dbi: dbi})`: Object parameter with DBI

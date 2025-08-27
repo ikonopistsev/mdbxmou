@@ -124,13 +124,13 @@ const result = await env.query([
 
 #### Methods
 
-**createMap(keyMode, [valueMode], [flags], [name]) → DBI**
+**createMap(db_name | keyMode, [keyMode | valueMode], [valueMode]) → DBI**
 ```javascript
-// No arguments - default keyMode (0) and valueMode (0)
-const dbi = txn.createMap();
-
 // One argument - keyMode only
 const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
+
+// One argument - db_name only (uses default keyMode)
+const namedDbi = txn.createMap("my-table");
 
 // Two arguments - keyMode + valueMode
 const dbi = txn.createMap(MDBX_Param.keyMode.ordinal, MDBX_Param.valueMode.multi);
@@ -144,16 +144,16 @@ const namedDbi = txn.createMap("my-table", MDBX_Param.keyMode.ordinal, MDBX_Para
 
 > **Note**: Use `createMap` in write transactions - it will create the database if it doesn't exist, or open it if it does. This is safer for new environments.
 
-**openMap(keyMode, [name]) → DBI**
+**openMap(db_name | keyMode, [keyMode]) → DBI**
 ```javascript
-// No arguments - default keyMode (0) 
-const dbi = txn.openMap();
-
 // One argument - keyMode only
 // Number keyMode - keys returned as numbers
 const dbi = txn.openMap(MDBX_Param.keyMode.ordinal);
 // BigInt keyMode - keys returned as BigInts
 const dbi = txn.openMap(BigInt(MDBX_Param.keyMode.ordinal));
+
+// One argument - db_name only (uses default keyMode)
+const namedDbi = txn.openMap("my-table");
 
 // Two arguments - db_name + keyMode
 const namedDbi = txn.openMap("my-table", MDBX_Param.keyMode.ordinal);
