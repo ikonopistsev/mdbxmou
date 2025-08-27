@@ -1,30 +1,24 @@
 #include "querymou.hpp"
+#include "dbimou.hpp"
 
 namespace mdbxmou {
 
-void async_common::parse(txn_mode txn, const Napi::Object& obj)
+dbimou* async_common::parse(const Napi::Object& arg0)
 {
-    if (obj.Has("db")) {
-        db_name = obj.Get("db").As<Napi::String>().Utf8Value();
-        db = mdbx::slice{db_name};
+    dbimou* dbi = nullptr;
+    // если просто передали dbi
+    if (arg0.InstanceOf(dbimou::ctor.Value())) {
+        dbi = Napi::ObjectWrap<dbimou>::Unwrap(arg0);
+    } else {
+        auto t = arg0.Get("dbi").As<Napi::Object>();
+        dbi = Napi::ObjectWrap<dbimou>::Unwrap(t);
     }
 
-    if (obj.Has("dbMode")) {
-        db_mod = db_mode::parse(txn, obj.Get("dbMode").As<Napi::Number>());
-    }
-
-    if (obj.Has("keyFlag")) {
-        key_flag = base_flag::parse_key(obj.Get("keyFlag").As<Napi::Number>());
-    }
-
-    if (obj.Has("keyMode")) {
-        key_mod = parse_key_mode(obj.Env(), obj.Get("keyMode").As<Napi::Number>(), key_flag);
-    }
-
-    // парсим value
-    if (obj.Has("valueMode")) {
-        val_mod = value_mode::parse(obj.Get("valueMode").As<Napi::Number>());
-    }    
+    id = dbi->get_id();
+    key_mod = dbi->get_key_mode();
+    val_mod = dbi->get_value_mode();
+    key_flag = dbi->get_key_flag();
+    return dbi;
 }
 
 void async_key::parse(const async_common& common, const Napi::Value& item)
@@ -59,101 +53,75 @@ void async_keyval::parse(const query_line& common, const Napi::Object& item)
     }
 }
 
-void query_line::parse(txn_mode txn, const Napi::Object& obj)
+void query_line::parse(txn_mode txn, const Napi::Object& arg0)
 {
     //  парсим общие параметры
-    async_common::parse(txn, obj);
-
-    if (obj.Has("valueFlag")) {
-        value_flag = base_flag::parse_value(val_mod, 
-            obj.Get("valueFlag").As<Napi::Number>());
-    }    
-
-    if (obj.Has("mode")) {
-        mode = query_mode::parse(txn, obj.Get("mode").As<Napi::Number>());
-    } else if (obj.Has("queryMode")) {
-        mode = query_mode::parse(txn, obj.Get("queryMode").As<Napi::Number>());
-    }    
-}
-
-void query_line::parse(txn_mode txn, base_flag kf, 
-        base_flag vf, const Napi::Object& obj)
-{
-    // утснавлиаем общие параметры
-    this->key_flag = kf;
-    this->value_flag = vf;
-
-    // парсим общие параметры
-    parse(txn, obj);
-
-    // Парсим элементы
-    if (obj.Has("item")) {
-        auto items_array = obj.Get("item").As<Napi::Array>();
-        auto length = items_array.Length();
-        item.reserve(length);
-        for (uint32_t i = 0; i < length; ++i) {
+    auto dbi = async_common::parse(arg0);
+    value_flag = dbi->get_value_flag();
+    if (arg0.Has("mode")) {
+        mode = query_mode::parse(txn, arg0.Get("mode").As<Napi::Number>());
+    } else if (arg0.Has("queryMode")) {
+        mode = query_mode::parse(txn, arg0.Get("queryMode").As<Napi::Number>());
+    }
+    auto items_array = arg0.Get("item").As<Napi::Array>();
+    auto item_len = items_array.Length();
+    if (item_len > 0) {
+        item.reserve(item_len);
+        for (uint32_t i = 0; i < item_len; ++i) {
             auto item_obj = items_array.Get(i).As<Napi::Object>();
             async_keyval keyval{};
             keyval.parse(*this, item_obj);
             item.emplace_back(std::move(keyval));
         }
-    } else {
-        throw std::runtime_error("query: no item");
     }
 }
 
-query_request parse_query(txn_mode mode, base_flag key_flag, 
-        base_flag value_flag, const Napi::Value& obj)
+query_request parse_query(txn_mode txn, const Napi::Value& arg0)
 {
     query_request rc{};
-    if (obj.IsArray()) {
-        auto arr = obj.As<Napi::Array>();
+    if (arg0.IsArray()) {
+        auto arr = arg0.As<Napi::Array>();
         rc.reserve(arr.Length());
         for (uint32_t i = 0; i < arr.Length(); ++i) {
             query_line row{};
-            row.parse(mode, key_flag, value_flag, arr.Get(i).As<Napi::Object>());
+            row.parse(txn, arr.Get(i).As<Napi::Object>());
             rc.push_back(std::move(row));
         }
-    } else if (obj.IsObject()) {
+    } else if (arg0.IsObject()) {
         query_line row{};
-        row.parse(mode, key_flag, value_flag, obj.As<Napi::Object>());
+        row.parse(txn, arg0.As<Napi::Object>());
         rc.push_back(std::move(row));
     } else {
-        throw Napi::TypeError::New(obj.Env(), "Expected array or object for query");
+        throw Napi::TypeError::New(arg0.Env(), "Expected array or object for query");
     }
     return rc;
 }
 
-void keys_line::parse(txn_mode txn, 
-    base_flag kf, const Napi::Object& obj)
+void keys_line::parse(const Napi::Object& arg0)
 {
-    // утснавлиаем общие параметры
-    this->key_flag = kf;
-
     // парсим общие параметры
-    async_common::parse(txn, obj);
+    async_common::parse(arg0);
 
     // парсим параметры scan_from
-    if (obj.Has("from")) {
+    if (arg0.Has("from")) {
         keymou key{};
         has_from_key = true;
-        async_key::parse(*this, obj.Get("from"));
+        async_key::parse(*this, arg0.Get("from"));
     }
     
-    if (obj.Has("limit")) {
-        auto limit_val = obj.Get("limit");
+    if (arg0.Has("limit")) {
+        auto limit_val = arg0.Get("limit");
         if (limit_val.IsNumber()) {
             limit = limit_val.As<Napi::Number>().Uint32Value();
         }
     }
     
-    if (obj.Has("cursorMode")) {
-        cursor_mode = parse_cursor_mode(obj.Get("cursorMode"));
+    if (arg0.Has("cursorMode")) {
+        cursor_mode = parse_cursor_mode(arg0.Get("cursorMode"));
     }    
 }
 
-keys_request parse_keys(txn_mode txn, base_flag key_flag, 
-    base_flag value_flag, const Napi::Value& obj)
+keys_request parse_keys(const Napi::Value& obj)
 {
     keys_request rc{};
     if (obj.IsArray()) {
@@ -161,12 +129,12 @@ keys_request parse_keys(txn_mode txn, base_flag key_flag,
         rc.reserve(arr.Length());
         for (uint32_t i = 0; i < arr.Length(); ++i) {
             keys_line row{};
-            row.parse(txn, key_flag, arr.Get(i).As<Napi::Object>());
+            row.parse(arr.Get(i).As<Napi::Object>());
             rc.push_back(std::move(row));
         }
     } else if (obj.IsObject()) {
         keys_line row{};
-        row.parse(txn, key_flag, obj.As<Napi::Object>());
+        row.parse(obj.As<Napi::Object>());
         rc.push_back(std::move(row));
     } else {
         throw Napi::TypeError::New(obj.Env(), "Expected array or object for query");

@@ -21,7 +21,7 @@ const test = async () => {
       path: db_dir
     });
 
-  console.log('Start write');
+  console.log('Start write (memory leak test)');
   const count = 100000;
   for (let i = 0; i < count; i++) {
     const txn = db.startWrite();

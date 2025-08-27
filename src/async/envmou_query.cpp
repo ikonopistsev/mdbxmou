@@ -10,16 +10,7 @@ void async_query::Execute()
         auto txn = start_transaction();
         for (auto& req : query_) 
         {
-            mdbx::map_handle dbi{};
-            auto db_mode = req.db_mod;
-            if (db_mode.val & db_mode::accede) {
-                dbi = txn.open_map_accede(req.db);
-            } else if (db_mode.val & db_mode::create) {
-                dbi = txn.create_map(req.db, req.key_mod, req.val_mod);
-            } else {
-                dbi = txn.open_map(req.db, req.key_mod, req.val_mod);
-            }
-
+            mdbx::map_handle dbi{req.id};
             auto mode = req.mode;
             if (mode.val & query_mode::get) {
                 do_get(txn, dbi, req);
@@ -29,7 +20,6 @@ void async_query::Execute()
                 do_put(txn, dbi, req);
             }
         }
-
         txn.commit();
     } catch (const std::exception& e) {
         SetError(e.what());
@@ -111,9 +101,6 @@ void async_query::OnOK()
     for (std::size_t i = 0; i < query_.size(); ++i) {
         Napi::Object js_row = Napi::Object::New(env);
         const auto& row = query_[i];
-        if (!row.db.empty()) {
-            js_row.Set("db", Napi::String::New(env, row.db_name));
-        }
         result.Set(static_cast<uint32_t>(i), write_row(env, row));
     }
 

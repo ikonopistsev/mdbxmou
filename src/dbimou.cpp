@@ -569,13 +569,11 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
 Napi::Value dbimou::drop(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() < 1) {
-        Napi::TypeError::New(env, "First argument must be a transaction").ThrowAsJavaScriptException();
-        return env.Undefined();
+        throw Napi::TypeError::New(env, "First argument must be a transaction");
     }
     auto arg0 = info[0].As<Napi::Object>();
     if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        Napi::TypeError::New(env, "First argument must be a txnmou instance").ThrowAsJavaScriptException();
-        return env.Undefined();
+        throw Napi::TypeError::New(env, "First argument must be a txnmou instance");
     }
     auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
     bool delete_db = false;

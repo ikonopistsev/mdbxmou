@@ -24,7 +24,6 @@ class dbimou final
 
     buffer_type key_buf_{};
     buffer_type val_buf_{};
-    std::uint64_t id_buf_{};
     
 public:   
     static Napi::FunctionReference ctor;
@@ -60,6 +59,9 @@ public:
 
     static void init(const char *class_name, Napi::Env env);
 
+    // valuemou read(const MDBX_txn* txn);
+    // valuemou read(const MDBX_txn* txn, const keymou& key);
+
     // Основные операции (только синхронные)
     Napi::Value put(const Napi::CallbackInfo&);
     Napi::Value get(const Napi::CallbackInfo&);
@@ -69,7 +71,7 @@ public:
     Napi::Value stat(const Napi::CallbackInfo&);
     Napi::Value keys(const Napi::CallbackInfo&);
     Napi::Value keys_from(const Napi::CallbackInfo&);
-    Napi::Value drop(const Napi::CallbackInfo& info);
+    Napi::Value drop(const Napi::CallbackInfo&);
 
 private:
     // Внутренний метод для forEach с начальным ключом
@@ -91,6 +93,30 @@ public:
 
     operator MDBX_put_flags_t() const noexcept {
         return static_cast<MDBX_put_flags_t>(key_mode_.val & value_mode_.val);
+    }
+
+    MDBX_dbi get_id() const noexcept {
+        return id_;
+    }
+
+    db_mode get_mode() const noexcept {
+        return mode_;
+    }
+
+    key_mode get_key_mode() const noexcept {
+        return key_mode_;
+    }
+
+    value_mode get_value_mode() const noexcept {
+        return value_mode_;
+    }
+
+    base_flag get_key_flag() const noexcept {
+        return key_flag_;
+    }
+
+    base_flag get_value_flag() const noexcept {
+        return value_flag_;
     }
 };
 

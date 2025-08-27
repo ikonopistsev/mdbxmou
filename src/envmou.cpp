@@ -372,8 +372,7 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
     txn_mode mode{};
 
     if (info.Length() < 1) {
-        throw Napi::TypeError::New(env, 
-            "expected array of requests: [{ db: String, db_mode: Number, key_mode: Number, key_flag: Number, value_mode: Number, value_flag: Number, mode: Number, item: [] }, ...]");
+        throw Napi::TypeError::New(env, "expected array of requests");
     }
 
     if (info.Length() > 1 || info[1].IsNumber()) {
@@ -389,8 +388,7 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
         auto conf = get_env_userctx(*this);
 
         auto arg0 = info[0];
-        query_request query = parse_query(mode, 
-            conf->key_flag, conf->value_flag, arg0);
+        query_request query = parse_query(mode, arg0);
         auto* worker = new async_query(env, *this, mode, 
             std::move(query), arg0.IsObject());
         auto promise = worker->GetPromise();
@@ -429,11 +427,8 @@ Napi::Value envmou::keys(const Napi::CallbackInfo& info)
 
         check();
 
-        auto conf = get_env_userctx(*this);
-
         auto arg0 = info[0];
-        keys_request query = parse_keys(mode, 
-            conf->key_flag, conf->value_flag, arg0);
+        keys_request query = parse_keys(arg0);
 
         auto* worker = new async_keys(env, *this, mode, 
             std::move(query), arg0.IsObject());
