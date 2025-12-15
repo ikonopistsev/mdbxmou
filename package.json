@@ -30,6 +30,7 @@
     "e3": "node ./test/e3.js",
     "e33": "node ./test/e33.js",
     "e4": "node ./test/e4.js",
+    "e4async": "node ./test/e4async.mjs",
     "e5": "node ./test/e5.js",
     "build": "node build.js",
     "build-dev": "node build-dev.js",

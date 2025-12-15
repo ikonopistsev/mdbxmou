@@ -82,12 +82,18 @@ const test = async () => {
   }
 
 
-  const { queryMode, dbMode, keyFlag } = MDBX_Param;
+  // query() принимает DBI (или объект { dbi }) и использует его параметры.
+  const { queryMode } = MDBX_Param;
+  const queryTxn = db4.startRead();
+  const queryDbi = queryTxn.openMap(BigInt(keyMode.ordinal));
+  queryTxn.commit();
+
   const result = await db4.query([
-    { dbMode: dbMode.accede, keyMode: keyMode.ordinal, mode: queryMode.get, item: [{ key: 0 }, { key: 1n }, { key: 2n }] },
-    { dbMode: dbMode.accede, keyMode: keyMode.ordinal, mode: queryMode.get, item: [{ key: 3n }, { key: 4n }, { key: 5n }] }
+    { dbi: queryDbi, mode: queryMode.get, item: [{ key: 0 }, { key: 1n }, { key: 2n }] },
+    { dbi: queryDbi, mode: queryMode.get, item: [{ key: 3n }, { key: 4n }, { key: 5n }] }
   ]);
-  console.log('query', JSON.stringify(result));
+  const json = JSON.stringify(result, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+  console.log('query', json);
 
   await db4.close();
 }
