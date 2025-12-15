@@ -1,5 +1,17 @@
 {
   "main": "lib/nativemou.js",
+  "exports": {
+    ".": {
+      "import": "./lib/index.mjs",
+      "require": "./lib/nativemou.js"
+    },
+    "./async": {
+      "import": "./lib/async.mjs",
+      "require": "./lib/mdbx_evn_async.js"
+    },
+    "./nativemou": "./lib/nativemou.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "lib/**/*",
     "src/**/*",
@@ -25,7 +37,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Node bindings for mdbx",
   "repository": {
     "type": "git",

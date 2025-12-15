@@ -1,6 +1,7 @@
 
 var spawnSync = require('child_process').spawnSync;
 var fs = require('fs');
+var path = require('path');
 
 function exec(cmd) {
     const { status } = spawnSync(cmd, {
@@ -14,6 +15,7 @@ function exec(cmd) {
 
 // Create VERSION.json for libmdbx (needed for npm package)
 const versionFile = 'deps/libmdbx/VERSION.json';
+const libmdbxGitMarker = 'deps/libmdbx/.git';
 if (!fs.existsSync(versionFile)) {
     console.log('Creating VERSION.json for libmdbx...');
     const versionJson = {
@@ -27,14 +29,20 @@ if (!fs.existsSync(versionFile)) {
     console.log('VERSION.json created successfully!');
 }
 
-// Patch CMakeLists.txt line 56: if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git" -> if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git"
+// Workaround for npm package: npm does not ship git metadata, while libmdbx
+// may rely on it to determine version info during CMake configure.
+// Apply this patch only when git metadata is missing.
 const cmakeFile = 'deps/libmdbx/CMakeLists.txt';
-if (fs.existsSync(cmakeFile)) {
-    let cmakeContent = fs.readFileSync(cmakeFile, 'utf8').split('\n');
-    if (cmakeContent[55] && cmakeContent[55].trim().startsWith('if(EXISTS')) {
-        cmakeContent[55] = cmakeContent[55].replace('if(EXISTS', 'if(NOT EXISTS');
-        fs.writeFileSync(cmakeFile, cmakeContent.join('\n'));
-        console.log('Patched CMakeLists.txt line 56: if(NOT EXISTS ...');
+if (!fs.existsSync(libmdbxGitMarker) && fs.existsSync(cmakeFile)) {
+    const cmakeText = fs.readFileSync(cmakeFile, 'utf8');
+    const from = 'if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git"';
+    const to = 'if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git"';
+    if (cmakeText.includes(from)) {
+        const patched = cmakeText.replace(from, to);
+        if (patched !== cmakeText) {
+            fs.writeFileSync(cmakeFile, patched);
+            console.log('Patched libmdbx CMakeLists.txt for npm package (no .git).');
+        }
     }
 }
 

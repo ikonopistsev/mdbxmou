@@ -19,6 +19,8 @@ npm install mdbxmou
 
 ## Quick Start
 
+CommonJS:
+
 ```javascript
 const { MDBX_Env, MDBX_Param } = require('mdbxmou');
 
@@ -47,6 +49,12 @@ readTxn.commit();
 await env.close();
 ```
 
+ESM:
+
+```javascript
+import { MDBX_Env, MDBX_Param } from "mdbxmou";
+```
+
 ## API Reference
 
 ### Environment (MDBX_Env)
@@ -64,19 +72,19 @@ await env.open({
   path: './database',           // Database directory
   keyFlag: MDBX_Param.keyFlag.string,    // Default key encoding (optional)
   valueFlag: MDBX_Param.valueFlag.string, // Default value encoding (optional)
-  envFlag: MDBX_Param.envFlag.nostickythreads
+  flags: MDBX_Param.envFlag.nostickythreads
 });
 ```
 
 Options:
 - `path` - Database directory path
+- `flags` - Environment flags (optional, defaults to `0`)
 - `keyFlag` - Default key encoding for all operations (optional, defaults to Buffer)
   - Only `string` can be set (ordinal mode uses `number`/`bigint` separately)
 - `valueFlag` - Default value encoding for all operations (optional, defaults to Buffer)
-- `envFlag` - Environment flags
-- `mapSize` - Maximum database size
-- `maxReaders` - Maximum number of readers
-- `maxDbs` - Maximum number of databases
+- `maxDbi` - Maximum number of databases (optional, default `32`)
+- `mode` - Filesystem permissions mode (optional, default `0664`)
+- `geometry` - Map size/geometry options (optional)
 
 Note: When `keyFlag` or `valueFlag` are set at environment level, they become defaults for all subsequent operations unless explicitly overridden.
 
@@ -536,7 +544,7 @@ try {
   const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
   
   // This might throw if key already exists with MDBX_NOOVERWRITE
-  dbi.put(txn, 123, "value", MDBX_Param.putFlag.nooverwrite);
+  dbi.put(txn, 123, "value");
   
   txn.commit();
 } catch (error) {
@@ -568,7 +576,17 @@ Note: For ordinal (integer) keys, use keyFlag.number or keyFlag.bigint to specif
 
 ### Environment Flags
 - `MDBX_Param.envFlag.nostickythreads` - Don't stick reader transactions to threads
-- `MDBX_Param.envFlag.readonly` - Open database in read-only mode
+- `MDBX_Param.envFlag.rdonly` - Open database in read-only mode
+- `MDBX_Param.envFlag.validation` - Enable page validation
+- `MDBX_Param.envFlag.exclusive` - Exclusive mode
+- `MDBX_Param.envFlag.accede` - Open existing environment
+- `MDBX_Param.envFlag.writemap` - Use writable memory map
+- `MDBX_Param.envFlag.nordahead` - Disable OS readahead
+- `MDBX_Param.envFlag.nomeminit` - Disable memory initialization
+- `MDBX_Param.envFlag.liforeclaim` - LIFO reclaim
+- `MDBX_Param.envFlag.nometasync` - Disable metadata flushes
+- `MDBX_Param.envFlag.safeNosync` - Safe nosync mode
+- `MDBX_Param.envFlag.utterlyNosync` - Utterly nosync mode
 
 ### Database Modes  
 - `MDBX_Param.dbMode.create` - Create database if it doesn't exist
@@ -576,7 +594,9 @@ Note: For ordinal (integer) keys, use keyFlag.number or keyFlag.bigint to specif
 
 ### Query Modes
 - `MDBX_Param.queryMode.get` - Read operations
-- `MDBX_Param.queryMode.put` - Write operations  
+- `MDBX_Param.queryMode.upsert` - Write operations (insert or update)
+- `MDBX_Param.queryMode.update` - Update existing (MDBX_CURRENT)
+- `MDBX_Param.queryMode.insertUnique` - Insert unique (MDBX_NOOVERWRITE)
 - `MDBX_Param.queryMode.del` - Delete operations
 
 ### Cursor Modes
