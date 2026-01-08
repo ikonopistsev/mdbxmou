@@ -1,15 +1,37 @@
 {
   "main": "lib/nativemou.js",
+  "types": "./lib/index.d.mts",
   "exports": {
     ".": {
-      "import": "./lib/index.mjs",
-      "require": "./lib/nativemou.js"
+      "import": {
+        "types": "./lib/index.d.mts",
+        "default": "./lib/index.mjs"
+      },
+      "require": {
+        "types": "./lib/nativemou.d.cts",
+        "default": "./lib/nativemou.js"
+      }
     },
     "./async": {
-      "import": "./lib/async.mjs",
-      "require": "./lib/mdbx_evn_async.js"
+      "import": {
+        "types": "./lib/async.d.mts",
+        "default": "./lib/async.mjs"
+      },
+      "require": {
+        "types": "./lib/async.d.cts",
+        "default": "./lib/mdbx_evn_async.js"
+      }
     },
-    "./nativemou": "./lib/nativemou.js",
+    "./nativemou": {
+      "import": {
+        "types": "./lib/nativemou.d.mts",
+        "default": "./lib/nativemou.js"
+      },
+      "require": {
+        "types": "./lib/nativemou.d.cts",
+        "default": "./lib/nativemou.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -26,12 +48,17 @@
     "cmake-js": "^7.3.1",
     "node-addon-api": "^8.5.0"
   },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.6.3"
+  },
   "scripts": {
     "e3": "node ./test/e3.js",
     "e33": "node ./test/e33.js",
     "e4": "node ./test/e4.js",
     "e4async": "node ./test/e4async.mjs",
     "e5": "node ./test/e5.js",
+    "test:types": "node ./test/types/run.mjs",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
     "install": "node build.js"

@@ -357,7 +357,7 @@ Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, txn_mode m
         // Создаем новый объект txnmou
         auto txn_obj = txnmou::ctor.New({});
         auto txn_wrapper = txnmou::Unwrap(txn_obj);
-        txn_wrapper->attach(*this, txn, mode, nullptr);
+        txn_wrapper->attach(*this, txn, mode);
 
         return txn_obj;
     } catch (const std::exception& e) {

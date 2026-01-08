@@ -13,14 +13,15 @@ function exec(cmd) {
     }
 }
 
-// Create VERSION.json for libmdbx (needed for npm package)
+// Create VERSION.json for libmdbx (needed for npm packages, which don't ship git metadata).
+// In a git checkout/submodule we must NOT create it, since libmdbx rejects multiple version sources.
 const versionFile = 'deps/libmdbx/VERSION.json';
 const libmdbxGitMarker = 'deps/libmdbx/.git';
-if (!fs.existsSync(versionFile)) {
+if (!fs.existsSync(libmdbxGitMarker) && !fs.existsSync(versionFile)) {
     console.log('Creating VERSION.json for libmdbx...');
     const versionJson = {
         "git_describe": "v0.13.7",
-        "git_timestamp": "2025-07-30T12:00:00Z", 
+        "git_timestamp": "2025-07-30T12:00:00Z",
         "git_tree": "npm-package",
         "git_commit": "npm-package",
         "semver": "0.13.7"
