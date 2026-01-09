@@ -10,21 +10,97 @@ namespace mdbxmou {
 using buffer_type = std::vector<char>;
 
 struct txnmou_managed final
-    : mdbx::txn_managed
+    : mdbx::txn
 {
-    txnmou_managed(MDBX_txn* txn)
-    {  
-        txn::handle_ = txn; 
+    // свободу txn
+    struct free_txn
+    {
+        void operator()(MDBX_txn *txn) const noexcept {
+            mdbx_txn_abort(txn);
+        }
+    };
+
+    std::unique_ptr<MDBX_txn, free_txn> guard_;
+
+    txnmou_managed(MDBX_txn* txn) noexcept
+        : mdbx::txn(txn)
+        , guard_(txn)
+    {   }
+    
+    // Move конструктор
+    txnmou_managed(txnmou_managed&& other) noexcept
+        : mdbx::txn(other.txn::handle_)
+        , guard_(std::move(other.guard_))
+    {
+        other.txn::handle_ = nullptr;
+    }
+    
+    // Запрет копирования
+    txnmou_managed(const txnmou_managed&) = delete;
+    txnmou_managed& operator=(const txnmou_managed&) = delete;
+    
+    ~txnmou_managed() noexcept {
+        // guard_ автоматически откатит транзакцию
+        txn::handle_ = nullptr;
+    }
+    
+    // Commit транзакции
+    void commit() {
+        if (guard_) {
+            auto rc = ::mdbx_txn_commit(guard_.release());
+            txn::handle_ = nullptr;
+            if (rc != MDBX_SUCCESS) {
+                throw std::runtime_error(::mdbx_strerror(rc));
+            }
+        }
+    }
+    
+    // Abort транзакции
+    void abort() {
+        if (guard_) {
+            auto rc = ::mdbx_txn_abort(guard_.release());
+            txn::handle_ = nullptr;
+            if (rc != MDBX_SUCCESS) {
+                throw std::runtime_error(::mdbx_strerror(rc));
+            }
+        }
     }
 };
 
 struct cursormou_managed final
-    : mdbx::cursor_managed
+    : mdbx::cursor
 {
-    cursormou_managed(MDBX_cursor* cursor) noexcept
-    {  
-        cursor::handle_ = cursor; 
-    }    
+    // свободу курсору
+    struct free_cursor
+    {
+        void operator()(MDBX_cursor* c) const noexcept {
+            if (c) ::mdbx_cursor_close(c);
+        }
+    };
+
+    std::unique_ptr<MDBX_cursor, free_cursor> guard_;
+
+    explicit cursormou_managed(MDBX_cursor* cursor) noexcept
+        : mdbx::cursor(cursor)
+        , guard_(cursor)
+    {   }
+    
+    // Move конструктор
+    cursormou_managed(cursormou_managed&& other) noexcept
+        : mdbx::cursor(other.cursor::handle_)
+        , guard_(std::move(other.guard_))
+    {
+        other.cursor::handle_ = nullptr;
+    }
+    
+    // Запрет копирования
+    cursormou_managed(const cursormou_managed&) = delete;
+    cursormou_managed& operator=(const cursormou_managed&) = delete;
+    
+    ~cursormou_managed() noexcept {
+        // guard_ автоматически закроет курсор
+        cursor::handle_ = nullptr;
+    }
 };
 
 struct env_flag {

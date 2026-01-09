@@ -10,16 +10,10 @@ class txnmou final
     : public Napi::ObjectWrap<txnmou>
 {
 private:
-    envmou* env_{nullptr};
-    
-    // Простой deleter
-    struct free_txn {
-        void operator()(MDBX_txn* txn) const noexcept {
-            mdbx_txn_abort(txn);
-        }
-    };
-    
-    std::unique_ptr<MDBX_txn, free_txn> txn_{};
+    envmou* env_{nullptr};    
+
+    std::unique_ptr<MDBX_txn, 
+        txnmou_managed::free_txn> txn_{};
     txn_mode mode_{};
 
     void check() const {
@@ -45,6 +39,8 @@ public:
             dec_counter();
         }
     }
+
+    //void Finalize(Napi::Env env) { fprintf(stderr, "txnmou::Finalize %p\n", this); }
 
     static void init(const char *class_name, Napi::Env env);
 

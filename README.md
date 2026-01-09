@@ -132,8 +132,11 @@ const result = await env.query([
 
 #### Methods
 
-**createMap(db_name | keyMode, [keyMode | valueMode], [valueMode]) → DBI**
+**createMap([db_name | keyMode], [keyMode | valueMode], [valueMode]) → DBI**
 ```javascript
+// No arguments - default DB with string keys
+const dbi = txn.createMap();
+
 // One argument - keyMode only
 const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
 
@@ -152,8 +155,11 @@ const namedDbi = txn.createMap("my-table", MDBX_Param.keyMode.ordinal, MDBX_Para
 
 > **Note**: Use `createMap` in write transactions - it will create the database if it doesn't exist, or open it if it does. This is safer for new environments.
 
-**openMap(db_name | keyMode, [keyMode]) → DBI**
+**openMap([db_name | keyMode], [keyMode]) → DBI**
 ```javascript
+// No arguments - default DB with string keys
+const dbi = txn.openMap();
+
 // One argument - keyMode only
 // Number keyMode - keys returned as numbers
 const dbi = txn.openMap(MDBX_Param.keyMode.ordinal);

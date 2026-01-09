@@ -97,7 +97,7 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
             if (arg0.IsString()) {
                 db_name = arg0.As<Napi::String>().Utf8Value();
                 key_mode = parse_key_mode(env, arg1, key_flag);
-            } else if (arg0.IsNumber()) {
+            } else if (arg0.IsNumber() || arg0.IsBigInt()) {
                 key_mode = parse_key_mode(env, arg0, key_flag);
                 value_mode = value_mode::parse(arg1);
             } else {
@@ -108,12 +108,13 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
             auto arg0 = info[0];
             if (arg0.IsString()) {
                 db_name = arg0.As<Napi::String>().Utf8Value();
-            } else {
+            } else if (arg0.IsNumber() || arg0.IsBigInt()) {
                 key_mode = parse_key_mode(env, arg0, key_flag);
+            } else {
+                throw Napi::Error::New(env, "Invalid argument type: expected string (db_name) or number (key_mode)");
             }
-        } else {
-            throw Napi::Error::New(env, "Invalid number of arguments for get_dbi");
         }
+        // arg_count == 0: используем значения по умолчанию (строковый ключ, default db)
 
         check();    
 

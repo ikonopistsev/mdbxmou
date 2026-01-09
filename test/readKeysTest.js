@@ -2,8 +2,8 @@
 
 const fs = require('fs');
 const MDBX = require('../lib/nativemou.js');
-const { buffer } = require('stream/consumers');
 const { MDBX_Env, MDBX_Param } = MDBX;
+const { v4: uuidv4 } = require("uuid");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -67,11 +67,9 @@ const maybeRunGC = async (label) => {
 };
 
 const test = async () => {
-  const db_dir = 'e3';
-
+  const db_dir = 'readKeysTestDB';
   await fs.promises.rm(db_dir, { recursive: true, force: true });
 
-  console.log("MDBX_Param:", MDBX_Param);
   // получаем константы
   const { keyMode, envFlag } = MDBX_Param;
   const { safeNosync } = envFlag;
@@ -79,73 +77,64 @@ const test = async () => {
   const db = new MDBX_Env();
 
   console.log('Opening database...');
-
-  const openArg = 
   await db.open({
       path: db_dir, 
       flags: safeNosync,
     });
 
   const txn = db.startWrite();
-  const dbi = txn.createMap(keyMode.ordinal);
+  const dbi = txn.createMap();
   txn.commit();
 
-  console.log('Start write (memory leak test)');
-  const count = Number.parseInt(process.env.E3_COUNT ?? '100000', 10);
-  const reportEveryMs = 5000;
-  const reportWrite = createPeriodicReporter({ everyMs: reportEveryMs, total: count, label: 'Write' });
-  const reportVerify = createPeriodicReporter({ everyMs: reportEveryMs, total: count, label: 'Verify' });
-  console.log(`Start | Memory: ${formatMemoryUsage()}`);
-  
-  const buffSize = 4096;
+  await maybeRunGC("After open");
+
+    // заполняем тестовую базу uuid ключами
+  console.log('Filling database with test data...');
   {
     const txn = db.startWrite();
-    for (let i = 0; i < 100; i++) {
-      dbi.put(txn, i, Buffer.alloc(buffSize));
+    const total = 10;
+    for (let i = 0; i < total; i++) {
+      const key = uuidv4();
+      const value = `value-for-${key}`;
+      dbi.put(txn, key, value);
     }
     txn.commit();
   }
-  
-  let stat = {};
-  for (let i = 0; i < 1; ++i) {
-    const txn = db.startWrite();
-    const k = dbi.keys(txn);
-    console.log(k);
-    stat = dbi.stat(txn);
-    txn.commit();
-    reportWrite(i + 1, stat);
+  await maybeRunGC("After filled");
 
-    if ((i % 1000) == 0) {
-      await sleep(1);
-    }    
-  }
+    console.log("Start reading keys (memory leak test)");
+    const count = 2000000; ///Number.parseInt(process.env.E3_COUNT ?? '100000', 10);
+    const reportEveryMs = 5000;
+    const reportRead = createPeriodicReporter({
+      everyMs: reportEveryMs,
+      total: count,
+      label: "Read Keys",
+    });
+    const reportWrite = createPeriodicReporter({
+      everyMs: reportEveryMs,
+      total: count,
+      label: "Write",
+    });
+    console.log(`Start | Memory: ${formatMemoryUsage()}`);
 
-  await sleep(1);
-  return;
-
-  for (let i = 0; i < count; i++) {
-    const id = i % 10000;
-    const txn = db.startWrite();
-
-    // пытаемся читать 
-    const val = dbi.get(txn, id);
-    if (val) {
-      let n = val.readInt32BE(buffSize - 4);
-      ++n;
-      val.writeInt32BE(n, buffSize - 4);
-      dbi.put(txn, id, val);
-    } else {
-      // иначе просто создаем новый объект
-      dbi.put(txn, id, Buffer.alloc(buffSize));
-    }
+    let stat = {};
+  // теперь просто получаем keys много раз и следим за утечкой памяти
+  {
     
-    stat = dbi.stat(txn);
-    txn.commit();
+    for (let i = 0; i < count; i++) {
+      const txn = db.startWrite();
+      const keys = dbi.keys(txn);
+      stat = dbi.stat(txn);
+      txn.abort();
 
-    reportWrite(i + 1, stat);
+      // нормализуем ключи в строки чтобы избежать утечек памяти из-за буферов
+      const normalizedKeys = keys.map(normalizeValueToString);
 
-    if ((i % 1000) == 0) {
-      await sleep(1);
+      reportRead(i + 1, stat);
+
+      if ((i % 1000) == 0) {
+        await sleep(1);
+      }
     }
   }
 
@@ -158,6 +147,7 @@ const test = async () => {
 
   await sleep(200);
   console.log(`After close #1 (after 200ms) | Memory: ${formatMemoryUsage()}`);
+
 }
 
-test().catch(console.error);
+test().catch(console.error)

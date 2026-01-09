@@ -38,15 +38,16 @@ public:
         if (status != napi_ok) {
             throw Napi::Error::New(env, "napi_get_value_string_utf8 length");
         }
-
+        
         mem.reserve(length + 1);
-        mem.resize(length);
 
         status = napi_get_value_string_utf8(
             env, arg0, mem.data(), mem.capacity(), nullptr);
         if (status != napi_ok) {
             throw Napi::Error::New(env, "napi_get_value_string_utf8 copyout");
         }
+
+        mem.resize(length);
 
         assign(mem.data(), mem.size());
     }
