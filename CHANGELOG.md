@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-01-10
+
+### Added
+- **Cursor API**: New `cursormou` class for low-level database traversal
+  - `txn.openCursor(dbi)`: Create cursor from transaction and DBI
+  - `cursor.first()`, `cursor.last()`: Navigate to first/last record
+  - `cursor.next()`, `cursor.prev()`: Sequential navigation
+  - `cursor.seek(key)`: Exact key match
+  - `cursor.seekGE(key)`: Find key greater or equal (lower_bound)
+  - `cursor.current()`: Get current position
+  - `cursor.put(key, value, [flags])`: Insert/update record
+  - `cursor.del([flags])`: Delete current record
+  - `cursor.close()`: Explicit cursor close
+  - Returns `{key, value}` objects or `undefined` at end
+
+### Fixed
+- **Critical: String data corruption bug**: Fixed `valuemou` constructor using `reserve()` instead of `resize()` when copying strings from JavaScript, causing data to be written to uninitialized memory
+- **Memory leak in cursor operations**: Fixed `cursormou_managed` to properly close cursor in destructor
+- **Memory leak in transactions**: Simplified `txnmou_managed` - removed redundant `unique_ptr` guard, now uses single `handle_` pointer with proper RAII
+
+### Changed
+- **RAII improvements**: Refactored `txnmou_managed` and `cursormou_managed` to match libmdbx's `txn_managed`/`cursor_managed` pattern
+  - Removed redundant `unique_ptr` - now uses single pointer with `std::exchange` in commit/abort
+  - Cleaner move constructors using `std::exchange`
+- **README**: Updated to remove "zero-copy" claims (not applicable for Node.js bindings)
+
+### Technical
+- `txnmou_managed::commit()` and `abort()` now use `std::exchange()` for atomic handle release
+- Cursor uses `keymou`/`valuemou` directly with implicit `MDBX_val` conversion
+
 ## [Unreleased]
 
 ### Added

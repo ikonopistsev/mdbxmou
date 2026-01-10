@@ -46,10 +46,10 @@ struct valuemou
             throw Napi::Error::New(env, "napi_get_value_string_utf8 length");
         }
         
-        mem.reserve(length + 1);
+        mem.resize(length + 1);
 
         status = napi_get_value_string_utf8(
-            env, arg0, mem.data(), mem.capacity(), nullptr);
+            env, arg0, mem.data(), mem.size(), nullptr);
         if (status != napi_ok) {
             throw Napi::Error::New(env, "napi_get_value_string_utf8 copyout");
         }

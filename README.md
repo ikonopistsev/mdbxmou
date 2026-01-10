@@ -9,7 +9,7 @@ High-performance Node.js binding for libmdbx — a fast, lightweight, embedded k
 - **Transactions** — ACID transactions with read/write modes
 - **Multiple key/value types** — String, binary, ordinal (integer) keys
 - **Batch operations** — Efficient multi-key read/write
-- **Memory-mapped** — Zero-copy data access
+- **Memory-mapped** — High-performance memory-mapped I/O
 
 ## Installation
 
@@ -264,6 +264,199 @@ dbi.drop(txn, true);
 
 // Default behavior (clear contents)
 dbi.drop(txn);
+```
+
+### Cursor (MDBX_Cursor)
+
+Cursors provide low-level control for database traversal with positioning and iteration capabilities.
+
+#### Creating a Cursor
+```javascript
+const txn = env.startRead();
+const dbi = txn.openMap();
+const cursor = txn.openCursor(dbi);
+```
+
+#### Navigation Methods
+
+**first() → {key, value} | undefined**
+```javascript
+const item = cursor.first();
+if (item) {
+  console.log(item.key, item.value);
+}
+```
+
+**last() → {key, value} | undefined**
+```javascript
+const item = cursor.last();
+```
+
+**next() → {key, value} | undefined**
+```javascript
+const item = cursor.next();
+```
+
+**prev() → {key, value} | undefined**
+```javascript
+const item = cursor.prev();
+```
+
+**current() → {key, value} | undefined**
+```javascript
+const item = cursor.current();
+```
+
+#### Search Methods
+
+**seek(key) → {key, value} | undefined**
+
+Exact key match. Returns `undefined` if key not found.
+```javascript
+const item = cursor.seek('user:123');
+if (item) {
+  console.log('Found:', item.value);
+}
+```
+
+**seekGE(key) → {key, value} | undefined**
+
+Find first key greater or equal to given key (lower_bound).
+```javascript
+const item = cursor.seekGE('user:100');
+// Returns first key >= 'user:100'
+```
+
+#### Modification Methods
+
+**put(key, value, [flags])**
+
+Insert or update a record at cursor position.
+```javascript
+cursor.put('newKey', 'newValue');
+
+// With flags (MDBX_NOOVERWRITE, etc.)
+cursor.put('key', 'value', MDBX_Param.queryMode.insertUnique);
+```
+
+**del([flags]) → boolean**
+
+Delete record at current cursor position. Returns `true` if deleted, `false` if not found.
+```javascript
+cursor.seek('keyToDelete');
+const deleted = cursor.del();
+```
+
+#### Control Methods
+
+**close()**
+```javascript
+cursor.close();
+```
+
+#### Cursor Examples
+
+**Iterate all records:**
+```javascript
+const cursor = txn.openCursor(dbi);
+
+for (let item = cursor.first(); item; item = cursor.next()) {
+  console.log(item.key, item.value.toString());
+}
+
+cursor.close();
+txn.abort();
+```
+
+**Range iteration:**
+```javascript
+const cursor = txn.openCursor(dbi);
+
+// Find all keys starting with 'user:'
+for (let item = cursor.seekGE('user:'); item; item = cursor.next()) {
+  if (!item.key.startsWith('user:')) break;
+  console.log(item.key, item.value.toString());
+}
+
+cursor.close();
+```
+
+**Pagination:**
+```javascript
+function getPage(cursor, offset, limit) {
+  const results = [];
+  
+  let item = cursor.first();
+  
+  // Skip offset
+  for (let i = 0; i < offset && item; i++) {
+    item = cursor.next();
+  }
+  
+  // Collect limit items
+  for (let i = 0; i < limit && item; i++) {
+    results.push({ key: item.key, value: item.value.toString() });
+    item = cursor.next();
+  }
+  
+  return results;
+}
+
+const txn = env.startRead();
+const dbi = txn.openMap();
+const cursor = txn.openCursor(dbi);
+
+const page1 = getPage(cursor, 0, 10);   // First 10 items
+const page2 = getPage(cursor, 10, 10);  // Next 10 items
+
+cursor.close();
+txn.abort();
+```
+
+**Reverse iteration:**
+```javascript
+const cursor = txn.openCursor(dbi);
+
+for (let item = cursor.last(); item; item = cursor.prev()) {
+  console.log(item.key, item.value.toString());
+}
+
+cursor.close();
+```
+
+**Bulk insert with cursor:**
+```javascript
+const txn = env.startWrite();
+const dbi = txn.createMap();
+const cursor = txn.openCursor(dbi);
+
+for (let i = 0; i < 1000; i++) {
+  cursor.put(`key${i}`, `value${i}`);
+}
+
+cursor.close();
+txn.commit();
+```
+
+**Delete with cursor:**
+```javascript
+const txn = env.startWrite();
+const dbi = txn.openMap();
+const cursor = txn.openCursor(dbi);
+
+// Delete specific key
+if (cursor.seek('keyToDelete')) {
+  cursor.del();
+}
+
+// Delete range
+for (let item = cursor.seekGE('prefix:'); item; item = cursor.next()) {
+  if (!item.key.startsWith('prefix:')) break;
+  cursor.del();
+}
+
+cursor.close();
+txn.commit();
 ```
 
 ## Key and Value Types
@@ -623,7 +816,7 @@ Note: For ordinal (integer) keys, use keyFlag.number or keyFlag.bigint to specif
 1. **Use ordinal keys** for integer data - much faster than string keys
 2. **Batch operations** - Use query API for bulk operations
 3. **Reuse transactions** - Keep read transactions open for multiple operations
-4. **Memory mapping** - MDBX uses memory-mapped files for zero-copy access
+4. **Memory mapping** - MDBX uses memory-mapped files for fast I/O
 5. **Transaction scope** - Always pass transaction object to DBI methods
 
 ## License

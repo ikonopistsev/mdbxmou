@@ -24,6 +24,7 @@ add_library(${PROJECT_NAME} SHARED
     "src/envmou.cpp" 
     "src/txnmou.cpp"
     "src/dbimou.cpp"
+    "src/cursormou.cpp"
     "src/dbi.cpp")
 
 # Gives our library file a .node extension without any "lib" prefix

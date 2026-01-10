@@ -1,5 +1,6 @@
 #include "txnmou.hpp"
 #include "envmou.hpp"
+#include "cursormou.hpp"
 
 namespace mdbxmou {
 
@@ -11,6 +12,7 @@ void txnmou::init(const char *class_name, Napi::Env env) {
         InstanceMethod("abort", &txnmou::abort),
         InstanceMethod("openMap", &txnmou::open_map),
         InstanceMethod("createMap", &txnmou::create_map),
+        InstanceMethod("openCursor", &txnmou::open_cursor),
         InstanceMethod("isActive", &txnmou::is_active),
     });
 
@@ -23,6 +25,11 @@ Napi::Value txnmou::commit(const Napi::CallbackInfo& info) {
 
     if (!txn_) {
         throw Napi::Error::New(env, "txn already completed");
+    }
+    
+    if (cursor_count_ > 0) {
+        throw Napi::Error::New(env, 
+            "txn commit: " + std::to_string(cursor_count_) + " cursor(s) still open");
     }
     
     dec_counter();
@@ -39,6 +46,11 @@ Napi::Value txnmou::abort(const Napi::CallbackInfo& info) {
     
     if (!txn_) {
         throw Napi::Error::New(env, "txn already completed");
+    }
+    
+    if (cursor_count_ > 0) {
+        throw Napi::Error::New(env, 
+            "txn abort: " + std::to_string(cursor_count_) + " cursor(s) still open");
     }
     
     dec_counter();
@@ -121,6 +133,37 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
     auto ptr = dbimou::Unwrap(obj);
     ptr->attach(dbi, db_mode, key_mode, 
         value_mode, key_flag, value_flag);
+    return obj;
+}
+
+Napi::Value txnmou::open_cursor(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!txn_) {
+        throw Napi::Error::New(env, "txn not active");
+    }
+    
+    if (info.Length() < 1 || !info[0].IsObject()) {
+        throw Napi::Error::New(env, "dbi required");
+    }
+    
+    auto arg0 = info[0].As<Napi::Object>();
+    if (!arg0.InstanceOf(dbimou::ctor.Value())) {
+        throw Napi::TypeError::New(env, "openCursor: first argument must be MDBX_Dbi instance");
+    }
+    
+    auto* dbi = dbimou::Unwrap(arg0);
+    
+    MDBX_cursor* cursor{};
+    int rc = mdbx_cursor_open(txn_.get(), dbi->get_id(), &cursor);
+    
+    if (rc != MDBX_SUCCESS) {
+        throw Napi::Error::New(env, std::string("mdbx_cursor_open: ") + mdbx_strerror(rc));
+    }
+    
+    auto obj = cursormou::ctor.New({});
+    auto ptr = cursormou::Unwrap(obj);
+    ptr->attach(*this, *dbi, cursor);
     return obj;
 }
 

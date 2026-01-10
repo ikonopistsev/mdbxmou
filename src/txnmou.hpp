@@ -22,6 +22,7 @@ private:
 
     std::unique_ptr<MDBX_txn, free_txn> txn_{};
     txn_mode mode_{};
+    std::size_t cursor_count_{};
     
     // Уменьшает счетчик транзакций
     void dec_counter() noexcept;
@@ -51,10 +52,17 @@ public:
     Napi::Value create_map(const Napi::CallbackInfo& info) {
         return get_dbi(info, {db_mode::create});
     }
+    
+    Napi::Value open_cursor(const Napi::CallbackInfo&);
 
     operator MDBX_txn*() noexcept {
         return txn_.get();
     }
+
+    // Cursor counting
+    txnmou& operator++() noexcept { ++cursor_count_; return *this; }
+    txnmou& operator--() noexcept { --cursor_count_; return *this; }
+    std::size_t cursor_count() const noexcept { return cursor_count_; }
 
     Napi::Value is_active(const Napi::CallbackInfo&);
 
