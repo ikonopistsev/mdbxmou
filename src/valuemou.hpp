@@ -4,11 +4,18 @@
 
 namespace mdbxmou {
 
-class valuemou
-    : public mdbx::slice
+// Обёртка над mdbx::slice — НЕ ВЛАДЕЕТ памятью.
+// Хранит указатель на внешний буфер (buffer_type или stack).
+// Copy и move эквивалентны — просто копируют указатель и размер.
+// ВАЖНО: не использовать после уничтожения буфера!
+struct valuemou
+    : mdbx::slice
 {
-public:
     valuemou() = default;
+    valuemou(const valuemou&) = default;
+    valuemou& operator=(const valuemou&) = default;
+    valuemou(valuemou&&) = default;
+    valuemou& operator=(valuemou&&) = default;
 
     valuemou(const mdbx::slice& arg0) noexcept
         : mdbx::slice{arg0}
@@ -76,11 +83,14 @@ public:
     }
 };
 
-class keymou final
-    : public valuemou
+struct keymou final
+    : valuemou
 {
-public:    
     keymou() = default;
+    keymou(const keymou&) = default;
+    keymou& operator=(const keymou&) = default;
+    keymou(keymou&&) = default;
+    keymou& operator=(keymou&&) = default;
 
     keymou(const valuemou& arg0) noexcept
         : valuemou{arg0}

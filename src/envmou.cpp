@@ -103,7 +103,7 @@ env_arg0 envmou::parse(const Napi::Value& arg0)
 
     if (obj.Has("mode")) {
         auto value = obj.Get("mode").As<Napi::Number>();
-        rc.file_mode = static_cast<mode_t>(value.Int32Value());
+        rc.file_mode = static_cast<mdbx_mode_t>(value.Int32Value());
     }
 
     if (obj.Has("keyFlag")) {
@@ -234,7 +234,7 @@ Napi::Value envmou::close(const Napi::CallbackInfo& info)
             return env.Undefined();
         }
 
-        if (trx_count_.load() > 0) {
+        if (trx_count_ > 0) {
             throw std::runtime_error("active transactions");
         }
 
@@ -392,10 +392,10 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
         auto* worker = new async_query(env, *this, mode, 
             std::move(query), arg0.IsObject());
         auto promise = worker->GetPromise();
-        worker->Queue();
         
-        // Увеличиваем счетчик транзакций после успешного создания
+        // Увеличиваем счетчик ДО Queue() — worker гарантированно вызовет --env_
         ++(*this);
+        worker->Queue();
 
         return promise;
     } catch (const std::exception& e) {
@@ -433,10 +433,10 @@ Napi::Value envmou::keys(const Napi::CallbackInfo& info)
         auto* worker = new async_keys(env, *this, mode, 
             std::move(query), arg0.IsObject());
         auto promise = worker->GetPromise();
-        worker->Queue();
         
-        // Увеличиваем счетчик транзакций после успешного создания
+        // Увеличиваем счетчик ДО Queue() — worker гарантированно вызовет --env_
         ++(*this);
+        worker->Queue();
 
         return promise;
     } catch (const std::exception& e) {

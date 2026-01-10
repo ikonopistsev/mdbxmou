@@ -27,7 +27,8 @@ class envmou final
     };
         
     std::unique_ptr<MDBX_env, free_env> env_{};
-    std::atomic<std::size_t> trx_count_{};
+    // счетчик транзакицй, не требующий атомарности
+    std::size_t trx_count_{};
     env_arg0 arg0_{};
     std::mutex lock_{};
 
@@ -106,7 +107,7 @@ public:
     }
 
     void do_close() {
-        if (trx_count_.load() > 0) {
+        if (trx_count_ > 0) {
             throw std::runtime_error("transaction in progress");
         }
         env_.reset();

@@ -33,9 +33,6 @@ public:
         , dbi{}
     {   }
 
-    //~dbimou() { fprintf(stderr, "dbimou::~dbimou %p key_cap=%zu val_cap=%zu\n",this, key_buf_.capacity(), val_buf_.capacity()); }
-    //void Finalize(Napi::Env env) { fprintf(stderr, "~dbimou %p key_cap=%zu val_cap=%zu\n",this, key_buf_.capacity(), val_buf_.capacity()); }
-
     Napi::Value get_id(const Napi::CallbackInfo& info) {
         return Napi::BigInt::New(info.Env(), static_cast<int64_t>(id_));
     }

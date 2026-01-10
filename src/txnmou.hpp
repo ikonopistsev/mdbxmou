@@ -10,17 +10,18 @@ class txnmou final
     : public Napi::ObjectWrap<txnmou>
 {
 private:
-    envmou* env_{nullptr};    
-
-    std::unique_ptr<MDBX_txn, 
-        txnmou_managed::free_txn> txn_{};
-    txn_mode mode_{};
-
-    void check() const {
-        if (!txn_) {
-            throw std::runtime_error("txn: inactive");
+    envmou* env_{nullptr};
+    
+    // свободу txn
+    struct free_txn
+    {
+        void operator()(MDBX_txn *txn) const noexcept {
+            mdbx_txn_abort(txn);
         }
-    }
+    };
+
+    std::unique_ptr<MDBX_txn, free_txn> txn_{};
+    txn_mode mode_{};
     
     // Уменьшает счетчик транзакций
     void dec_counter() noexcept;
@@ -40,8 +41,6 @@ public:
         }
     }
 
-    //void Finalize(Napi::Env env) { fprintf(stderr, "txnmou::Finalize %p\n", this); }
-
     static void init(const char *class_name, Napi::Env env);
 
     Napi::Value commit(const Napi::CallbackInfo&);
@@ -53,7 +52,7 @@ public:
         return get_dbi(info, {db_mode::create});
     }
 
-    operator MDBX_txn*() const noexcept {
+    operator MDBX_txn*() noexcept {
         return txn_.get();
     }
 

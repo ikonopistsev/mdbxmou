@@ -51,6 +51,7 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info)
         auto key = (key_mode_.val & key_mode::ordinal) ?
             keymou::from(info[1], env, t) : 
             keymou::from(info[1], env, key_buf_);
+
         auto val = valuemou::from(info[2], env, val_buf_);
         dbi::put(*txn, key, val, *this);
     } catch (const std::exception& e) {
@@ -139,7 +140,7 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
         auto key = (key_mode_.val & key_mode::ordinal) ?
             keymou::from(info[1], env, t) : 
             keymou::from(info[1], env, key_buf_);
-        
+
         bool result = dbi::has(*txn, key);
         return Napi::Value::From(env, result);
     } catch (const std::exception& e) {
@@ -177,7 +178,6 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
             }
             
             uint32_t index{};
-
             if (key_mode_.val & key_mode::ordinal) {
                 cursor.scan([&](const mdbx::pair& f) {
                     keymou key{f.key};

@@ -97,31 +97,8 @@ const test = async () => {
   const reportVerify = createPeriodicReporter({ everyMs: reportEveryMs, total: count, label: 'Verify' });
   console.log(`Start | Memory: ${formatMemoryUsage()}`);
   
-  const buffSize = 4096;
-  {
-    const txn = db.startWrite();
-    for (let i = 0; i < 100; i++) {
-      dbi.put(txn, i, Buffer.alloc(buffSize));
-    }
-    txn.commit();
-  }
-  
   let stat = {};
-  for (let i = 0; i < 1; ++i) {
-    const txn = db.startWrite();
-    const k = dbi.keys(txn);
-    console.log(k);
-    stat = dbi.stat(txn);
-    txn.commit();
-    reportWrite(i + 1, stat);
-
-    if ((i % 1000) == 0) {
-      await sleep(1);
-    }    
-  }
-
-  await sleep(1);
-  return;
+  const buffSize = 4096;
 
   for (let i = 0; i < count; i++) {
     const id = i % 10000;
