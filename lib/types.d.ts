@@ -73,6 +73,87 @@ export interface MDBXDbiStat {
   modTxnId: number;
 }
 
+/** Result of cursor navigation/search operations */
+export interface MDBXCursorResult<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDBXValue> {
+  key: K;
+  value: V;
+}
+
+/**
+ * Database cursor for sequential access and range queries.
+ * Must be closed before transaction commit/abort.
+ * @example
+ * ```js
+ * const cursor = txn.openCursor(dbi);
+ * for (let item = cursor.first(); item; item = cursor.next()) {
+ *   console.log(item.key, item.value);
+ * }
+ * cursor.close();
+ * txn.commit();
+ * ```
+ */
+export interface MDBX_Cursor<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDBXValue> {
+  /** Move to first record. Returns undefined if database is empty. */
+  first(): MDBXCursorResult<K, V> | undefined;
+  /** Move to last record. Returns undefined if database is empty. */
+  last(): MDBXCursorResult<K, V> | undefined;
+  /** Move to next record. Returns undefined if at end. */
+  next(): MDBXCursorResult<K, V> | undefined;
+  /** Move to previous record. Returns undefined if at beginning. */
+  prev(): MDBXCursorResult<K, V> | undefined;
+  /** Get current record without moving cursor. */
+  current(): MDBXCursorResult<K, V> | undefined;
+  
+  /**
+   * Seek to exact key match.
+   * @param key - The key to find
+   * @returns Record if found, undefined otherwise
+   */
+  seek(key: K): MDBXCursorResult<K, V> | undefined;
+  
+  /**
+   * Seek to key >= given key (lower_bound semantics).
+   * @param key - The key to search from
+   * @returns First record with key >= given key, undefined if none
+   */
+  seekGE(key: K): MDBXCursorResult<K, V> | undefined;
+  
+  /**
+   * Insert or update a key-value pair.
+   * @param key - The key
+   * @param value - The value (Buffer or string)
+   * @param flags - Optional MDBX put flags
+   */
+  put(key: K, value: MDBXValue, flags?: number): void;
+  
+  /**
+   * Delete record at current cursor position.
+   * @param flags - Optional MDBX delete flags
+   * @returns true if deleted, false if not found
+   */
+  del(flags?: number): boolean;
+  
+  /**
+   * Iterate over all records.
+   * @param callback - Called for each record. Return true to stop iteration.
+   * @param backward - If true, iterate from last to first
+   * @example
+   * ```js
+   * cursor.forEach(({key, value}) => {
+   *   console.log(key, value);
+   *   if (key === 'stop') return true; // stop iteration
+   * });
+   * ```
+   */
+  forEach(callback: (item: MDBXCursorResult<K, V>) => boolean | void, backward?: boolean): void;
+  
+  /** 
+   * Close cursor. Must be called before transaction commit/abort.
+   * Safe to call multiple times.
+   */
+  close(): void;
+}
+
 export interface MDBX_Dbi<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDBXValue> {
   readonly id: bigint;
   readonly dbMode: number;
@@ -118,6 +199,11 @@ export interface MDBX_Txn {
   createMap(keyMode: number | bigint, valueMode: number): MDBX_Dbi;
   createMap(name: string, keyMode: number | bigint): MDBX_Dbi;
   createMap(name: string, keyMode: number | bigint, valueMode: number): MDBX_Dbi;
+
+  /** Open a cursor for the given dbi */
+  openCursor<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDBXValue>(
+    dbi: MDBX_Dbi<K, V>
+  ): MDBX_Cursor<K, V>;
 
   isActive(): boolean;
   isTopLevel(): boolean;

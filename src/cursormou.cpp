@@ -289,12 +289,9 @@ Napi::Value cursormou::for_each(const Napi::CallbackInfo& info) {
         // Вызов callback
         auto ret = callback.Call({result});
         
-        // Если вернул false или undefined - остановить
-        if (ret.IsBoolean() && !ret.As<Napi::Boolean>().Value()) {
+        // true stops the scan, false/undefined continues (same as dbi.forEach)
+        if (ret.IsBoolean() && ret.As<Napi::Boolean>().Value()) {
             break;
-        }
-        if (ret.IsUndefined() || ret.IsNull()) {
-            // undefined/null = продолжаем (как forEach в JS)
         }
         
         // Следующий элемент

@@ -13,7 +13,7 @@ const env = new MDBX_Env();
 env.openSync({ 
     path: dbPath, 
     flag: MDBX_Param.envFlag.nostickythreads | MDBX_Param.envFlag.writemap,
-    mode: 664 
+    mode: 0o664 
 });
 
 // Заполняем данные
@@ -80,7 +80,7 @@ env.openSync({
     cursor.forEach(({key}) => {
         earlyCount++;
         console.log(`early[${earlyCount}]: ${key}`);
-        if (earlyCount >= 3) return false; // остановить после 3
+        if (earlyCount >= 3) return true; // true stops iteration
     });
     console.log('forEach stopped after:', earlyCount);
     
@@ -89,7 +89,7 @@ env.openSync({
     cursor.forEach(({key}) => {
         backCount++;
         if (backCount <= 3) console.log(`back[${backCount}]: ${key}`);
-        if (backCount >= 3) return false;
+        if (backCount >= 3) return true; // true stops iteration
     }, true);
     console.log('backward stopped after:', backCount);
     
