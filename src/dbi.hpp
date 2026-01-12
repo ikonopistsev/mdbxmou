@@ -39,7 +39,7 @@ public:
     cursormou_managed open_cursor(MDBX_txn* txn) const;
     
     // Static version for map_handle
-    static cursormou_managed get_cursor(MDBX_txn* txn, mdbx::map_handle dbi);
+    static cursormou_managed open_cursor(MDBX_txn *txn, mdbx::map_handle dbi);
 
     // Drop database or delete it
     void drop(MDBX_txn* txn, bool delete_db = false);

@@ -105,9 +105,9 @@ void async_keys::do_keys_batch(txnmou_managed& txn,
     mdbx::map_handle dbi, keys_line& arg0)
 {
     auto& item = arg0.item;
-    const bool is_ordinal = mdbx::is_ordinal(arg0.key_mod);
-    
-    auto cursor = dbi::get_cursor(txn, dbi);
+    auto is_ordinal = mdbx::is_ordinal(arg0.key_mod);
+
+    auto cursor = dbi::open_cursor(txn, dbi);
 
     // Буфер для batch - MDBXMOU_BATCH_LIMIT/2 пар (key, value)
 #ifndef MDBXMOU_BATCH_LIMIT

@@ -173,14 +173,14 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info)
         auto fn = info[1].As<Napi::Function>();
         
         try {
-            auto cursor = dbi::open_cursor(*txn);
-            auto stat = dbi::get_stat(*txn);
+            auto stat = get_stat(*txn);
             
             // Проверяем, есть ли записи в базе данных
             if (stat.ms_entries == 0) {
                 return Napi::Number::New(env, 0);
             }
-            
+
+            auto cursor = open_cursor(*txn);
             uint32_t index{};
             if (key_mode_.val & key_mode::ordinal) {
                 cursor.scan([&](const mdbx::pair& f) {
@@ -238,7 +238,8 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info)
     }
 }
 
-Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     auto arg_len = info.Length();
     
@@ -367,7 +368,8 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
     }
 }
 
-Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::stat(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     auto arg_len = info.Length();
     if (arg_len < 1) {
@@ -405,7 +407,8 @@ Napi::Value dbimou::stat(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::keys(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     auto arg_len = info.Length();
     if (arg_len < 1) {
@@ -437,9 +440,9 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
         std::array<mdbx::slice, MDBXMOU_BATCH_LIMIT> pairs;
 
         uint32_t index{};
-        const bool is_ordinal = key_mode_.val & key_mode::ordinal;
-        const bool is_bigint = key_flag_.val & base_flag::bigint;
-        const bool is_string = key_flag_.val & base_flag::string;
+        auto is_ordinal = mdbx::is_ordinal(key_mode_);
+        auto is_bigint = key_flag_.val & base_flag::bigint;
+        auto is_string = key_flag_.val & base_flag::string;
         
         // Первый вызов с MDBX_FIRST
         size_t count = cursor.get_batch(pairs, MDBX_FIRST);
@@ -469,7 +472,8 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     auto arg_len = info.Length();
     if (arg_len < 2) {
@@ -580,7 +584,8 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-Napi::Value dbimou::drop(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::drop(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     if (info.Length() < 1) {
         throw Napi::TypeError::New(env, "First argument must be a transaction");
