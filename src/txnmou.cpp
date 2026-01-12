@@ -155,8 +155,7 @@ Napi::Value txnmou::open_cursor(const Napi::CallbackInfo& info) {
     auto* dbi = dbimou::Unwrap(arg0);
     
     MDBX_cursor* cursor{};
-    int rc = mdbx_cursor_open(txn_.get(), dbi->get_id(), &cursor);
-    
+    auto rc = mdbx_cursor_open(txn_.get(), dbi->get_id(), &cursor);
     if (rc != MDBX_SUCCESS) {
         throw Napi::Error::New(env, std::string("mdbx_cursor_open: ") + mdbx_strerror(rc));
     }
@@ -174,10 +173,8 @@ Napi::Value txnmou::is_active(const Napi::CallbackInfo& info) {
 
 void txnmou::attach(envmou& env, MDBX_txn* txn, txn_mode mode) 
 {
-    env_ = &env;
+    env_ = &(++env);
     mode_ = mode;
-    
-    ++(*env_);
     txn_.reset(txn);
 }
 

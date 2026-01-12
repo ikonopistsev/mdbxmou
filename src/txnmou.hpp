@@ -46,6 +46,7 @@ public:
 
     Napi::Value commit(const Napi::CallbackInfo&);
     Napi::Value abort(const Napi::CallbackInfo&);
+    
     Napi::Value open_map(const Napi::CallbackInfo& info) {
         return get_dbi(info, db_mode{});
     }
@@ -60,9 +61,17 @@ public:
     }
 
     // Cursor counting
-    txnmou& operator++() noexcept { ++cursor_count_; return *this; }
-    txnmou& operator--() noexcept { --cursor_count_; return *this; }
-    std::size_t cursor_count() const noexcept { return cursor_count_; }
+    txnmou& operator++() noexcept { 
+        ++cursor_count_; return *this; 
+    }
+    
+    txnmou& operator--() noexcept { 
+        --cursor_count_; return *this; 
+    }
+    
+    std::size_t cursor_count() const noexcept { 
+        return cursor_count_; 
+    }
 
     Napi::Value is_active(const Napi::CallbackInfo&);
 

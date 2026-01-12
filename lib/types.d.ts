@@ -148,6 +148,36 @@ export interface MDBX_Cursor<K extends MDBXKey = MDBXKey, V extends MDBXValue = 
   forEach(callback: (item: MDBXCursorResult<K, V>) => boolean | void, backward?: boolean): void;
   
   /** 
+   * Check if cursor is at end-of-data (beyond first or last record).
+   * @returns true if cursor has no valid position
+   */
+  eof(): boolean;
+  
+  /** 
+   * Check if cursor is on first record in database.
+   * @returns true if on first record
+   */
+  onFirst(): boolean;
+  
+  /** 
+   * Check if cursor is on last record in database.
+   * @returns true if on last record
+   */
+  onLast(): boolean;
+  
+  /** 
+   * Check if cursor is on first value of current key (DUPSORT databases).
+   * @returns true if on first value for current key
+   */
+  onFirstMultival(): boolean;
+  
+  /** 
+   * Check if cursor is on last value of current key (DUPSORT databases).
+   * @returns true if on last value for current key
+   */
+  onLastMultival(): boolean;
+  
+  /** 
    * Close cursor. Must be called before transaction commit/abort.
    * Safe to call multiple times.
    */

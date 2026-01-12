@@ -53,6 +53,13 @@ public:
     // Текущая позиция
     Napi::Value current(const Napi::CallbackInfo&);
     
+    // Статус курсора
+    Napi::Value eof(const Napi::CallbackInfo&);
+    Napi::Value on_first(const Napi::CallbackInfo&);
+    Napi::Value on_last(const Napi::CallbackInfo&);
+    Napi::Value on_first_multival(const Napi::CallbackInfo&);
+    Napi::Value on_last_multival(const Napi::CallbackInfo&);
+    
     // Модификация
     Napi::Value put(const Napi::CallbackInfo&);
     Napi::Value del(const Napi::CallbackInfo&);

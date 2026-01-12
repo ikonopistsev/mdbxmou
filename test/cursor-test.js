@@ -67,6 +67,14 @@ env.openSync({
     item = cursor.seek('nonexistent');
     console.log('seek:', item);
     
+    console.log('\n--- eof/onFirst/onLast ---');
+    cursor.first();
+    console.log('After first(): onFirst =', cursor.onFirst(), ', onLast =', cursor.onLast(), ', eof =', cursor.eof());
+    cursor.last();
+    console.log('After last(): onFirst =', cursor.onFirst(), ', onLast =', cursor.onLast(), ', eof =', cursor.eof());
+    cursor.next(); // beyond last
+    console.log('After next() past end: eof =', cursor.eof());
+    
     console.log('\n--- forEach() ---');
     let count = 0;
     cursor.forEach(({key, value}) => {
