@@ -27,7 +27,7 @@ void async_key::parse(const async_common& common, const Napi::Value& item)
     auto key_flag = common.key_flag;
 
     keymou key{};
-    if (common.key_mod.val & key_mode::ordinal) {
+    if (mdbx::is_ordinal(common.key_mod)) {
         if (item.IsBigInt()) {
             key = keymou{item.As<Napi::BigInt>(), id_buf};
         } else if (item.IsNumber()) {

@@ -39,7 +39,7 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
         const auto& item = param[j];
         Napi::Value key_value;
         Napi::Object js_item = Napi::Object::New(env);
-        if (key_mode.val & key_mode::ordinal) {
+        if (mdbx::is_ordinal(key_mode)) {
             if (key_flag.val & base_flag::number) {
                 key_value = Napi::Number::New(env, static_cast<double>(item.id_buf));
             } else {

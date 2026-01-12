@@ -30,7 +30,7 @@ static Napi::Value write_row(Napi::Env env, const keys_line& row)
     for (std::uint32_t j = 0; j < param.size(); ++j) {
         const auto& item = param[j];
         Napi::Value key_value;
-        if (key_mode.val & key_mode::ordinal) {
+        if (mdbx::is_ordinal(key_mode)) {
             if (key_flag.val & base_flag::number) {
                 key_value = Napi::Number::New(env, static_cast<double>(item.id_buf));
             } else {

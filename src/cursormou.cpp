@@ -80,7 +80,7 @@ namespace mdbxmou
         auto value_flag = dbi_->get_value_flag();
 
         // Ключ
-        if (key_mode.val & key_mode::ordinal) {
+        if (mdbx::is_ordinal(key_mode)) {
             if (key_flag.val & base_flag::bigint) {
                 result.Set("key", key.to_bigint(env));
             } else {
@@ -210,7 +210,7 @@ namespace mdbxmou
 
         auto key_mode = dbi_->get_key_mode();
 
-        keymou key = (key_mode.val & key_mode::ordinal) ? 
+        keymou key = (mdbx::is_ordinal(key_mode)) ? 
             keymou::from(info[0], env, key_num_) : 
             keymou::from(info[0], env, key_buf_);
 
@@ -231,7 +231,7 @@ namespace mdbxmou
         auto value_flag = dbi_->get_value_flag();
 
         // Ключ
-        if (key_mode.val & key_mode::ordinal) {
+        if (mdbx::is_ordinal(key_mode)) {
             if (key_flag.val & base_flag::bigint) {
                 result.Set("key", key.to_bigint(env));
             } else {
@@ -275,7 +275,7 @@ namespace mdbxmou
 
         auto key_mode = dbi_->get_key_mode();
 
-        keymou key = (key_mode.val & key_mode::ordinal) ? 
+        keymou key = (mdbx::is_ordinal(key_mode)) ? 
             keymou::from(info[0], env, key_num_) : 
             keymou::from(info[0], env, key_buf_);
 
@@ -354,7 +354,7 @@ namespace mdbxmou
             auto result = Napi::Object::New(env);
 
             // Ключ
-            if (key_mode.val & key_mode::ordinal) {
+            if (mdbx::is_ordinal(key_mode)) {
                 if (key_flag.val & base_flag::bigint) {
                     result.Set("key", key.to_bigint(env));
                 } else {

@@ -48,7 +48,7 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info)
     auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
     try {
         std::uint64_t t;
-        auto key = (key_mode_.val & key_mode::ordinal) ?
+        auto key = mdbx::is_ordinal(key_mode_) ?
             keymou::from(info[1], env, t) : 
             keymou::from(info[1], env, key_buf_);
 
@@ -77,7 +77,7 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info)
 
     try {
         std::uint64_t t;
-        auto key = (key_mode_.val & key_mode::ordinal) ?
+        auto key = mdbx::is_ordinal(key_mode_) ?
             keymou::from(info[1], env, t) : 
             keymou::from(info[1], env, key_buf_);
         
@@ -111,7 +111,7 @@ Napi::Value dbimou::del(const Napi::CallbackInfo& info)
 
     try {
         std::uint64_t t;
-        auto key = (key_mode_.val & key_mode::ordinal) ?
+        auto key = mdbx::is_ordinal(key_mode_) ?
             keymou::from(info[1], env, t) : 
             keymou::from(info[1], env, key_buf_);
         
@@ -140,7 +140,7 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info)
 
     try {
         std::uint64_t t;
-        auto key = (key_mode_.val & key_mode::ordinal) ?
+        auto key = mdbx::is_ordinal(key_mode_) ?
             keymou::from(info[1], env, t) : 
             keymou::from(info[1], env, key_buf_);
 
@@ -182,7 +182,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info)
 
             auto cursor = open_cursor(*txn);
             uint32_t index{};
-            if (key_mode_.val & key_mode::ordinal) {
+            if (mdbx::is_ordinal(key_mode_)) {
                 cursor.scan([&](const mdbx::pair& f) {
                     keymou key{f.key};
                     valuemou val{f.value};
@@ -275,7 +275,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info)
         
         // Парсим начальный ключ
         std::uint64_t t;
-        keymou from_key = (key_mode_.val & key_mode::ordinal) ?
+        keymou from_key = (mdbx::is_ordinal(key_mode_)) ?
             keymou::from(info[1], env, t) : 
             keymou::from(info[1], env, key_buf_);
         
@@ -309,7 +309,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info)
         std::size_t index{};
         bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
                                   cursor_mode == move_operation::multi_exactkey_value_equal);
-        if (key_mode_.val & key_mode::ordinal) {
+        if (mdbx::is_ordinal(key_mode_)) {
             cursor.scan_from([&](const mdbx::pair& f) {
                 keymou key{f.key};
                 valuemou val{f.value};
@@ -491,7 +491,7 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info)
         
         // Парсим аргументы: txn, from, limit, cursorMode
         std::uint64_t t;
-        keymou from_key = (key_mode_.val & key_mode::ordinal) ?
+        keymou from_key = (mdbx::is_ordinal(key_mode_)) ?
             keymou::from(info[1], env, t) : 
             keymou::from(info[1], env, key_buf_);
         
@@ -532,7 +532,7 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info)
         bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
                                   cursor_mode == move_operation::multi_exactkey_value_equal);
         
-        if (key_mode_.val & key_mode::ordinal) {
+        if (mdbx::is_ordinal(key_mode_)) {
             cursor.scan_from([&](const mdbx::pair& f) {
                 if (index >= count) {
                     return true; // останавливаем сканирование

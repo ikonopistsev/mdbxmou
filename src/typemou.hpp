@@ -246,7 +246,7 @@ static inline key_mode parse_key_mode(Napi::Env env, const Napi::Value& arg0, ba
             throw Napi::Error::New(env, "BigInt value lossless conversion failed");
         }
         mode.val = static_cast<int>(value);
-        if (mode.val & key_mode::ordinal) {
+        if (mdbx::is_ordinal(mode)) {
             // только если цифровой key_flag не был задан
             if (key_flag.val <= base_flag::string) {
                 key_flag.val = base_flag::bigint;
@@ -254,7 +254,7 @@ static inline key_mode parse_key_mode(Napi::Env env, const Napi::Value& arg0, ba
         }
     } else if (arg0.IsNumber()) {
         mode = key_mode::parse(arg0);
-        if (mode.val & key_mode::ordinal) {
+        if (mdbx::is_ordinal(mode)) {
             // только если цифровой key_flag не был задан
             if (key_flag.val <= base_flag::string) {
                 key_flag.val = base_flag::number;
