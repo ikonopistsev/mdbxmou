@@ -88,6 +88,58 @@ Options:
 
 Note: When `keyFlag` or `valueFlag` are set at environment level, they become defaults for all subsequent operations unless explicitly overridden.
 
+### Key Type Configuration
+
+The library uses a two-level system for configuring key types:
+
+#### Level 1: Environment (`keyFlag`)
+
+When opening the environment, `keyFlag` controls how **string/binary keys** are returned:
+
+| `keyFlag` value | String/Binary keys returned as |
+|-----------------|-------------------------------|
+| `0` (default)   | `Buffer`                      |
+| `keyFlag.string` (2) | `String`                 |
+
+```javascript
+// Keys returned as Buffer (default)
+await env.open({ path: './data' });
+
+// Keys returned as String
+await env.open({ 
+  path: './data',
+  keyFlag: MDBX_Param.keyFlag.string 
+});
+```
+
+#### Level 2: Database (`keyMode`)
+
+When opening/creating a database, the **argument type** determines how **ordinal (integer) keys** are returned:
+
+| Argument type | Ordinal keys returned as |
+|---------------|-------------------------|
+| `Number`      | `Number`                |
+| `BigInt`      | `BigInt`                |
+
+```javascript
+// Ordinal keys as Number
+const dbi = txn.openMap(MDBX_Param.keyMode.ordinal);        // keyMode.ordinal = 8
+dbi.keys(txn);  // [0, 1, 2, 3, ...]
+
+// Ordinal keys as BigInt  
+const dbi = txn.openMap(BigInt(MDBX_Param.keyMode.ordinal)); // BigInt(8)
+dbi.keys(txn);  // [0n, 1n, 2n, 3n, ...]
+```
+
+#### Summary
+
+| Key type | Configuration level | Option | Result type |
+|----------|--------------------|--------------------|-------------|
+| String/Binary | env.open() | `keyFlag: 0` | `Buffer` |
+| String/Binary | env.open() | `keyFlag: keyFlag.string` | `String` |
+| Ordinal | openMap/createMap | `keyMode.ordinal` (Number) | `Number` |
+| Ordinal | openMap/createMap | `BigInt(keyMode.ordinal)` | `BigInt` |
+
 **close() → Promise**
 ```javascript
 await env.close();

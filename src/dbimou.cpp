@@ -61,7 +61,8 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info)
     return env.Undefined();
 }
 
-Napi::Value dbimou::get(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::get(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     auto arg_len = info.Length();
     if (arg_len < 2) {
@@ -94,7 +95,8 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-Napi::Value dbimou::del(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::del(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     auto arg_len = info.Length();
     if (arg_len < 2) {
@@ -122,7 +124,8 @@ Napi::Value dbimou::del(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::has(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     auto arg_len = info.Length();
     if (arg_len < 2) {
@@ -150,7 +153,8 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
+Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) 
+{
     Napi::Env env = info.Env();
     auto arg_len = info.Length();
     if (arg_len < 2) {
@@ -188,7 +192,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
                     // Конвертируем значение
                     Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
                         val.to_string(env) : val.to_buffer(env);
-
+                    // Формируем результат
                     Napi::Value result = fn.Call({ rc_key, rc_val, 
                         Napi::Number::New(env, static_cast<double>(index)) });
 
@@ -208,7 +212,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info) {
                     // Конвертируем значение
                     Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
                         val.to_string(env) : val.to_buffer(env);
-                    
+                    // Формируем результат
                     Napi::Value result = fn.Call({ rc_key, rc_val, 
                         Napi::Number::New(env, static_cast<double>(index)) });
 
@@ -320,7 +324,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
                 // Конвертируем значение
                 Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
                     val.to_string(env) : val.to_buffer(env);
-
+                // Формируем результат
                 Napi::Value result = fn.Call({ rc_key, rc_val, 
                     Napi::Number::New(env, static_cast<double>(index)) });
 
@@ -346,7 +350,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info) {
                 // Конвертируем значение
                 Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
                     val.to_string(env) : val.to_buffer(env);
-                
+                // Формируем результат
                 Napi::Value result = fn.Call({ rc_key, rc_val, 
                     Napi::Number::New(env, static_cast<double>(index)) });
 
@@ -415,8 +419,7 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
     auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
     
     try {
-        auto cursor = dbi::open_cursor(*txn);
-        auto stat = dbi::get_stat(*txn);
+        auto stat = get_stat(*txn);
         
         // Создаем массив для ключей
         Napi::Array keys = Napi::Array::New(env, stat.ms_entries);
@@ -424,27 +427,38 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info) {
             return keys;
         }
 
+        // Используем batch версию для лучшей производительности
+        auto cursor = open_cursor(*txn);
+
+        // Буфер для batch - MDBXMOU_BATCH_LIMIT/2 пар (key, value)
+#ifndef MDBXMOU_BATCH_LIMIT
+#define MDBXMOU_BATCH_LIMIT 512
+#endif // MDBXMOU_BATCH_LIMIT
+        std::array<mdbx::slice, MDBXMOU_BATCH_LIMIT> pairs;
+
         uint32_t index{};
-        if (key_mode_.val & key_mode::ordinal) {
-            cursor.scan([&](const mdbx::pair& f) {
-                keymou key{f.key};
-                // Конвертируем ключ
-                Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
-                    key.to_bigint(env) : key.to_number(env);
-                
+        const bool is_ordinal = key_mode_.val & key_mode::ordinal;
+        const bool is_bigint = key_flag_.val & base_flag::bigint;
+        const bool is_string = key_flag_.val & base_flag::string;
+        
+        // Первый вызов с MDBX_FIRST
+        size_t count = cursor.get_batch(pairs, MDBX_FIRST);
+        
+        while (count > 0) {
+            // pairs[0] = key1, pairs[1] = value1, pairs[2] = key2, ...
+            for (size_t i = 0; i < count; i += 2) {
+                keymou key{pairs[i]};
+                Napi::Value rc_key;
+                if (is_ordinal) {
+                    rc_key = is_bigint ? key.to_bigint(env) : key.to_number(env);
+                } else {
+                    rc_key = is_string ? key.to_string(env) : key.to_buffer(env);
+                }
                 keys.Set(index++, rc_key);
-                return false; // продолжаем сканирование
-            });
-        } else {
-            cursor.scan([&](const mdbx::pair& f) {
-                keymou key{f.key};
-                // Конвертируем ключ
-                Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
-                    key.to_string(env) : key.to_buffer(env);
-                
-                keys.Set(index++, rc_key);
-                return false; // продолжаем сканирование
-            });
+            }
+            
+            // Следующий batch
+            count = cursor.get_batch(pairs, MDBX_NEXT);
         }
 
         return keys;

@@ -5,9 +5,6 @@ namespace mdbxmou {
 
 void async_open::Execute() 
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: async_open id=%d\n", gettid());
-
     try {
         auto e = envmou::create_and_open(arg0_);
         that_.attach(e, arg0_);
@@ -18,9 +15,6 @@ void async_open::Execute()
 
 void async_open::OnOK() 
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: async_open OnOK id=%d\n", gettid());
-
     auto env = Env();
 
     that_.unlock();

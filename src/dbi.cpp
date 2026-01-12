@@ -47,10 +47,15 @@ bool dbi::del(MDBX_txn* txn, const keymou& key)
 
 cursormou_managed dbi::open_cursor(MDBX_txn* txn) const
 {
+    return get_cursor(txn, mdbx::map_handle{ id_ });
+}
+
+cursormou_managed dbi::get_cursor(MDBX_txn* txn, mdbx::map_handle dbi)
+{
     MDBX_cursor* cursor_ptr;
-    auto rc = mdbx_cursor_open(txn, id_, &cursor_ptr);
+    auto rc = mdbx_cursor_open(txn, dbi.dbi, &cursor_ptr);
     if (rc != MDBX_SUCCESS) {
-        throw std::runtime_error(mdbx_strerror(rc));
+        mdbx::error::throw_exception(rc);
     }
     return cursormou_managed{ cursor_ptr };
 }

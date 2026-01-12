@@ -141,7 +141,7 @@ void async_query::do_get(const txnmou_managed& txn,
     {
         auto key = mdbx::is_ordinal(key_mode) ?
             keymou{q.id_buf} : keymou{q.key_buf};
-        mdbx::slice abs{};
+        mdbx::slice abs;
         valuemou val{txn.get(dbi, key, abs)};
         q.set(val);
     }

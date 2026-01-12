@@ -1,6 +1,7 @@
 #include "envmou_keys.hpp"
 #include "envmou.hpp"
 #include "dbimou.hpp"
+#include "../valuemou.hpp"
 
 namespace mdbxmou {
 
@@ -92,24 +93,47 @@ void async_keys::do_keys(txnmou_managed& txn,
         auto stat = dbimou::get_stat(txn, dbi);
         item.reserve(stat.ms_entries);
         
-        auto cursor = txn.open_cursor(dbi);        
-        if (mdbx::is_ordinal(arg0.key_mod)) {
-            cursor.scan([&](const mdbx::pair& f) {
-                async_key rc{};
-                rc.id_buf = f.key.as_uint64();
-                item.push_back(std::move(rc));
-                return false;
-            });
-        } else {
-            cursor.scan([&](const mdbx::pair& f) {
-                async_key rc{};
-                rc.key_buf.assign(f.key.char_ptr(), f.key.end_char_ptr());
-                item.push_back(std::move(rc));
-                return false;
-            });
-        }
+        // Используем batch версию для лучшей производительности
+        do_keys_batch(txn, dbi, arg0);
     } else {
         do_keys_from(txn, dbi, arg0);
+    }
+}
+
+// Batch версия - читает ключи блоками через cursormou_managed::get_batch
+void async_keys::do_keys_batch(txnmou_managed& txn, 
+    mdbx::map_handle dbi, keys_line& arg0)
+{
+    auto& item = arg0.item;
+    const bool is_ordinal = mdbx::is_ordinal(arg0.key_mod);
+    
+    auto cursor = dbi::get_cursor(txn, dbi);
+
+    // Буфер для batch - MDBXMOU_BATCH_LIMIT/2 пар (key, value)
+#ifndef MDBXMOU_BATCH_LIMIT
+#define MDBXMOU_BATCH_LIMIT 512
+#endif
+    std::array<mdbx::slice, MDBXMOU_BATCH_LIMIT> pairs;
+
+    // Первый вызов с MDBX_FIRST
+    size_t count = cursor.get_batch(pairs, MDBX_FIRST);
+    
+    while (count > 0) {
+        // pairs[0] = key1, pairs[1] = value1, pairs[2] = key2, ...
+        for (size_t i = 0; i < count; i += 2) {
+            keymou key{pairs[i]};
+            async_key key_item{};
+            if (is_ordinal) {
+                key_item.id_buf = key.as_uint64();
+            } else {
+                // Ключ - строка/буфер
+                key_item.key_buf.assign(key.char_ptr(), key.end_char_ptr());
+            }
+            item.push_back(std::move(key_item));
+        }
+        
+        // Следующий batch
+        count = cursor.get_batch(pairs, MDBX_NEXT);
     }
 }
 

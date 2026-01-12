@@ -43,6 +43,9 @@ public:
     void do_keys(txnmou_managed& txn, 
         mdbx::map_handle dbi, keys_line& arg0);
 
+    void do_keys_batch(txnmou_managed& txn, 
+        mdbx::map_handle dbi, keys_line& arg0);
+
     void do_keys_from(txnmou_managed& txn, 
         mdbx::map_handle dbi, keys_line& arg0);
 };

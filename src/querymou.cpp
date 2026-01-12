@@ -5,7 +5,7 @@ namespace mdbxmou {
 
 dbimou* async_common::parse(const Napi::Object& arg0)
 {
-    dbimou* dbi = nullptr;
+    dbimou* dbi{};
     // если просто передали dbi
     if (arg0.InstanceOf(dbimou::ctor.Value())) {
         dbi = Napi::ObjectWrap<dbimou>::Unwrap(arg0);

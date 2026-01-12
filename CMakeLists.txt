@@ -47,6 +47,13 @@ if(MSVC)
     target_link_libraries(${PROJECT_NAME} ntdll.lib)
 endif()
 
+# Batch read limit for mdbx_cursor_get_batch (pairs count = limit / 2)
+if(NOT DEFINED MDBXMOU_BATCH_LIMIT)
+    set(MDBXMOU_BATCH_LIMIT 512)
+endif()
+add_definitions(-DMDBXMOU_BATCH_LIMIT=${MDBXMOU_BATCH_LIMIT})
+message(STATUS "MDBXMOU_BATCH_LIMIT: ${MDBXMOU_BATCH_LIMIT}")
+
 # Include N-API wrappers
 execute_process(COMMAND node -p "require('node-addon-api').include"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

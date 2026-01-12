@@ -5,9 +5,6 @@ namespace mdbxmou {
 
 void async_copy::Execute() 
 {
-    // выдадим идентфикатор потока для лога (thread_id)
-    // fprintf(stderr, "TRACE: async_copy id=%d\n", gettid());
-
     auto rc = mdbx_env_copy(that_, dest_.c_str(), flags_);
     if (rc != MDBX_SUCCESS) {
         SetError(mdbx_strerror(rc));

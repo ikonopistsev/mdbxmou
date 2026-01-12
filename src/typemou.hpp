@@ -4,6 +4,7 @@
 #include <mdbx.h++>
 #include <cstdint>
 #include <vector>
+#include <array>
 #include <utility>
 
 namespace mdbxmou {
@@ -69,6 +70,33 @@ struct cursormou_managed final
         if (cursor::handle_) {
             ::mdbx_cursor_close(cursor::handle_);
         }
+    }
+
+    /// \brief Batch read using mdbx_cursor_get_batch
+    /// \param[out] pairs Array of mdbx::slice to fill (key0, val0, key1, val1, ...)
+    /// \param[in] limit Maximum number of slice elements in pairs array
+    /// \param[in] op Cursor operation (MDBX_FIRST or MDBX_NEXT only)
+    /// \return Number of items read (key+value count), 0 if end of data
+    /// \throws mdbx::exception on error
+    size_t get_batch(mdbx::slice* pairs, size_t limit, MDBX_cursor_op op) 
+    {
+        size_t count{};
+        auto rc = ::mdbx_cursor_get_batch(cursor::handle_, &count, pairs, limit, op);
+        if (rc == MDBX_SUCCESS || rc == MDBX_RESULT_TRUE) {
+            return count;
+        }
+        if (rc == MDBX_NOTFOUND || rc == MDBX_ENODATA) {
+            return 0;
+        }
+        mdbx::error::throw_exception(rc);
+        return 0; // unreachable
+    }
+    
+    /// \brief Batch read with std::array
+    template<size_t N>
+    size_t get_batch(std::array<mdbx::slice, N>& pairs, MDBX_cursor_op op) 
+    {
+        return get_batch(pairs.data(), N, op);
     }
 };
 
