@@ -70,21 +70,102 @@ void txnmou::dec_counter() noexcept
     }
 }
 
-Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
+Napi::Value txnmou::get_dbi(const char* name, base_flag key_flag, 
+    base_flag value_flag, key_mode key_mode, value_mode value_mode, 
+    db_mode db_mode)
 {
-    Napi::Env env = info.Env();
+    Napi::Env env = Env();
 
     if ((mode_.val & txn_mode::ro) && (db_mode.val & db_mode::create)) {
         throw Napi::Error::New(env, "dbi: cannot open DB in read-only transaction");
     }
 
-    key_mode key_mode{};
-    value_mode value_mode{};
-    std::string db_name{};
+    if (!txn_) {
+        throw Napi::Error::New(env, "txn already completed");
+    }
+
+    MDBX_dbi dbi{};
+    auto flags = static_cast<MDBX_db_flags_t>(db_mode.val|key_mode.val|value_mode.val);
+    auto rc = mdbx_dbi_open(*this, (name && name[0]) ? name : nullptr, flags, &dbi);
+    if (rc != MDBX_SUCCESS) {
+        throw Napi::Error::New(env, std::string("mdbx_dbi_open: ") + mdbx_strerror(rc));
+    }
+    // создаем новый объект dbi
+    auto obj = dbimou::ctor.New({});
+    auto ptr = dbimou::Unwrap(obj);
+    ptr->attach(dbi, db_mode, key_mode, 
+        value_mode, key_flag, value_flag);
+    return obj;
+}
+
+Napi::Value txnmou::get_dbi(const Napi::Object& arg0, db_mode db_mode)
+{
+    auto env = arg0.Env();
     auto conf = get_env_userctx(*env_);
     auto key_flag = conf->key_flag;
     auto value_flag = conf->value_flag;
+    key_mode key_mode{};
+    value_mode value_mode{};
+    std::string db_name{};
+
+    if (arg0.Has("name")) {
+        auto value = arg0.Get("name");
+        if (!value.IsUndefined() && !value.IsNull()) {
+            if (!value.IsString()) {
+                throw Napi::Error::New(env, "dbi: name must be string");
+            }
+            db_name = value.As<Napi::String>().Utf8Value();
+        }
+    }
+
+    if (arg0.Has("keyFlag")) {
+        auto value = arg0.Get("keyFlag");
+        if (!value.IsUndefined() && !value.IsNull()) {
+            key_flag = base_flag::parse_key(value);
+        }
+    }
+
+    if (arg0.Has("valueFlag")) {
+        auto value = arg0.Get("valueFlag");
+        if (!value.IsUndefined() && !value.IsNull()) {
+            value_flag = base_flag::parse_value(value);
+        }
+    }
+
+    if (arg0.Has("keyMode")) {
+        auto value = arg0.Get("keyMode");
+        if (!value.IsUndefined() && !value.IsNull()) {
+            key_mode = parse_key_mode(env, value, key_flag);
+        }
+    }
+
+    if (arg0.Has("valueMode")) {
+        auto value = arg0.Get("valueMode");
+        if (!value.IsUndefined() && !value.IsNull()) {
+            value_mode = value_mode::parse(value);
+        }
+    }
+
+    return get_dbi(db_name.empty() ? nullptr : db_name.c_str(), 
+        key_flag, value_flag, key_mode, value_mode, db_mode);
+}
+
+Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
+{
+    Napi::Env env = info.Env();
+
+    auto conf = get_env_userctx(*env_);
+    auto key_flag = conf->key_flag;
+    auto value_flag = conf->value_flag;
+    key_mode key_mode{};
+    value_mode value_mode{};
+    std::string db_name{};
     auto arg_count = info.Length();
+
+    if (arg_count == 1 && info[0].IsObject()) {
+        return get_dbi(info[0].As<Napi::Object>(), db_mode);
+    }
+
     if (arg_count == 3) {
         auto arg0 = info[0]; // db_name
         auto arg1 = info[1]; // key_mode
@@ -94,8 +175,8 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
         value_mode = value_mode::parse(arg2);
     } else if (arg_count == 2) {
         // db_name + key_mode || key_mode + value_mode
-        auto arg0 = info[0]; 
-        auto arg1 = info[1]; 
+        auto arg0 = info[0];
+        auto arg1 = info[1];
         if (arg0.IsString()) {
             db_name = arg0.As<Napi::String>().Utf8Value();
             key_mode = parse_key_mode(env, arg1, key_flag);
@@ -116,24 +197,10 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
             throw Napi::Error::New(env, "Invalid argument type: expected string (db_name) or number (key_mode)");
         }
     }
-    // arg_count == 0: используем значения по умолчанию (строковый ключ, default db)
+    // arg_count == 0: значения по умолчанию (key/value = buffer, если env не задавал флаги)
 
-    if (!txn_) {
-        throw Napi::Error::New(env, "txn already completed");
-    }
-
-    MDBX_dbi dbi{};
-    auto flags = static_cast<MDBX_db_flags_t>(db_mode.val|key_mode.val|value_mode.val);
-    auto rc = mdbx_dbi_open(*this, db_name.empty() ? nullptr : db_name.c_str(), flags, &dbi);
-    if (rc != MDBX_SUCCESS) {
-        throw Napi::Error::New(env, std::string("mdbx_dbi_open: ") + mdbx_strerror(rc));
-    }
-    // создаем новый объект dbi
-    auto obj = dbimou::ctor.New({});
-    auto ptr = dbimou::Unwrap(obj);
-    ptr->attach(dbi, db_mode, key_mode, 
-        value_mode, key_flag, value_flag);
-    return obj;
+    return get_dbi(db_name.empty() ? nullptr : db_name.c_str(), 
+        key_flag, value_flag, key_mode, value_mode, db_mode);
 }
 
 Napi::Value txnmou::open_cursor(const Napi::CallbackInfo& info) {
