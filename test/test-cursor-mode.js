@@ -17,7 +17,7 @@ const testCursorMode = async () => {
 
   console.log('Opening database...');
   await db.open({
-      path: path,
+      path,
       valueFlag: MDBX_Param.valueFlag.string
   });
 
@@ -25,7 +25,7 @@ const testCursorMode = async () => {
   const w = db.startWrite();
   const wdbi = w.createMap(keyMode.ordinal);
   for (let i = 1; i <= 10; i++) {
-    wdbi.put(i, `value${i}`);
+    wdbi.put(w, i, `value${i}`);
   }
   w.commit();
 
@@ -37,7 +37,7 @@ const testCursorMode = async () => {
 
   // 1. forEach(fn)
   console.log('\n1. forEach(fn):');
-  let count = dbi.forEach((k, v, i) => {
+  let count = dbi.forEach(r, (k, v, i) => {
     console.log(`  ${i}: ${k} = ${v}`);
     return i >= 2; // останавливаем после 3 элементов
   });
@@ -45,7 +45,7 @@ const testCursorMode = async () => {
 
   // 2. forEach(fromKey, fn)
   console.log('\n2. forEach(fromKey=5, fn):');
-  count = dbi.forEach(5, (k, v, i) => {
+  count = dbi.forEach(r, 5, (k, v, i) => {
     console.log(`  ${i}: ${k} = ${v}`);
     return i >= 2; // останавливаем после 3 элементов
   });
@@ -53,7 +53,7 @@ const testCursorMode = async () => {
 
   // 3. forEach(fromKey, cursorMode, fn) - строковый режим
   console.log('\n3. forEach(fromKey=7, "keyGreater", fn):');
-  count = dbi.forEach(7, 'keyGreater', (k, v, i) => {
+  count = dbi.forEach(r, 7, 'keyGreater', (k, v, i) => {
     console.log(`  ${i}: ${k} = ${v}`);
     return i >= 1; // останавливаем после 2 элементов
   });
@@ -61,7 +61,7 @@ const testCursorMode = async () => {
 
   // 4. forEach(fromKey, cursorMode, fn) - числовой режим key_lesser_or_equal (обратное сканирование)
   console.log('\n4. forEach(fromKey=7, cursorMode.key_lesser_or_equal, fn):');
-  count = dbi.forEach(7, cursorMode.key_lesser_or_equal, (k, v, i) => {
+  count = dbi.forEach(r, 7, cursorMode.key_lesser_or_equal, (k, v, i) => {
     console.log(`  ${i}: ${k} = ${v}`);
     return i >= 2; // останавливаем после 3 элементов
   });
@@ -69,7 +69,7 @@ const testCursorMode = async () => {
 
   // 5. forEach(fromKey, cursorMode, fn) - keyEqual
   console.log('\n5. forEach(fromKey=5, "keyEqual", fn):');
-  count = dbi.forEach(5, 'keyEqual', (k, v, i) => {
+  count = dbi.forEach(r, 5, 'keyEqual', (k, v, i) => {
     console.log(`  ${i}: ${k} = ${v}`);
     return i >= 0; // останавливаем после первого элемента для демонстрации
   });

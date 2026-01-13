@@ -19,7 +19,7 @@ const test = async () => {
 
   console.log('Opening database...');
   const rc = await db.open({
-      path: path,
+      path,
       valueFlag: valueFlag.string
   });
 
@@ -39,11 +39,11 @@ const test = async () => {
   // по умолчаниюю query выполняется в режиме wr
   const out = await db.query([
     { 
-      mode: queryMode.get, dbi: dbi,
+      mode: queryMode.get, dbi,
       item: [{ "key": 1 }, { "key": 42 }] 
     },
     { 
-      mode: queryMode.insertUnique, dbi: dbi,
+      mode: queryMode.insertUnique, dbi,
       item: [{ "key": 2, "value":"val-2" }] 
     }
   ]);
@@ -77,7 +77,7 @@ const test = async () => {
     // почитаем асинхронно в упрощенном режиме
     console.log("Read key = 2 in simple async mode to out2");
     const out2 = await db.query({
-      dbi: dbi,
+      dbi,
       item: [{ "key": 2 }, { "key": 42 }]  
     });
     console.log("out2", JSON.stringify(out2));
@@ -89,8 +89,8 @@ const test = async () => {
   }
 
   {
-    const out = await db.keys({dbi: dbi});
-    console.log("await keys({dbi: dbi})", out);
+    const out = await db.keys({ dbi });
+    console.log("await keys({ dbi })", out);
   }
 
   {
@@ -100,9 +100,9 @@ const test = async () => {
 
   {
     const out = await db.keys([
-      { dbi: dbi, limit: 1, from:1}
+      { dbi, limit: 1, from: 1 }
     ]);
-    console.log("await keys({ dbi: dbi, limit: 1, from:1})", out);
+    console.log("await keys({ dbi, limit: 1, from: 1 })", out);
   }
   
   // добавим не существующий ключ
@@ -111,7 +111,7 @@ const test = async () => {
   const rm = await db.query([
       { 
         mode: queryMode.del, 
-        dbi: dbi,
+        dbi,
         item: keys.map(key => ({ "key": key }))
       }
   ]);

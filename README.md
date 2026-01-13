@@ -24,29 +24,33 @@ CommonJS:
 ```javascript
 const { MDBX_Env, MDBX_Param } = require('mdbxmou');
 
-// Create environment
-const env = new MDBX_Env();
-await env.open({ 
-  path: './data',
-  keyFlag: MDBX_Param.keyFlag.string,    // Default key encoding (optional)
-  valueFlag: MDBX_Param.valueFlag.string // Default value encoding (optional)
-});
+async function main() {
+  // Create environment
+  const env = new MDBX_Env();
+  await env.open({ 
+    path: './data',
+    keyFlag: MDBX_Param.keyFlag.string,    // Default key encoding (optional)
+    valueFlag: MDBX_Param.valueFlag.string // Default value encoding (optional)
+  });
 
-// Write data
-const txn = env.startWrite();
-const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
-dbi.put(txn, 1, "hello");
-dbi.put(txn, 2, "world");
-txn.commit();
+  // Write data
+  const txn = env.startWrite();
+  const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
+  dbi.put(txn, 1, "hello");
+  dbi.put(txn, 2, "world");
+  txn.commit();
 
-// Read data
-const readTxn = env.startRead();
-const readDbi = readTxn.openMap(BigInt(MDBX_Param.keyMode.ordinal));
-const value = readDbi.get(readTxn, 1);
-console.log(value); // "hello"
-readTxn.commit();
+  // Read data
+  const readTxn = env.startRead();
+  const readDbi = readTxn.openMap(BigInt(MDBX_Param.keyMode.ordinal));
+  const value = readDbi.get(readTxn, 1);
+  console.log(value); // "hello"
+  readTxn.commit();
 
-await env.close();
+  await env.close();
+}
+
+main().catch(console.error);
 ```
 
 ESM:
@@ -628,6 +632,9 @@ async function asyncExample() {
   readTxn.commit();
   await env.close();
 }
+
+syncExample();
+asyncExample().catch(console.error);
 ```
 
 ### Key Type Behavior
@@ -670,6 +677,8 @@ function keyTypesExample() {
 
   env.closeSync();
 }
+
+keyTypesExample();
 ```
 
 ### Cursor Operations
@@ -723,6 +732,8 @@ function cursorExample() {
   readTxn.commit();
   env.closeSync();
 }
+
+cursorExample();
 ```
 
 ### Query API (Advanced Async)
@@ -742,7 +753,7 @@ async function queryExample() {
   // Async query with DBI object (not database name)
   const results = await env.query([
     {
-      dbi: dbi,
+      dbi,
       mode: MDBX_Param.queryMode.insertUnique,
       item: [
         { key: 1, value: JSON.stringify({ name: "Alice" }) },
@@ -750,7 +761,7 @@ async function queryExample() {
       ]
     },
     {
-      dbi: dbi,
+      dbi,
       mode: MDBX_Param.queryMode.get,
       item: [
         { key: 1 },
@@ -762,6 +773,8 @@ async function queryExample() {
   console.log('Query results:', JSON.stringify(results, null, 2));
   await env.close();
 }
+
+queryExample().catch(console.error);
 ```
 
 ### Async Keys API
@@ -788,7 +801,7 @@ async function keysExample() {
   console.log("All keys:", allKeys);
 
   // Get keys with DBI object parameter  
-  const allKeys2 = await env.keys({ dbi: dbi });
+  const allKeys2 = await env.keys({ dbi });
   console.log("All keys (object):", allKeys2);
 
   // Get keys from multiple DBIs
@@ -797,32 +810,54 @@ async function keysExample() {
 
   // Get limited keys from specific position
   const limitedKeys = await env.keys([
-    { dbi: dbi, limit: 3, from: 5 }
+    { dbi, limit: 3, from: 5 }
   ]);
   console.log("Limited keys:", limitedKeys);
 
   await env.close();
 }
+
+keysExample().catch(console.error);
 ```
 
 ## Error Handling
 
 ```javascript
-try {
-  const env = new MDBX_Env();
-  await env.open({ path: './data' });
-  
-  const txn = env.startWrite();
-  const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
-  
-  // This might throw if key already exists with MDBX_NOOVERWRITE
-  dbi.put(txn, 123, "value");
-  
-  txn.commit();
-} catch (error) {
-  console.error('Database error:', error.message);
-  if (txn) txn.abort();
+async function errorHandlingExample() {
+  let txn;
+  try {
+    const env = new MDBX_Env();
+    await env.open({ path: './data' });
+    
+    txn = env.startWrite();
+    const dbi = txn.createMap(MDBX_Param.keyMode.ordinal);
+    
+    // This might throw if key already exists with MDBX_NOOVERWRITE
+    dbi.put(txn, 123, "value");
+    
+    txn.commit();
+  } catch (error) {
+    console.error('Database error:', error.message);
+    if (txn) txn.abort();
+  }
 }
+
+errorHandlingExample().catch(console.error);
+```
+
+## Runnable README Tests
+
+The examples above have matching runnable tests in `test/`. You can execute them directly:
+
+```bash
+node test/readme-quick-start.js
+node test/readme-sync-example.js
+node test/readme-async-example.js
+node test/readme-key-types.js
+node test/readme-cursor-example.js
+node test/readme-query-example.js
+node test/readme-keys-example.js
+node test/readme-error-handling.js
 ```
 
 ## Configuration Options

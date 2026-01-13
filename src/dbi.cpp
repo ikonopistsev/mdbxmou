@@ -44,7 +44,6 @@ bool dbi::del(MDBX_txn* txn, const keymou& key)
     return true;
 }
 
-
 cursormou_managed dbi::open_cursor(MDBX_txn* txn) const
 {
     return open_cursor(txn, mdbx::map_handle{id_});

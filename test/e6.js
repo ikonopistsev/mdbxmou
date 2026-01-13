@@ -20,7 +20,7 @@ const test = async () => {
 
   console.log('Opening database...');
   await db.open({
-    path: path,
+    path,
     valueFlag: valueFlag.string
   });
 
@@ -166,7 +166,7 @@ const test = async () => {
   
   // Тестируем полное удаление базы данных
   await db.open({
-    path: path,
+    path,
     valueFlag: valueFlag.string
   });
   
