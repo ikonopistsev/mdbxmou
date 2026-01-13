@@ -185,8 +185,9 @@ const result = await env.query([
 #### Methods
 
 **createMap([db_name | keyMode], [keyMode | valueMode], [valueMode]) → DBI**
+**createMap({ name, keyFlag, valueFlag, keyMode, valueMode }) → DBI**
 ```javascript
-// No arguments - default DB with string keys
+// No arguments - default DB with env key/value flags (buffer if not set)
 const dbi = txn.createMap();
 
 // One argument - keyMode only
@@ -203,13 +204,23 @@ const namedDbi = txn.createMap("my-table", MDBX_Param.keyMode.ordinal);
 
 // Three arguments - db_name + keyMode + valueMode  
 const namedDbi = txn.createMap("my-table", MDBX_Param.keyMode.ordinal, MDBX_Param.valueMode.multi);
+
+// Object form - explicit flags/modes
+const dbi = txn.createMap({
+  name: "my-table",
+  keyFlag: MDBX_Param.keyFlag.string,
+  valueFlag: MDBX_Param.valueFlag.string,
+  keyMode: MDBX_Param.keyMode.reverse,
+  valueMode: MDBX_Param.valueMode.multi
+});
 ```
 
 > **Note**: Use `createMap` in write transactions - it will create the database if it doesn't exist, or open it if it does. This is safer for new environments.
 
 **openMap([db_name | keyMode], [keyMode]) → DBI**
+**openMap({ name, keyFlag, valueFlag, keyMode, valueMode }) → DBI**
 ```javascript
-// No arguments - default DB with string keys
+// No arguments - default DB with env key/value flags (buffer if not set)
 const dbi = txn.openMap();
 
 // One argument - keyMode only
@@ -224,6 +235,15 @@ const namedDbi = txn.openMap("my-table");
 // Two arguments - db_name + keyMode
 const namedDbi = txn.openMap("my-table", MDBX_Param.keyMode.ordinal);
 const namedDbiBigInt = txn.openMap("my-table", BigInt(MDBX_Param.keyMode.ordinal));
+
+// Object form - explicit flags/modes
+const dbi = txn.openMap({
+  name: "my-table",
+  keyFlag: MDBX_Param.keyFlag.string,
+  valueFlag: MDBX_Param.valueFlag.string,
+  keyMode: MDBX_Param.keyMode.reverse,
+  valueMode: MDBX_Param.valueMode.multi
+});
 ```
 
 > **Note**: Use `openMap` in read transactions or when you're sure the database already exists. For write transactions on new environments, prefer `createMap`.
@@ -231,6 +251,7 @@ const namedDbiBigInt = txn.openMap("my-table", BigInt(MDBX_Param.keyMode.ordinal
 > **Note**: When using ordinal keyMode, the key type in results depends on how you specify keyMode:
 > - `keyMode: number` → keys returned as `number`
 > - `keyMode: BigInt(number)` → keys returned as `BigInt`
+> - When you pass `keyMode.ordinal` as a positional argument (Number/BigInt), it also updates `keyFlag` to number/bigint unless a numeric keyFlag was already set in env or explicitly provided.
 
 **commit()**
 ```javascript
