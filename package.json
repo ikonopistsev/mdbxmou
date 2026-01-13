@@ -65,7 +65,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Node bindings for mdbx",
   "repository": {
     "type": "git",
