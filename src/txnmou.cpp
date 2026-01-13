@@ -102,6 +102,7 @@ Napi::Value txnmou::get_dbi(const Napi::Object& arg0, db_mode db_mode)
 {
     auto env = arg0.Env();
     auto conf = get_env_userctx(*env_);
+    // параметры по умолчанию из окружения
     auto key_flag = conf->key_flag;
     auto value_flag = conf->value_flag;
     key_mode key_mode{};
