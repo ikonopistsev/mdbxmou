@@ -181,21 +181,17 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
         if (arg0.IsString()) {
             db_name = arg0.As<Napi::String>().Utf8Value();
             key_mode = parse_key_mode(env, arg1, key_flag);
-        } else if (arg0.IsNumber() || arg0.IsBigInt()) {
+        } else {
             key_mode = parse_key_mode(env, arg0, key_flag);
             value_mode = value_mode::parse(arg1);
-        } else {
-            throw Napi::Error::New(env, "Invalid argument type for db_name or value_mode");
         }
     } else if (arg_count == 1) {
         // db_name || key_mode
         auto arg0 = info[0];
         if (arg0.IsString()) {
             db_name = arg0.As<Napi::String>().Utf8Value();
-        } else if (arg0.IsNumber() || arg0.IsBigInt()) {
-            key_mode = parse_key_mode(env, arg0, key_flag);
         } else {
-            throw Napi::Error::New(env, "Invalid argument type: expected string (db_name) or number (key_mode)");
+            key_mode = parse_key_mode(env, arg0, key_flag);
         }
     }
     // arg_count == 0: значения по умолчанию (key/value = buffer, если env не задавал флаги)
@@ -220,7 +216,7 @@ Napi::Value txnmou::open_cursor(const Napi::CallbackInfo& info) {
         throw Napi::TypeError::New(env, "openCursor: first argument must be MDBX_Dbi instance");
     }
     
-    auto* dbi = dbimou::Unwrap(arg0);
+    auto dbi = dbimou::Unwrap(arg0);
     
     MDBX_cursor* cursor{};
     auto rc = mdbx_cursor_open(txn_.get(), dbi->get_id(), &cursor);

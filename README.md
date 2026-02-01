@@ -1,6 +1,6 @@
 # mdbxmou
 
-High-performance Node.js binding for libmdbx — a fast, lightweight, embedded key-value database.
+High-performance Node.js binding for [libmdbx](https://github.com/erthink/libmdbx) — a fast, lightweight, embedded key-value database.
 
 ## Features
 
