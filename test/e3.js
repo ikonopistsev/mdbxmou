@@ -73,33 +73,36 @@ const test = async () => {
 
   console.log("MDBX_Param:", MDBX_Param);
   // получаем константы
-  const { keyMode, envFlag } = MDBX_Param;
+  const { keyMode, envFlag, envOption } = MDBX_Param;
   const { safeNosync } = envFlag;
 
   const db = new MDBX_Env();
 
   console.log('Opening database...');
 
-  const openArg = 
+  const buffSize = 2048;
   await db.open({
-      path: db_dir, 
-      flags: safeNosync,
-    });
+    path: db_dir,
+    flags: safeNosync,
+    geometry: {
+      pageSize: buffSize * 2
+    }
+  });
+  db.setOption(envOption.syncBytes, 4 * 1024 * 1024); // MDBX_opt_syncbytes
+  db.setOption(envOption.syncPeriod, 10); // syncPeriod in seconds
 
   const txn = db.startWrite();
   const dbi = txn.createMap(keyMode.ordinal);
   txn.commit();
 
   console.log('Start write (memory leak test)');
-  const count = Number.parseInt(process.env.E3_COUNT ?? '100000', 10);
+  const count = Number.parseInt(process.env.E3_COUNT ?? '1000000', 10);
   const reportEveryMs = 5000;
   const reportWrite = createPeriodicReporter({ everyMs: reportEveryMs, total: count, label: 'Write' });
   const reportVerify = createPeriodicReporter({ everyMs: reportEveryMs, total: count, label: 'Verify' });
   console.log(`Start | Memory: ${formatMemoryUsage()}`);
   
   let stat = {};
-  const buffSize = 4096;
-
   for (let i = 0; i < count; i++) {
     const id = i % 10000;
     const txn = db.startWrite();

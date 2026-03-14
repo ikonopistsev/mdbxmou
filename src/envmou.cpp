@@ -5,6 +5,8 @@
 #include "async/envmou_open.hpp"
 #include "async/envmou_keys.hpp"
 #include "async/envmou_close.hpp"
+#include <cmath>
+#include <limits>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -13,6 +15,39 @@
 #endif
 
 namespace mdbxmou {
+
+namespace {
+
+std::uint64_t parse_option_value(const Napi::Env &env, const Napi::Value &arg0)
+{
+    if (arg0.IsBigInt())
+    {
+        bool lossless = false;
+        const auto value = arg0.As<Napi::BigInt>().Uint64Value(&lossless);
+        if (!lossless)
+            throw Napi::TypeError::New(env, "option value BigInt must fit uint64");
+
+        return value;
+    }
+
+    return static_cast<std::uint64_t>(arg0.As<Napi::Number>().DoubleValue());
+}
+
+double parse_sync_period_seconds(const Napi::Env &env, const Napi::Value &arg0)
+{
+    if (!arg0.IsNumber()) {
+        throw Napi::TypeError::New(env, "syncPeriod must be a Number in seconds");
+    }
+
+    const double seconds = arg0.As<Napi::Number>().DoubleValue();
+    if (!std::isfinite(seconds) || seconds < 0) {
+        throw Napi::TypeError::New(env, "syncPeriod must be a non-negative finite Number");
+    }
+
+    return seconds;
+}
+
+} // namespace
 
 Napi::FunctionReference envmou::ctor{};
 
@@ -29,7 +64,9 @@ void envmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
         InstanceMethod("startRead", &envmou::start_read),
         InstanceMethod("startWrite", &envmou::start_write),
         InstanceMethod("query", &envmou::query),
-        InstanceMethod("keys", &envmou::keys)
+        InstanceMethod("keys", &envmou::keys),
+        InstanceMethod("setOption", &envmou::set_option),
+        InstanceMethod("syncEx", &envmou::sync_ex),
     });
     ctor = Napi::Persistent(func);
     ctor.SuppressDestruct();
@@ -92,6 +129,11 @@ env_arg0 envmou::parse(const Napi::Value& arg0)
         auto value = obj.Get("maxDbi").As<Napi::Number>();
         rc.max_dbi = static_cast<MDBX_dbi>(value.Uint32Value());
     } 
+
+    if (obj.Has("maxReaders")) {
+        auto value = obj.Get("maxReaders").As<Napi::Number>();
+        rc.max_readers = value.Uint32Value();
+    }
 
     if (obj.Has("geometry")) {
         rc.geom = parse_geometry(obj.Get("geometry"));
@@ -440,6 +482,63 @@ Napi::Value envmou::keys(const Napi::CallbackInfo& info)
         throw Napi::Error::New(env, "envmou::keys");
     }
     return env.Undefined();
+}
+
+Napi::Value envmou::set_option(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+
+    if (info.Length() < 2)
+    {
+        throw Napi::TypeError::New(env,
+            "expected: option and value");
+    }
+    
+    auto opt = evn_option::parse(info[0]);
+
+    lock_guard lock(*this);
+
+    check();
+
+    uint64_t val = 0;
+    if (static_cast<MDBX_option>(opt) == MDBX_opt_sync_period)
+        val = info[1].As<Napi::Number>().DoubleValue() * 65536u;
+    else
+        val = parse_option_value(env, info[1]);
+
+    auto rc = mdbx_env_set_option(*this, opt, val);
+    if (rc != MDBX_SUCCESS)
+    {
+        throw Napi::Error::New(env, mdbx_strerror(rc));
+    }
+
+    return env.Undefined();
+}
+
+Napi::Value envmou::sync_ex(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+
+    if (info.Length() < 2)
+    {
+        throw Napi::TypeError::New(env,
+            "expected: force and nonblock");
+    }
+
+    auto force = info[0].As<Napi::Boolean>().Value();
+    auto nonblock = info[1].As<Napi::Boolean>().Value();
+
+    lock_guard lock(*this);
+
+    check();
+
+    auto rc = mdbx_env_sync_ex(*this, force, nonblock);
+    if (rc != MDBX_SUCCESS)
+    {
+        throw Napi::Error::New(env, mdbx_strerror(rc));
+    }
+
+    return Napi::Number::New(env, rc);
 }
 
 } // namespace mdbxmou

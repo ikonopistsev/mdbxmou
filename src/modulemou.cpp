@@ -26,6 +26,31 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     MDBXMOU_DECLARE_FLAG_NAME(envFlag, "utterlyNosync", env_flag::utterly_nosync);
     mdbx_mou.Set("envFlag", envFlag);
 
+    using mdbxmou::evn_option;
+    Napi::Object envOption = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "maxDb", evn_option::max_db);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "maxReaders", evn_option::max_readers);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "syncBytes", evn_option::sync_bytes);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "syncPeriod", evn_option::sync_period);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "rpAugmentLimit", evn_option::rp_augment_limit);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "looseLimit", evn_option::loose_limit);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "dpReserveLimit", evn_option::dp_reserve_limit);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "txnDpLimit", evn_option::txn_dp_limit);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "txnDpInitial", evn_option::txn_dp_initial);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "spillMaxDenominator", evn_option::spill_max_denominator);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "spillMinDenominator", evn_option::spill_min_denominator);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "spillParent4childDenominator", evn_option::spill_parent4child_denominator);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "mergeThreshold16dot16Percent", evn_option::merge_threshold_16dot16_percent);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "writethroughThreshold", evn_option::writethrough_threshold);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "prefaultWriteEnable", evn_option::prefault_write_enable);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "gcTimeLimit", evn_option::gc_time_limit);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "preferWafInsteadofBalance", evn_option::prefer_waf_insteadof_balance);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "subpageLimit", evn_option::subpage_limit);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "subpageRoomThreshold", evn_option::subpage_room_threshold);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "subpageReservePrereq", evn_option::subpage_reserve_prereq);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "subpageReserveLimit", evn_option::subpage_reserve_limit);
+    mdbx_mou.Set("envOption", envOption);
+
     using mdbxmou::txn_mode;
     Napi::Object txnMode = Napi::Object::New(env);
     MDBXMOU_DECLARE_FLAG_NAME(txnMode, "ro", txn_mode::ro);

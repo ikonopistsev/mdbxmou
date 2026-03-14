@@ -291,6 +291,9 @@ export declare class MDBX_Env {
 
   query(request: MDBXQueryRequest | MDBXQueryRequest[], txnMode?: number): Promise<MDBXQueryResult>;
   keys(request: MDBXKeysRequest | MDBXKeysRequest[], txnMode?: number): Promise<MDBXKeysResult>;
+  /** syncPeriod expects seconds and may be fractional; other options use integer values. */
+  setOption(option: number, value: number | bigint): void;
+  syncEx(force: boolean, nonblock: boolean): number;
 }
 
 export interface MDBX_Param {
@@ -307,6 +310,30 @@ export interface MDBX_Param {
     readonly nometasync: number;
     readonly safeNosync: number;
     readonly utterlyNosync: number;
+  };
+
+  readonly envOption: {
+    readonly maxDb: number;
+    readonly maxReaders: number;
+    readonly syncBytes: number;
+    readonly syncPeriod: number;
+    readonly rpAugmentLimit: number;
+    readonly looseLimit: number;
+    readonly dpReserveLimit: number;
+    readonly txnDpLimit: number;
+    readonly txnDpInitial: number;
+    readonly spillMaxDenominator: number;
+    readonly spillMinDenominator: number;
+    readonly spillParent4childDenominator: number;
+    readonly mergeThreshold16dot16Percent: number;
+    readonly writethroughThreshold: number;
+    readonly prefaultWriteEnable: number;
+    readonly gcTimeLimit: number;
+    readonly preferWafInsteadofBalance: number;
+    readonly subpageLimit: number;
+    readonly subpageRoomThreshold: number;
+    readonly subpageReservePrereq: number;
+    readonly subpageReserveLimit: number;
   };
 
   readonly txnMode: {
@@ -373,4 +400,3 @@ export interface MDBX_Native {
   MDBX_Env: typeof MDBX_Env;
   MDBX_Param: MDBX_Param;
 }
-

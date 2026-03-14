@@ -162,6 +162,20 @@ env.openSync({
 env.closeSync();
 ```
 
+**setOption(option, value)**
+```javascript
+env.setOption(MDBX_Param.envOption.syncBytes, 4 * 1024 * 1024);
+env.setOption(MDBX_Param.envOption.syncPeriod, 0.2); // 200 ms
+```
+
+> **Note**: `syncPeriod` is passed in **seconds** and may be fractional. Other options are passed as non-negative integer values.
+> **Note**: `maxDb` and `maxReaders` are pre-open options. Set them through `open/openSync` (`maxDbi`, `maxReaders`) instead of `setOption()`.
+
+**syncEx(force, nonblock) → number**
+```javascript
+env.syncEx(true, false);
+```
+
 **startWrite() → Transaction**
 ```javascript
 const txn = env.startWrite();
@@ -894,6 +908,29 @@ Note: For ordinal (integer) keys, use keyFlag.number or keyFlag.bigint to specif
 - `MDBX_Param.envFlag.nometasync` - Disable metadata flushes
 - `MDBX_Param.envFlag.safeNosync` - Safe nosync mode
 - `MDBX_Param.envFlag.utterlyNosync` - Utterly nosync mode
+
+### Environment Options
+- `MDBX_Param.envOption.maxDb` - Raw `MDBX_opt_max_db` option id
+- `MDBX_Param.envOption.maxReaders` - Raw `MDBX_opt_max_readers` option id
+- `MDBX_Param.envOption.syncBytes` - Threshold for forced flushes in weak sync modes
+- `MDBX_Param.envOption.syncPeriod` - Sync period in **seconds** when used with `setOption()`
+- `MDBX_Param.envOption.rpAugmentLimit` - Raw `MDBX_opt_rp_augment_limit`
+- `MDBX_Param.envOption.looseLimit` - Raw `MDBX_opt_loose_limit`
+- `MDBX_Param.envOption.dpReserveLimit` - Raw `MDBX_opt_dp_reserve_limit`
+- `MDBX_Param.envOption.txnDpLimit` - Raw `MDBX_opt_txn_dp_limit`
+- `MDBX_Param.envOption.txnDpInitial` - Raw `MDBX_opt_txn_dp_initial`
+- `MDBX_Param.envOption.spillMaxDenominator` - Raw `MDBX_opt_spill_max_denominator`
+- `MDBX_Param.envOption.spillMinDenominator` - Raw `MDBX_opt_spill_min_denominator`
+- `MDBX_Param.envOption.spillParent4childDenominator` - Raw `MDBX_opt_spill_parent4child_denominator`
+- `MDBX_Param.envOption.mergeThreshold16dot16Percent` - Raw `MDBX_opt_merge_threshold_16dot16_percent`
+- `MDBX_Param.envOption.writethroughThreshold` - Raw `MDBX_opt_writethrough_threshold`
+- `MDBX_Param.envOption.prefaultWriteEnable` - Raw `MDBX_opt_prefault_write_enable`
+- `MDBX_Param.envOption.gcTimeLimit` - Raw `MDBX_opt_gc_time_limit`
+- `MDBX_Param.envOption.preferWafInsteadofBalance` - Raw `MDBX_opt_prefer_waf_insteadof_balance`
+- `MDBX_Param.envOption.subpageLimit` - Raw `MDBX_opt_subpage_limit`
+- `MDBX_Param.envOption.subpageRoomThreshold` - Raw `MDBX_opt_subpage_room_threshold`
+- `MDBX_Param.envOption.subpageReservePrereq` - Raw `MDBX_opt_subpage_reserve_prereq`
+- `MDBX_Param.envOption.subpageReserveLimit` - Raw `MDBX_opt_subpage_reserve_limit`
 
 ### Database Modes  
 - `MDBX_Param.dbMode.create` - Create database if it doesn't exist

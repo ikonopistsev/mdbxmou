@@ -81,9 +81,13 @@ public:
     // внутри транзакция, получение db и чтение/запись
     Napi::Value query(const Napi::CallbackInfo&);
     Napi::Value keys(const Napi::CallbackInfo&);
-    
+
+    Napi::Value set_option(const Napi::CallbackInfo &);
+    Napi::Value sync_ex(const Napi::CallbackInfo &);
+
     // Методы для создания транзакций
-    Napi::Value start_read(const Napi::CallbackInfo& info) {
+    Napi::Value start_read(const Napi::CallbackInfo &info)
+    {
         return start_transaction(info, {txn_mode::ro});
     }
     Napi::Value start_write(const Napi::CallbackInfo& info) {

@@ -130,6 +130,43 @@ struct env_flag {
     }
 };
 
+struct evn_option {
+    enum type : int {
+        max_db = MDBX_opt_max_db,
+        max_readers = MDBX_opt_max_readers,
+        sync_bytes = MDBX_opt_sync_bytes,
+        sync_period = MDBX_opt_sync_period,
+        rp_augment_limit = MDBX_opt_rp_augment_limit,
+        loose_limit = MDBX_opt_loose_limit,
+        dp_reserve_limit = MDBX_opt_dp_reserve_limit,
+        txn_dp_limit = MDBX_opt_txn_dp_limit,
+        txn_dp_initial = MDBX_opt_txn_dp_initial,
+        spill_max_denominator = MDBX_opt_spill_max_denominator,
+        spill_min_denominator = MDBX_opt_spill_min_denominator,
+        spill_parent4child_denominator = MDBX_opt_spill_parent4child_denominator,
+        merge_threshold_16dot16_percent = MDBX_opt_merge_threshold_16dot16_percent,
+        writethrough_threshold = MDBX_opt_writethrough_threshold,
+        prefault_write_enable = MDBX_opt_prefault_write_enable,
+        gc_time_limit = MDBX_opt_gc_time_limit,
+        prefer_waf_insteadof_balance = MDBX_opt_prefer_waf_insteadof_balance,
+        subpage_limit = MDBX_opt_subpage_limit,
+        subpage_room_threshold = MDBX_opt_subpage_room_threshold,
+        subpage_reserve_prereq = MDBX_opt_subpage_reserve_prereq,
+        subpage_reserve_limit = MDBX_opt_subpage_reserve_limit
+    };
+    int val{};
+
+    static inline evn_option parse(const Napi::Value &arg0)
+    {
+        return {arg0.As<Napi::Number>().Int32Value()};
+    }
+
+    operator MDBX_option() const noexcept
+    {
+        return static_cast<MDBX_option>(val);
+    }
+};
+
 struct txn_mode {
     enum type : int {
         ro = MDBX_TXN_RDONLY
