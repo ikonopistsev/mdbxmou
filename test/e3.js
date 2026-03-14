@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const MDBX = require('../lib/nativemou.js');
-const { buffer } = require('stream/consumers');
 const { MDBX_Env, MDBX_Param } = MDBX;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -46,15 +45,6 @@ const createPeriodicReporter = ({ everyMs, total, label }) => {
   };
 };
 
-const normalizeValueToString = (value) => {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'bigint') return String(value);
-  if (Buffer.isBuffer(value)) return value.toString();
-  if (value instanceof Uint8Array) return Buffer.from(value).toString();
-  if (value instanceof ArrayBuffer) return Buffer.from(value).toString();
-  return String(value);
-};
-
 const maybeRunGC = async (label) => {
   if (typeof global.gc !== 'function') {
     console.log(`${label} | GC: not exposed (run node with --expose-gc) | Memory: ${formatMemoryUsage()}`);
@@ -74,25 +64,26 @@ const test = async () => {
   console.log("MDBX_Param:", MDBX_Param);
   // получаем константы
   const { keyMode, envFlag, envOption } = MDBX_Param;
-  const { safeNosync } = envFlag;
 
   const db = new MDBX_Env();
 
   console.log('Opening database...');
 
-  const buffSize = 2048;
+  const buffSize = 4096;
   await db.open({
     path: db_dir,
-    flags: safeNosync,
+    flags: envFlag.safeNosync,
     geometry: {
       pageSize: buffSize * 2
     }
   });
   db.setOption(envOption.syncBytes, 4 * 1024 * 1024); // MDBX_opt_syncbytes
-  db.setOption(envOption.syncPeriod, 10); // syncPeriod in seconds
+  db.setOption(envOption.syncPeriod, 1.23); // syncPeriod in seconds
 
   const txn = db.startWrite();
   const dbi = txn.createMap(keyMode.ordinal);
+  const s = dbi.stat(txn);
+  console.log(JSON.stringify(s));
   txn.commit();
 
   console.log('Start write (memory leak test)');
