@@ -394,9 +394,10 @@ export interface MDBX_Param {
   };
 }
 
+/** Runtime constants exported by the native module. */
 export declare const MDBX_Param: MDBX_Param;
 
 export interface MDBX_Native {
   MDBX_Env: typeof MDBX_Env;
-  MDBX_Param: MDBX_Param;
+  MDBX_Param: typeof MDBX_Param;
 }
