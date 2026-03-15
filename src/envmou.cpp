@@ -33,20 +33,6 @@ std::uint64_t parse_option_value(const Napi::Env &env, const Napi::Value &arg0)
     return static_cast<std::uint64_t>(arg0.As<Napi::Number>().DoubleValue());
 }
 
-double parse_sync_period_seconds(const Napi::Env &env, const Napi::Value &arg0)
-{
-    if (!arg0.IsNumber()) {
-        throw Napi::TypeError::New(env, "syncPeriod must be a Number in seconds");
-    }
-
-    const double seconds = arg0.As<Napi::Number>().DoubleValue();
-    if (!std::isfinite(seconds) || seconds < 0) {
-        throw Napi::TypeError::New(env, "syncPeriod must be a non-negative finite Number");
-    }
-
-    return seconds;
-}
-
 } // namespace
 
 Napi::FunctionReference envmou::ctor{};
