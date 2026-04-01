@@ -33,6 +33,9 @@ const { MDBX_Env, MDBX_Param } = require("../lib/nativemou.js");
     { key: 6, value: "value_6" },
   ]);
 
+  const total = readDbi.getCount(readTxn, { start: 3, end: 8 });
+  assert.strictEqual(total, 6);
+
   const keys = readDbi.keysRange(readTxn, {
     start: 3,
     end: 8,

@@ -165,14 +165,13 @@ MDBX_cursor_op range_turn_op(const range_options& options)
     return options.reverse ? MDBX_PREV : MDBX_NEXT;
 }
 
-Napi::Array collect_range(const Napi::Env& env, dbimou& self, txnmou& txn, const range_options& options, range_output output)
+template<class Fn>
+std::size_t scan_range(dbimou& self, txnmou& txn, const range_options& options, Fn&& fn)
 {
-    Napi::Array result = Napi::Array::New(env);
     if (options.limit == 0) {
-        return result;
+        return 0;
     }
 
-    auto conv = self.get_convmou();
     auto cursor = self.open_cursor(txn);
     mdbx::slice key{};
     mdbx::slice value{};
@@ -186,7 +185,7 @@ Napi::Array collect_range(const Napi::Env& env, dbimou& self, txnmou& txn, const
     }
 
     if (!cursor_get(cursor, range_start_op(options), key, value)) {
-        return result;
+        return 0;
     }
 
     std::size_t skipped{};
@@ -201,17 +200,8 @@ Napi::Array collect_range(const Napi::Env& env, dbimou& self, txnmou& txn, const
         if (skipped < options.offset) {
             ++skipped;
         } else {
-            switch (output) {
-                case range_output::items: {
-                    result.Set(index, conv.make_result(env, keymou{key}, valuemou{value}));
-                    break;
-                }
-                case range_output::keys:
-                    result.Set(index, conv.convert_key(env, keymou{key}));
-                    break;
-                case range_output::values:
-                    result.Set(index, conv.convert_value(env, valuemou{value}));
-                    break;
+            if (fn(keymou{key}, valuemou{value}, index)) {
+                break;
             }
 
             ++index;
@@ -225,7 +215,37 @@ Napi::Array collect_range(const Napi::Env& env, dbimou& self, txnmou& txn, const
         }
     }
 
+    return index;
+}
+
+Napi::Array collect_range(const Napi::Env& env, dbimou& self, txnmou& txn, const range_options& options, range_output output)
+{
+    Napi::Array result = Napi::Array::New(env);
+    auto conv = self.get_convmou();
+    scan_range(self, txn, options, [&](const keymou& key, const valuemou& value, std::size_t index) {
+        switch (output) {
+            case range_output::items:
+                result.Set(index, conv.make_result(env, key, value));
+                break;
+            case range_output::keys:
+                result.Set(index, conv.convert_key(env, key));
+                break;
+            case range_output::values:
+                result.Set(index, conv.convert_value(env, value));
+                break;
+        }
+        return false;
+    });
     return result;
+}
+
+std::size_t count_range(dbimou& self, txnmou& txn, range_options options)
+{
+    options.offset = 0;
+    options.limit = std::numeric_limits<std::size_t>::max();
+    return scan_range(self, txn, options, [](const keymou&, const valuemou&, std::size_t) {
+        return false;
+    });
 }
 
 Napi::Value run_range_query(const Napi::CallbackInfo& info, dbimou& self, const char* method_name, range_output output)
@@ -247,6 +267,26 @@ Napi::Value run_range_query(const Napi::CallbackInfo& info, dbimou& self, const 
     }
 }
 
+Napi::Value run_range_count(const Napi::CallbackInfo& info, dbimou& self, const char* method_name)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        throw Napi::TypeError::New(env, std::string(method_name) + ": txnmou required");
+    }
+
+    auto txn = txnmou::unwrap_checked(env, info[0], method_name);
+
+    try {
+        auto options = info.Length() > 1 ?
+            parse_range_options(env, info[1], self) :
+            range_options{};
+        auto count = count_range(self, *txn, options);
+        return Napi::Number::New(env, static_cast<double>(count));
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, std::string(method_name) + ": " + e.what());
+    }
+}
+
 } // namespace
 
 Napi::FunctionReference dbimou::ctor{};
@@ -263,6 +303,7 @@ void dbimou::init(const char *class_name, Napi::Env env)
         InstanceMethod("keys", &dbimou::keys),
         InstanceMethod("keysFrom", &dbimou::keys_from),
         InstanceMethod("getRange", &dbimou::get_range),
+        InstanceMethod("getCount", &dbimou::get_count),
         InstanceMethod("keysRange", &dbimou::keys_range),
         InstanceMethod("valuesRange", &dbimou::values_range),
         InstanceMethod("drop", &dbimou::drop),
@@ -714,6 +755,11 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info)
 Napi::Value dbimou::get_range(const Napi::CallbackInfo& info)
 {
     return run_range_query(info, *this, "getRange", range_output::items);
+}
+
+Napi::Value dbimou::get_count(const Napi::CallbackInfo& info)
+{
+    return run_range_count(info, *this, "getCount");
 }
 
 Napi::Value dbimou::keys_range(const Napi::CallbackInfo& info)

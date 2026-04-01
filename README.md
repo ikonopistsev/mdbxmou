@@ -368,6 +368,12 @@ const rows = dbi.getRange(txn, { start: 10, end: 15 });
 // ]
 ```
 
+**getCount(txn, [options]) → number**
+```javascript
+const total = dbi.getCount(txn, { start: 10, end: 20 });
+// 11
+```
+
 **keysRange(txn, [options]) → Array**
 ```javascript
 const keys = dbi.keysRange(txn, { start: 10, end: 20, limit: 5 });
@@ -391,6 +397,7 @@ Range options:
 - `reverse` - scan from upper bound to lower bound
 - `limit` - maximum number of returned items
 - `offset` - skip N items after initial positioning
+- `getCount()` ignores `offset` and `limit` and returns the total size of the bounded range
 
 **drop(txn, [delete_db]) → void**
 ```javascript
@@ -827,6 +834,9 @@ function rangeExample() {
   //   { key: 5, value: 'value_5' },
   //   { key: 6, value: 'value_6' }
   // ]
+
+  const total = readDbi.getCount(readTxn, { start: 3, end: 8 });
+  console.log(total); // 6
 
   const keys = readDbi.keysRange(readTxn, {
     start: 3,

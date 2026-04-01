@@ -73,6 +73,7 @@ public:
     Napi::Value keys(const Napi::CallbackInfo&);
     Napi::Value keys_from(const Napi::CallbackInfo&);
     Napi::Value get_range(const Napi::CallbackInfo&);
+    Napi::Value get_count(const Napi::CallbackInfo&);
     Napi::Value keys_range(const Napi::CallbackInfo&);
     Napi::Value values_range(const Napi::CallbackInfo&);
     Napi::Value drop(const Napi::CallbackInfo&);

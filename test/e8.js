@@ -64,6 +64,14 @@ const { keyMode, keyFlag, valueFlag } = MDBX_Param;
   });
   assert.deepEqual(range.map(({ key }) => key), [5, 4]);
 
+  assert.equal(readOrdinalDbi.getCount(readTxn, { start: 3, end: 6 }), 4);
+  assert.equal(readOrdinalDbi.getCount(readTxn, {
+    start: 2,
+    end: 8,
+    offset: 2,
+    limit: 3,
+  }), 7);
+
   const keys = readOrdinalDbi.keysRange(readTxn, {
     start: 2,
     end: 8,
@@ -96,6 +104,7 @@ const { keyMode, keyFlag, valueFlag } = MDBX_Param;
     reverse: true,
   });
   assert.deepEqual(reverseInexactStringRange.map(({ key }) => key.toString()), ["c"]);
+  assert.equal(readStringDbi.getCount(readTxn, { start: "b", end: "d" }), 3);
 
   assert.deepEqual(
     readStringDbi.keysRange(readTxn, { reverse: true, limit: 2 }).map((key) => key.toString()),
