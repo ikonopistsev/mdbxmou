@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
 export type MDBXKey = Buffer | string | number | bigint;
-export type MDBXValue = Buffer | string;
+export type MDBXValue = Buffer | string | number | bigint;
 
 export type MDBXCursorMode =
   | number
@@ -376,6 +376,8 @@ export interface MDBX_Param {
 
   readonly valueFlag: {
     readonly string: number;
+    readonly number: number;
+    readonly bigint: number;
   };
 
   readonly dbMode: {

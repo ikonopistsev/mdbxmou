@@ -33,7 +33,7 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
 {
     auto& param = row.item;
     auto mode = row.mode;
-    convmou conv{row.key_mod, row.key_flag, row.value_flag};
+    convmou conv{row.key_mod, row.val_mod, row.key_flag, row.value_flag};
     auto js_arr = Napi::Array::New(env, param.size());
     for (std::size_t j = 0; j < param.size(); ++j) {
         const auto& item = param[j];
@@ -45,7 +45,9 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
 
         if (mode.is_get() || mode.is_write()) {
             auto& val_buf = item.val_buf;
-            if (val_buf.empty()) {
+            if (is_ordinal(row.val_mod) && mode.is_write() && val_buf.empty()) {
+                js_item.Set("value", conv.convert_value(env, valuemou{item.val_num}));
+            } else if (val_buf.empty()) {
                 js_item.Set("value", env.Null());
             } else {
                 js_item.Set("value",
@@ -137,7 +139,9 @@ void async_query::do_put(txnmou_managed& txn,
     {
         auto key = mdbx::is_ordinal(key_mode) ?
             keymou{q.id_buf} : keymou{q.key_buf};
-        mdbx::slice val{q.val_buf.data(), q.val_buf.size()};
+        valuemou val = is_ordinal(arg0.val_mod) ?
+            valuemou{q.val_num} :
+            valuemou{q.val_buf};
         mdbx::error::success_or_throw(txn.put(dbi, key, &val, flags));
     }
 }

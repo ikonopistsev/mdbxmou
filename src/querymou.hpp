@@ -39,6 +39,7 @@ struct async_keyval
     : async_key
 {
     buffer_type val_buf{};
+    std::uint64_t val_num{};
     bool found{false};
 
     void parse(const query_line& line, const Napi::Object& obj);

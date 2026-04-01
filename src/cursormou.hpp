@@ -20,6 +20,7 @@ private:
     buffer_type key_buf_{};
     buffer_type val_buf_{};
     std::uint64_t key_num_{};
+    std::uint64_t val_num_{};
 
     // Внутренний хелпер для навигации
     Napi::Value move(const Napi::Env& env, MDBX_cursor_op op);

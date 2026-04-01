@@ -14,8 +14,11 @@ const w = env.startWrite();
 const dbi = w.createMap(MDBX_Param.keyMode.ordinal);
 dbi.put(w, 1, "one");
 dbi.put(w, 2, "two");
-// @ts-expect-error value must be Buffer|string
-dbi.put(w, 3, 123);
+// @ts-expect-error value must not be an object
+dbi.put(w, 3, { bad: true });
+const dup = w.createMap("dup", MDBX_Param.keyMode.ordinal, MDBX_Param.valueMode.multiOrdinal);
+dup.put(w, 1, 10);
+dup.put(w, 1, 20n);
 w.commit();
 
 const r = env.startRead();

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.12] - 2026-04-01
+
+### Added
+- **Public put flags for sync DBI**: `dbi.put(txn, key, value, [flags])` now accepts `MDBX_Param.putFlag.*`
+- **Range count API**: Added `dbi.getCount(txn, options)` for bounded range counts without materializing results
+- **Ordinal duplicate values**: Added support for `valueMode.multiOrdinal` (`MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP`)
+  - `put/get`, cursor methods, range methods, `forEach()` and `query()` now support numeric duplicate values
+  - Default JS representation for `multiOrdinal` values is `number`
+  - `valueFlag.number` and `valueFlag.bigint` are now exported
+
+### Changed
+- **Query write flags**: `queryMode` remains the base operation mode, while write-only MDBX flags are passed separately through `putFlag`
+- **Range internals**: `getRange()` and `getCount()` now share the same bounded scan path
+- **keymou cleanup**: `keymou` was reduced to a thin wrapper over `valuemou`, keeping only key-specific helpers
+- **convmou creation**: Removed positional constructors and switched sync DBI conversion policy creation to `convmou::for_dbi()`
+
 ## [0.3.11] - 2026-03-31
 
 ### Added

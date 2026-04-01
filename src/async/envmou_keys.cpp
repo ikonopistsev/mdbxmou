@@ -67,7 +67,7 @@ void async_keys::Execute()
 static Napi::Value write_row(Napi::Env env, const keys_line& row) 
 {
     auto& param = row.item;
-    convmou conv{row.key_mod, row.key_flag};
+    convmou conv{row.key_mod, {}, row.key_flag, {}};
     auto js_arr = Napi::Array::New(env, param.size());
     for (std::uint32_t j = 0; j < param.size(); ++j) {
         const auto& item = param[j];

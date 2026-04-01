@@ -1,4 +1,6 @@
-import type { MDBXDbiStat, MDBXEnvOpenOptions, MDBXKey, MDBXValue } from "./types.js";
+import type { MDBXDbiStat, MDBXEnvOpenOptions, MDBXKey } from "./types.js";
+
+type MDBXAsyncValue = Buffer | string;
 
 export interface MDBXAsyncMapOpenOptions {
   name?: string;
@@ -35,15 +37,15 @@ export interface MDBXAsyncDelBatchResultItem {
 export declare class MDBX_Async_Dbi {
   readonly meta: MDBXAsyncDbiMeta;
 
-  put(key: MDBXKey, value: MDBXValue, flags?: number): Promise<boolean>;
+  put(key: MDBXKey, value: MDBXAsyncValue, flags?: number): Promise<boolean>;
   get(key: MDBXKey): Promise<string | null | undefined>;
   del(key: MDBXKey): Promise<boolean>;
   stat(): Promise<MDBXDbiStat>;
 
-  forEach(cb: (key: MDBXKey, value: MDBXValue, index: number) => void): Promise<void>;
+  forEach(cb: (key: MDBXKey, value: MDBXAsyncValue, index: number) => void): Promise<void>;
 
   getBatch(keys: MDBXKey[]): Promise<MDBXAsyncGetBatchResultItem[]>;
-  putBatch(items: Array<{ key: MDBXKey; value: MDBXValue }>, flags?: number): Promise<MDBXAsyncPutBatchResultItem[]>;
+  putBatch(items: Array<{ key: MDBXKey; value: MDBXAsyncValue }>, flags?: number): Promise<MDBXAsyncPutBatchResultItem[]>;
   delBatch(keys: MDBXKey[]): Promise<MDBXAsyncDelBatchResultItem[]>;
 }
 

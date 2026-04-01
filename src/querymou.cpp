@@ -23,20 +23,11 @@ dbimou* async_common::parse(const Napi::Object& arg0)
 
 void async_key::parse(const async_common& common, const Napi::Value& item)
 {
-    // утснавлиаем общие параметры
-    auto key_flag = common.key_flag;
-
     keymou key{};
     if (mdbx::is_ordinal(common.key_mod)) {
-        if (item.IsBigInt()) {
-            key = keymou{item.As<Napi::BigInt>(), id_buf};
-        } else if (item.IsNumber()) {
-            key = keymou{item.As<Napi::Number>(), id_buf};
-        }
+        key = keymou::from(item, item.Env(), id_buf);
     } else {
-        key = (key_flag & base_flag::string) ?
-           keymou{item.As<Napi::String>(), item.Env(), key_buf} :
-           keymou{item.As<Napi::Buffer<char>>(), key_buf};
+        key = keymou::from(item, item.Env(), key_buf);
     }
 }
 
@@ -47,9 +38,11 @@ void async_keyval::parse(const query_line& common, const Napi::Object& item)
     if (common.mode.is_write()) {
         valuemou val{};
         auto item_val = item.Get("value");
-        val = (common.value_flag & base_flag::string) ?
-            valuemou{item_val.As<Napi::String>(), item_val.Env(), val_buf} :
-            valuemou{item_val.As<Napi::Buffer<char>>(), val_buf};
+        val = is_ordinal(common.val_mod) ?
+            valuemou::from(item_val, item_val.Env(), val_num) :
+            (common.value_flag & base_flag::string) ?
+                valuemou{item_val.As<Napi::String>(), item_val.Env(), val_buf} :
+                valuemou{item_val.As<Napi::Buffer<char>>(), val_buf};
     }
 }
 

@@ -159,7 +159,7 @@ Napi::Value txnmou::get_dbi(const Napi::Object& arg0, db_mode db_mode)
     if (arg0.Has("valueMode")) {
         auto value = arg0.Get("valueMode");
         if (!value.IsUndefined() && !value.IsNull()) {
-            value_mode = value_mode::parse(value);
+            value_mode = parse_value_mode(value, value_flag);
         }
     }
 
@@ -189,7 +189,7 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
         auto arg2 = info[2]; // value_mode
         db_name = arg0.As<Napi::String>().Utf8Value();
         key_mode = parse_key_mode(env, arg1, key_flag);
-        value_mode = value_mode::parse(arg2);
+        value_mode = parse_value_mode(arg2, value_flag);
     } else if (arg_count == 2) {
         // db_name + key_mode || key_mode + value_mode
         auto arg0 = info[0];
@@ -199,7 +199,7 @@ Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)
             key_mode = parse_key_mode(env, arg1, key_flag);
         } else {
             key_mode = parse_key_mode(env, arg0, key_flag);
-            value_mode = value_mode::parse(arg1);
+            value_mode = parse_value_mode(arg1, value_flag);
         }
     } else if (arg_count == 1) {
         // db_name || key_mode

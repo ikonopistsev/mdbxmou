@@ -230,7 +230,8 @@ namespace mdbxmou
             keymou::from(info[0], env, key_num_) : 
             keymou::from(info[0], env, key_buf_);
 
-        valuemou val = valuemou::from(info[1], env, val_buf_);
+        valuemou val = valuemou::from(info[1], env, val_buf_, val_num_,
+            is_ordinal(dbi_->get_value_mode()));
 
         // Опциональный флаг put_mode (по умолчанию MDBX_UPSERT)
         MDBX_put_flags_t flags = MDBX_UPSERT;

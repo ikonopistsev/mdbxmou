@@ -25,6 +25,7 @@ class dbimou final
 
     buffer_type key_buf_{};
     buffer_type val_buf_{};
+    std::uint64_t val_num_{};
     
 public:   
     static Napi::FunctionReference ctor;
@@ -125,7 +126,7 @@ public:
     }
 
     convmou get_convmou() const noexcept {
-        return {key_mode_, key_flag_, value_flag_};
+        return convmou::for_dbi(*this);
     }
 };
 

@@ -7,7 +7,7 @@ Node.js binding for [libmdbx](https://github.com/Mithril-mine/libmdbx) — a fas
 - **Synchronous API** — Direct MDBX operations in main thread
 - **Asynchronous API** — Background operations with async/await
 - **Transactions** — ACID transactions with read/write modes
-- **Multiple key/value types** — String, binary, ordinal (integer) keys
+- **Multiple key/value types** — String, binary, ordinal keys and ordinal duplicate values
 - **Batch operations** — Efficient multi-key read/write
 - **Memory-mapped** — High-performance memory-mapped I/O
 
@@ -86,6 +86,8 @@ Options:
 - `keyFlag` - Default key encoding for all operations (optional, defaults to Buffer)
   - Only `string` can be set (ordinal mode uses `number`/`bigint` separately)
 - `valueFlag` - Default value encoding for all operations (optional, defaults to Buffer)
+  - `string` affects normal string values
+  - `number` and `bigint` are meaningful for `valueMode.multiOrdinal`
 - `maxDbi` - Maximum number of databases (optional, default `32`)
 - `mode` - Filesystem permissions mode (optional, default `0664`)
 - `geometry` - Map size/geometry options (optional)
@@ -278,6 +280,8 @@ const dbi = txn.openMap({
 > - `keyMode: BigInt(number)` → keys returned as `BigInt`
 > - When you pass `keyMode.ordinal` as a positional argument (Number/BigInt), it also updates `keyFlag` to number/bigint unless a numeric keyFlag was already set in env or explicitly provided.
 
+> **Note**: When `valueMode.multiOrdinal` is used and `valueFlag` is not specified, values are returned as `number` by default. Set `valueFlag: MDBX_Param.valueFlag.bigint` if you need `BigInt` on read.
+
 **commit()**
 ```javascript
 txn.commit();
@@ -309,6 +313,8 @@ dbi.put(txn, 124, "value", MDBX_Param.putFlag.append);
 const value = dbi.get(txn, 123);
 const binary = dbi.get(txn, "key");
 ```
+
+For `valueMode.multiOrdinal`, `get()` returns the first duplicate value for the key, decoded as `number` by default.
 
 **del(txn, key) → boolean**
 ```javascript
@@ -615,12 +621,20 @@ txn.commit();
 ### Value Modes (MDBX_Param.valueMode)
 
 - **single** - Single value per key (default)
-- **multi** - Multiple values per key (dupsort)
+- **multi** - `MDBX_DUPSORT`, multiple values per key
+- **multiReverse** - `MDBX_DUPSORT | MDBX_REVERSEDUP`
+- **multiSamelength** - `MDBX_DUPSORT | MDBX_DUPFIXED`
+- **multiOrdinal** - `MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP`
+- **multiReverseSamelength** - `MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED`
 
 ### Value Flags (MDBX_Param.valueFlag)
 
-- **binary** - Raw binary data (default)
+- **binary** - Raw binary data (default, represented by `0`)
 - **string** - UTF-8 strings
+- **number** - Numeric decode for ordinal duplicate values
+- **bigint** - BigInt decode for ordinal duplicate values
+
+`valueFlag.number` and `valueFlag.bigint` matter primarily for `valueMode.multiOrdinal`. For ordinary values, use Buffer (default) or `valueFlag.string`.
 
 ## Examples
 
@@ -861,6 +875,44 @@ function rangeExample() {
 rangeExample();
 ```
 
+### MultiOrdinal Values
+
+```javascript
+const { MDBX_Env, MDBX_Param } = require('mdbxmou');
+
+function multiOrdinalExample() {
+  const env = new MDBX_Env();
+  env.openSync({ path: './multi-ordinal-data' });
+
+  const writeTxn = env.startWrite();
+  const dbi = writeTxn.createMap({
+    name: 'dup-ids',
+    keyMode: MDBX_Param.keyMode.ordinal,
+    valueMode: MDBX_Param.valueMode.multiOrdinal
+  });
+
+  dbi.put(writeTxn, 5, 30);
+  dbi.put(writeTxn, 5, 10);
+  dbi.put(writeTxn, 5, 20n);
+  writeTxn.commit();
+
+  const readTxn = env.startRead();
+  const readDbi = readTxn.openMap({
+    name: 'dup-ids',
+    keyMode: MDBX_Param.keyMode.ordinal,
+    valueMode: MDBX_Param.valueMode.multiOrdinal
+  });
+
+  console.log(readDbi.get(readTxn, 5)); // 10
+  console.log(readDbi.valuesRange(readTxn, { start: 5, end: 5 })); // [10, 20, 30]
+
+  readTxn.commit();
+  env.closeSync();
+}
+
+multiOrdinalExample();
+```
+
 ### Query API (Advanced Async)
 
 ```javascript
@@ -1005,7 +1057,21 @@ MDBX_Param.keyFlag.number     // Number type (used with ordinal mode)
 MDBX_Param.keyFlag.bigint     // BigInt type (used with ordinal mode)
 // Default - Buffer representation
 
+// Value modes
+MDBX_Param.valueMode.multi                 // MDBX_DUPSORT
+MDBX_Param.valueMode.multiReverse          // MDBX_DUPSORT | MDBX_REVERSEDUP
+MDBX_Param.valueMode.multiSamelength       // MDBX_DUPSORT | MDBX_DUPFIXED
+MDBX_Param.valueMode.multiOrdinal          // MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP
+MDBX_Param.valueMode.multiReverseSamelength // MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED
+
+// Value flags (optional, control value representation)
+MDBX_Param.valueFlag.string   // UTF-8 string values
+MDBX_Param.valueFlag.number   // Number values for multiOrdinal
+MDBX_Param.valueFlag.bigint   // BigInt values for multiOrdinal
+// Default - Buffer representation
+
 Note: For ordinal (integer) keys, use keyFlag.number or keyFlag.bigint to specify the data type.
+For `valueMode.multiOrdinal`, values are returned as `number` by default, or as `bigint` when `valueFlag.bigint` is used.
 ```
 
 ### Environment Flags

@@ -80,6 +80,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
 
     Napi::Object value_flag = Napi::Object::New(env);
     MDBXMOU_DECLARE_FLAG_NAME(value_flag, "string", base_flag::string);
+    MDBXMOU_DECLARE_FLAG_NAME(value_flag, "number", base_flag::number);
+    MDBXMOU_DECLARE_FLAG_NAME(value_flag, "bigint", base_flag::bigint);
     mdbx_mou.Set("valueFlag", value_flag);
 
     using mdbxmou::db_mode;

@@ -284,6 +284,11 @@ struct value_mode
     }
 };
 
+static inline bool is_ordinal(const value_mode& mode) noexcept
+{
+    return (mode.val & static_cast<int>(MDBX_INTEGERDUP)) != 0;
+}
+
 
 struct base_flag
 {
@@ -292,7 +297,7 @@ struct base_flag
         number = 4,
         bigint = 8,
         mask_key = string | number | bigint,
-        mask_val = string
+        mask_val = string | number | bigint
     };
     int val{};
 
@@ -331,11 +336,12 @@ struct base_flag
     }
 
     static inline void validate_value(const Napi::Value& arg0, int value) {
-        if (value == 0 || value == string) {
+        if (value == 0 || value == string ||
+            value == number || value == bigint) {
             return;
         }
         throw Napi::Error::New(arg0.Env(),
-            "valueFlag must be 0 or string");
+            "valueFlag must be 0, string, number or bigint");
     }
 
     static inline base_flag parse_key(const Napi::Value& arg0) {
@@ -348,7 +354,11 @@ struct base_flag
         const Napi::Value& arg0) {
         auto value = arg0.As<Napi::Number>().Int32Value() & mask_val;
         validate_value(arg0, value);
-        return {value};
+        base_flag rc{value};
+        if (is_ordinal(mode) && !rc.is_numeric()) {
+            rc = number;
+        }
+        return rc;
     }
 
     static inline base_flag parse_value(const Napi::Value& arg0) {
@@ -384,6 +394,15 @@ static inline key_mode parse_key_mode(Napi::Env env, const Napi::Value& arg0, ba
         }
     } else {
         throw Napi::Error::New(env, "Invalid argument type for key mode");
+    }
+    return mode;
+}
+
+static inline value_mode parse_value_mode(const Napi::Value& arg0, base_flag& value_flag)
+{
+    auto mode = value_mode::parse(arg0);
+    if (is_ordinal(mode) && !value_flag.is_numeric()) {
+        value_flag = base_flag::number;
     }
     return mode;
 }
