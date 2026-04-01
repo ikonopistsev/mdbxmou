@@ -6,6 +6,22 @@ namespace mdbxmou {
 
 Napi::FunctionReference txnmou::ctor{};
 
+bool txnmou::is_instance(const Napi::Value& value) noexcept
+{
+    return value.IsObject() &&
+        value.As<Napi::Object>().InstanceOf(ctor.Value());
+}
+
+txnmou* txnmou::unwrap_checked(const Napi::Env& env,
+    const Napi::Value& value, const char* method_name)
+{
+    if (!is_instance(value)) {
+        throw Napi::TypeError::New(env,
+            std::string(method_name) + ": argument must be MDBX_Txn instance");
+    }
+    return Napi::ObjectWrap<txnmou>::Unwrap(value.As<Napi::Object>());
+}
+
 void txnmou::init(const char *class_name, Napi::Env env) {
     auto func = DefineClass(env, class_name, {
         InstanceMethod("commit", &txnmou::commit),

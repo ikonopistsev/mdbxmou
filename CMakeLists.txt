@@ -23,6 +23,7 @@ add_library(${PROJECT_NAME} SHARED
     "src/querymou.cpp"
     "src/envmou.cpp" 
     "src/txnmou.cpp"
+    "src/convmou.cpp"
     "src/dbimou.cpp"
     "src/cursormou.cpp"
     "src/dbi.cpp")
@@ -62,5 +63,4 @@ execute_process(COMMAND node -p "require('node-addon-api').include"
 string(REPLACE "\n" "" NODE_ADDON_API_DIR ${NODE_ADDON_API_DIR})
 string(REPLACE "\"" "" NODE_ADDON_API_DIR ${NODE_ADDON_API_DIR})
 target_include_directories(${PROJECT_NAME} PRIVATE ${NODE_ADDON_API_DIR} "src")
-
 

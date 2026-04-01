@@ -34,7 +34,7 @@ void async_key::parse(const async_common& common, const Napi::Value& item)
             key = keymou{item.As<Napi::Number>(), id_buf};
         }
     } else {
-        key = (key_flag.val & base_flag::string) ?
+        key = (key_flag & base_flag::string) ?
            keymou{item.As<Napi::String>(), item.Env(), key_buf} :
            keymou{item.As<Napi::Buffer<char>>(), key_buf};
     }
@@ -47,7 +47,7 @@ void async_keyval::parse(const query_line& common, const Napi::Object& item)
     if (common.mode.val & query_mode::write_mask) {
         valuemou val{};
         auto item_val = item.Get("value");
-        val = (common.value_flag.val & base_flag::string) ?
+        val = (common.value_flag & base_flag::string) ?
             valuemou{item_val.As<Napi::String>(), item_val.Env(), val_buf} :
             valuemou{item_val.As<Napi::Buffer<char>>(), val_buf};
     }

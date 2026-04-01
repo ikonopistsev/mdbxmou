@@ -34,6 +34,9 @@ private:
 
 public:    
     static Napi::FunctionReference ctor;
+    static bool is_instance(const Napi::Value& value) noexcept;
+    static txnmou* unwrap_checked(const Napi::Env& env,
+        const Napi::Value& value, const char* method_name);
 
     txnmou(const Napi::CallbackInfo& info)
         : Napi::ObjectWrap<txnmou>(info) 

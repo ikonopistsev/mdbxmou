@@ -79,6 +79,16 @@ export interface MDBXCursorResult<K extends MDBXKey = MDBXKey, V extends MDBXVal
   value: V;
 }
 
+export interface MDBXRangeOptions<K extends MDBXKey = MDBXKey> {
+  start?: K;
+  end?: K;
+  limit?: number;
+  offset?: number;
+  reverse?: boolean;
+  includeStart?: boolean;
+  includeEnd?: boolean;
+}
+
 /**
  * Database cursor for sequential access and range queries.
  * Must be closed before transaction commit/abort.
@@ -213,6 +223,9 @@ export interface MDBX_Dbi<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDB
   stat(txn: MDBX_Txn): MDBXDbiStat;
   keys(txn: MDBX_Txn): K[];
   keysFrom(txn: MDBX_Txn, fromKey: K, limit?: number, cursorMode?: MDBXCursorMode): K[];
+  getRange(txn: MDBX_Txn, options?: MDBXRangeOptions<K>): MDBXCursorResult<K, V>[];
+  keysRange(txn: MDBX_Txn, options?: MDBXRangeOptions<K>): K[];
+  valuesRange(txn: MDBX_Txn, options?: MDBXRangeOptions<K>): V[];
   drop(txn: MDBX_Txn, deleteDb?: boolean): void;
 }
 

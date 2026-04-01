@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.11] - 2026-03-31
+
+### Added
+- **Sync range API**: Added `dbi.getRange(txn, options)`, `dbi.keysRange(txn, options)` and `dbi.valuesRange(txn, options)`
+  - Supports `start`, `end`, `reverse`, `limit`, `offset`, `includeStart` and `includeEnd`
+- **Type definitions for ranges**: Added `MDBXRangeOptions` and range method declarations to TypeScript typings
+
+### Changed
+- **Shared conversion layer**: Centralized native key/value to JS conversion in `convmou` and reused it across DBI, cursor and async query/keys paths
+- **Transaction argument validation**: Added reusable `txnmou::is_instance()` and `txnmou::unwrap_checked()` helpers and switched DBI methods to them
+- **base_flag cleanup**: Tightened `base_flag` handling around single-value semantics and added small helper methods for clearer flag checks
+- **Async keysFrom scan path**: Simplified `do_keys_from()` with a shared templated scan helper while keeping ordinal and non-ordinal specializations
+
+### Fixed
+- **Cursor key consistency**: Non-ordinal cursor methods now respect `keyFlag` and return `Buffer` or `string` consistently
+- **Async keysFrom buffer bug**: Fixed non-ordinal async `keysFrom()` to store keys in `key_buf` instead of the ordinal field
+- **Environment option exports**: `envOption` constants now map directly to `MDBX_option` values, including `maxReaders`
+
 ## [0.3.0] - 2026-01-10
 
 ### Added

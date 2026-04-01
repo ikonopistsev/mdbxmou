@@ -131,31 +131,7 @@ struct env_flag {
 };
 
 struct evn_option {
-    enum type : int {
-        max_db = MDBX_opt_max_db,
-        max_readers = MDBX_opt_max_readers,
-        sync_bytes = MDBX_opt_sync_bytes,
-        sync_period = MDBX_opt_sync_period,
-        rp_augment_limit = MDBX_opt_rp_augment_limit,
-        loose_limit = MDBX_opt_loose_limit,
-        dp_reserve_limit = MDBX_opt_dp_reserve_limit,
-        txn_dp_limit = MDBX_opt_txn_dp_limit,
-        txn_dp_initial = MDBX_opt_txn_dp_initial,
-        spill_max_denominator = MDBX_opt_spill_max_denominator,
-        spill_min_denominator = MDBX_opt_spill_min_denominator,
-        spill_parent4child_denominator = MDBX_opt_spill_parent4child_denominator,
-        merge_threshold_16dot16_percent = MDBX_opt_merge_threshold_16dot16_percent,
-        writethrough_threshold = MDBX_opt_writethrough_threshold,
-        prefault_write_enable = MDBX_opt_prefault_write_enable,
-        gc_time_limit = MDBX_opt_gc_time_limit,
-        prefer_waf_insteadof_balance = MDBX_opt_prefer_waf_insteadof_balance,
-        subpage_limit = MDBX_opt_subpage_limit,
-        subpage_room_threshold = MDBX_opt_subpage_room_threshold,
-        subpage_reserve_prereq = MDBX_opt_subpage_reserve_prereq,
-        subpage_reserve_limit = MDBX_opt_subpage_reserve_limit
-    };
     int val{};
-
     static inline evn_option parse(const Napi::Value &arg0)
     {
         return {arg0.As<Napi::Number>().Int32Value()};
@@ -197,7 +173,7 @@ struct query_mode
 
     static inline query_mode parse(const txn_mode& mode, const Napi::Value& arg0) {
         query_mode rc{arg0.As<Napi::Number>().Int32Value() & mask};
-        if ((mode.val & txn_mode::ro) && (rc.val & (del|upsert|update|insert_unique))) {
+        if ((mode.val & txn_mode::ro) && (rc.val & (del|write_mask))) {
             throw std::runtime_error("rw query in read-only transaction");
         }
         return rc;
@@ -259,17 +235,65 @@ struct base_flag
     };
     int val{};
 
+    constexpr bool empty() const noexcept {
+        return val == 0;
+    }
+
+    constexpr bool is(type flag) const noexcept {
+        return val == flag;
+    }
+
+    constexpr bool is_numeric() const noexcept {
+        return val == number || val == bigint;
+    }
+
+    constexpr base_flag& set(type flag) noexcept {
+        val = flag;
+        return *this;
+    }
+
+    constexpr base_flag& operator=(type flag) noexcept {
+        return set(flag);
+    }
+
+    friend constexpr bool operator&(base_flag left, type right) noexcept {
+        return (left.val & right) != 0;
+    }
+
+    static inline void validate_key(const Napi::Value& arg0, int value) {
+        if (value == 0 || value == string ||
+            value == number || value == bigint) {
+            return;
+        }
+        throw Napi::Error::New(arg0.Env(),
+            "keyFlag must be 0, string, number or bigint");
+    }
+
+    static inline void validate_value(const Napi::Value& arg0, int value) {
+        if (value == 0 || value == string) {
+            return;
+        }
+        throw Napi::Error::New(arg0.Env(),
+            "valueFlag must be 0 or string");
+    }
+
     static inline base_flag parse_key(const Napi::Value& arg0) {
-        return {arg0.As<Napi::Number>().Int32Value() & mask_key};
+        auto value = arg0.As<Napi::Number>().Int32Value() & mask_key;
+        validate_key(arg0, value);
+        return {value};
     }      
 
     static inline base_flag parse_value(const value_mode& mode, 
         const Napi::Value& arg0) {
-        return {arg0.As<Napi::Number>().Int32Value() & mask_val};
+        auto value = arg0.As<Napi::Number>().Int32Value() & mask_val;
+        validate_value(arg0, value);
+        return {value};
     }
 
     static inline base_flag parse_value(const Napi::Value& arg0) {
-        return {arg0.As<Napi::Number>().Int32Value() & mask_val};
+        auto value = arg0.As<Napi::Number>().Int32Value() & mask_val;
+        validate_value(arg0, value);
+        return {value};
     }    
 };
 
@@ -285,16 +309,16 @@ static inline key_mode parse_key_mode(Napi::Env env, const Napi::Value& arg0, ba
         mode.val = static_cast<int>(value);
         if (mdbx::is_ordinal(mode)) {
             // только если цифровой key_flag не был задан
-            if (key_flag.val <= base_flag::string) {
-                key_flag.val = base_flag::bigint;
+            if (!key_flag.is_numeric()) {
+                key_flag = base_flag::bigint;
             }
         }
     } else if (arg0.IsNumber()) {
         mode = key_mode::parse(arg0);
         if (mdbx::is_ordinal(mode)) {
             // только если цифровой key_flag не был задан
-            if (key_flag.val <= base_flag::string) {
-                key_flag.val = base_flag::number;
+            if (!key_flag.is_numeric()) {
+                key_flag = base_flag::number;
             }
         }
     } else {

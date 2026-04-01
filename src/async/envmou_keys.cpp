@@ -1,9 +1,52 @@
 #include "envmou_keys.hpp"
 #include "envmou.hpp"
+#include "convmou.hpp"
 #include "dbimou.hpp"
-#include "../valuemou.hpp"
+#include "valuemou.hpp"
 
 namespace mdbxmou {
+
+namespace {
+
+template<bool Ordinal>
+void scan_keys_from(mdbx::cursor_managed& cursor, keys_line& arg0,
+    keymou& from_key, mdbx::cursor::move_operation turn_mode)
+{
+    auto& item = arg0.item;
+    auto cursor_mode = arg0.cursor_mode;
+    bool is_key_equal_mode = (cursor_mode == mdbx::cursor::move_operation::key_equal ||
+        cursor_mode == mdbx::cursor::move_operation::multi_exactkey_value_equal);
+
+    std::size_t index{};
+    cursor.scan_from([&](const mdbx::pair& f) {
+        if (index >= arg0.limit) {
+            return true;
+        }
+
+        keymou key{f.key};
+        if (is_key_equal_mode) {
+            if constexpr (Ordinal) {
+                if (arg0.id_buf != key.as_int64()) {
+                    return true;
+                }
+            } else if (from_key != key) {
+                return true;
+            }
+        }
+
+        async_key rc{};
+        if constexpr (Ordinal) {
+            rc.id_buf = key.as_uint64();
+        } else {
+            rc.key_buf.assign(key.char_ptr(), key.end_char_ptr());
+        }
+        item.push_back(std::move(rc));
+        ++index;
+        return false;
+    }, from_key, cursor_mode, turn_mode);
+}
+
+} // namespace
 
 void async_keys::Execute() 
 {
@@ -24,26 +67,14 @@ void async_keys::Execute()
 static Napi::Value write_row(Napi::Env env, const keys_line& row) 
 {
     auto& param = row.item;
-    auto key_mode = row.key_mod;
-    auto key_flag = row.key_flag;
+    convmou conv{row.key_mod, row.key_flag};
     auto js_arr = Napi::Array::New(env, param.size());
     for (std::uint32_t j = 0; j < param.size(); ++j) {
         const auto& item = param[j];
-        Napi::Value key_value;
-        if (mdbx::is_ordinal(key_mode)) {
-            if (key_flag.val & base_flag::number) {
-                key_value = Napi::Number::New(env, static_cast<double>(item.id_buf));
-            } else {
-                key_value = Napi::BigInt::New(env, item.id_buf);
-            }
-        } else {
-            if (key_flag.val & base_flag::string) {
-                key_value = Napi::String::New(env, item.key_buf.data(), item.key_buf.size());
-            } else {
-                key_value = Napi::Buffer<char>::Copy(env, item.key_buf.data(), item.key_buf.size());
-            }
-        }
-        js_arr.Set(j, key_value);
+        auto key = mdbx::is_ordinal(row.key_mod) ?
+            keymou{item.id_buf} :
+            keymou{item.key_buf};
+        js_arr.Set(j, conv.convert_key(env, key));
     }
     return js_arr;
 }
@@ -140,14 +171,12 @@ void async_keys::do_keys_batch(txnmou_managed& txn,
 void async_keys::do_keys_from(txnmou_managed& txn, 
     mdbx::map_handle dbi, keys_line& arg0)
 {
-    // сыллка на массив результатов
-    auto& item = arg0.item;
-    std::size_t count = 0;
     using move_operation = mdbx::cursor::move_operation;
+    auto is_ordinal = mdbx::is_ordinal(arg0.key_mod);
 
     auto cursor = txn.open_cursor(dbi);
 
-    keymou from_key = mdbx::is_ordinal(arg0.key_mod) ?
+    keymou from_key = is_ordinal ?
         keymou{arg0.id_buf} : 
         keymou{mdbx::slice{arg0.key_buf.data(), arg0.key_buf.size()}};
 
@@ -170,50 +199,10 @@ void async_keys::do_keys_from(txnmou_managed& txn,
             break;
     }
 
-    bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
-        cursor_mode == move_operation::multi_exactkey_value_equal);    
-
-    std::size_t index{};
-    if (mdbx::is_ordinal(arg0.key_mod)) {
-        // Создаем ключ для позиционирования
-        cursor.scan_from([&](const mdbx::pair& f) {
-            if (index >= arg0.limit) {
-                return true; // останавливаем сканирование
-            }
-            
-            keymou key{f.key};
-            if (is_key_equal_mode) {
-                if (arg0.id_buf != key.as_int64()) {
-                    return true; // останавливаем сканирование
-                }
-            }
-            
-            async_key rc{};
-            rc.id_buf = key.as_uint64();
-            item.push_back(std::move(rc));
-            index++;                            
-            return false; // продолжаем сканирование
-        }, from_key, arg0.cursor_mode, turn_mode);
+    if (is_ordinal) {
+        scan_keys_from<true>(cursor, arg0, from_key, turn_mode);
     } else {
-        // Создаем ключ для позиционирования
-        cursor.scan_from([&](const mdbx::pair& f) {
-            if (index >= arg0.limit) {
-                return true; // останавливаем сканирование
-            }
-            
-            keymou key{f.key};
-            if (is_key_equal_mode) {
-                if (from_key != key) {
-                    return true; // останавливаем сканирование
-                }
-            }
-            
-            async_key rc{};
-            rc.id_buf = key.as_uint64();
-            item.push_back(std::move(rc));
-            index++;                            
-            return false; // продолжаем сканирование
-        }, from_key, arg0.cursor_mode, turn_mode);
+        scan_keys_from<false>(cursor, arg0, from_key, turn_mode);
     }
 }
 

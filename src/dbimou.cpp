@@ -2,8 +2,252 @@
 #include "envmou.hpp"
 #include "txnmou.hpp"
 #include "typemou.hpp"
+#include <limits>
 
 namespace mdbxmou {
+
+namespace {
+
+enum class range_output {
+    items,
+    keys,
+    values,
+};
+
+std::size_t parse_size_option(const Napi::Env& env, const Napi::Object& options, const char* key)
+{
+    auto value = options.Get(key);
+    if (value.IsUndefined() || value.IsNull()) {
+        return std::numeric_limits<std::size_t>::max();
+    }
+    if (!value.IsNumber()) {
+        throw Napi::TypeError::New(env, std::string(key) + " must be a number");
+    }
+    auto parsed = value.As<Napi::Number>().Int64Value();
+    if (parsed < 0) {
+        throw Napi::TypeError::New(env, std::string(key) + " must be >= 0");
+    }
+    return static_cast<std::size_t>(parsed);
+}
+
+bool parse_bool_option(const Napi::Env& env, const Napi::Object& options, const char* key, bool fallback)
+{
+    auto value = options.Get(key);
+    if (value.IsUndefined() || value.IsNull()) {
+        return fallback;
+    }
+    if (!value.IsBoolean()) {
+        throw Napi::TypeError::New(env, std::string(key) + " must be a boolean");
+    }
+    return value.As<Napi::Boolean>().Value();
+}
+
+struct range_options final
+{
+    bool has_start{};
+    bool has_end{};
+    bool reverse{};
+    bool include_start{true};
+    bool include_end{true};
+    std::size_t limit{std::numeric_limits<std::size_t>::max()};
+    std::size_t offset{};
+    std::uint64_t start_num{};
+    std::uint64_t end_num{};
+    buffer_type start_buf{};
+    buffer_type end_buf{};
+    keymou start_key{};
+    keymou end_key{};
+};
+
+range_options parse_range_options(const Napi::Env& env, const Napi::Value& arg0, const dbimou& self)
+{
+    range_options options{};
+    if (arg0.IsUndefined() || arg0.IsNull()) {
+        return options;
+    }
+    if (!arg0.IsObject()) {
+        throw Napi::TypeError::New(env, "getRange options must be an object");
+    }
+
+    auto obj = arg0.As<Napi::Object>();
+    options.limit = parse_size_option(env, obj, "limit");
+
+    auto offset = obj.Get("offset");
+    if (!offset.IsUndefined() && !offset.IsNull()) {
+        if (!offset.IsNumber()) {
+            throw Napi::TypeError::New(env, "offset must be a number");
+        }
+        auto parsed = offset.As<Napi::Number>().Int64Value();
+        if (parsed < 0) {
+            throw Napi::TypeError::New(env, "offset must be >= 0");
+        }
+        options.offset = static_cast<std::size_t>(parsed);
+    }
+
+    options.reverse = parse_bool_option(env, obj, "reverse", false);
+    options.include_start = parse_bool_option(env, obj, "includeStart", true);
+    options.include_end = parse_bool_option(env, obj, "includeEnd", true);
+
+    auto start = obj.Get("start");
+    if (!start.IsUndefined() && !start.IsNull()) {
+        options.has_start = true;
+        options.start_key = mdbx::is_ordinal(self.get_key_mode()) ?
+            keymou::from(start, env, options.start_num) :
+            keymou::from(start, env, options.start_buf);
+    }
+
+    auto end = obj.Get("end");
+    if (!end.IsUndefined() && !end.IsNull()) {
+        options.has_end = true;
+        options.end_key = mdbx::is_ordinal(self.get_key_mode()) ?
+            keymou::from(end, env, options.end_num) :
+            keymou::from(end, env, options.end_buf);
+    }
+
+    return options;
+}
+
+bool cursor_get(cursormou_managed& cursor, MDBX_cursor_op op, mdbx::slice& key, mdbx::slice& value)
+{
+    auto rc = ::mdbx_cursor_get(cursor, &key, &value, op);
+    switch (rc) {
+        case MDBX_SUCCESS:
+        case MDBX_RESULT_TRUE:
+            return true;
+        case MDBX_NOTFOUND:
+            return false;
+        default:
+            mdbx::error::throw_exception(rc);
+            return false;
+    }
+}
+
+bool outside_range(MDBX_txn* txn, MDBX_dbi dbi, const mdbx::slice& key, const range_options& options)
+{
+    if (options.reverse) {
+        if (!options.has_start) {
+            return false;
+        }
+        auto cmp = ::mdbx_cmp(
+            txn, dbi,
+            static_cast<const MDBX_val*>(&key),
+            static_cast<const MDBX_val*>(&options.start_key));
+        return cmp < 0 || (!options.include_start && cmp == 0);
+    }
+
+    if (!options.has_end) {
+        return false;
+    }
+    auto cmp = ::mdbx_cmp(
+        txn, dbi,
+        static_cast<const MDBX_val*>(&key),
+        static_cast<const MDBX_val*>(&options.end_key));
+    return cmp > 0 || (!options.include_end && cmp == 0);
+}
+
+MDBX_cursor_op range_start_op(const range_options& options)
+{
+    if (options.reverse) {
+        if (!options.has_end) {
+            return MDBX_LAST;
+        }
+        return options.include_end ? MDBX_TO_KEY_LESSER_OR_EQUAL : MDBX_TO_KEY_LESSER_THAN;
+    }
+
+    if (!options.has_start) {
+        return MDBX_FIRST;
+    }
+    return options.include_start ? MDBX_TO_KEY_GREATER_OR_EQUAL : MDBX_TO_KEY_GREATER_THAN;
+}
+
+MDBX_cursor_op range_turn_op(const range_options& options)
+{
+    return options.reverse ? MDBX_PREV : MDBX_NEXT;
+}
+
+Napi::Array collect_range(const Napi::Env& env, dbimou& self, txnmou& txn, const range_options& options, range_output output)
+{
+    Napi::Array result = Napi::Array::New(env);
+    if (options.limit == 0) {
+        return result;
+    }
+
+    auto conv = self.get_convmou();
+    auto cursor = self.open_cursor(txn);
+    mdbx::slice key{};
+    mdbx::slice value{};
+
+    if (options.reverse) {
+        if (options.has_end) {
+            key = options.end_key;
+        }
+    } else if (options.has_start) {
+        key = options.start_key;
+    }
+
+    if (!cursor_get(cursor, range_start_op(options), key, value)) {
+        return result;
+    }
+
+    std::size_t skipped{};
+    std::size_t index{};
+    auto turn_op = range_turn_op(options);
+
+    while (true) {
+        if (outside_range(txn, self.get_id(), key, options)) {
+            break;
+        }
+
+        if (skipped < options.offset) {
+            ++skipped;
+        } else {
+            switch (output) {
+                case range_output::items: {
+                    result.Set(index, conv.make_result(env, keymou{key}, valuemou{value}));
+                    break;
+                }
+                case range_output::keys:
+                    result.Set(index, conv.convert_key(env, keymou{key}));
+                    break;
+                case range_output::values:
+                    result.Set(index, conv.convert_value(env, valuemou{value}));
+                    break;
+            }
+
+            ++index;
+            if (index >= options.limit) {
+                break;
+            }
+        }
+
+        if (!cursor_get(cursor, turn_op, key, value)) {
+            break;
+        }
+    }
+
+    return result;
+}
+
+Napi::Value run_range_query(const Napi::CallbackInfo& info, dbimou& self, const char* method_name, range_output output)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        throw Napi::TypeError::New(env, std::string(method_name) + ": txnmou required");
+    }
+
+    auto txn = txnmou::unwrap_checked(env, info[0], method_name);
+
+    try {
+        auto options = info.Length() > 1 ?
+            parse_range_options(env, info[1], self) :
+            range_options{};
+        return collect_range(env, self, *txn, options, output);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, std::string(method_name) + ": " + e.what());
+    }
+}
+
+} // namespace
 
 Napi::FunctionReference dbimou::ctor{};
 
@@ -18,6 +262,9 @@ void dbimou::init(const char *class_name, Napi::Env env)
         InstanceMethod("stat", &dbimou::stat),
         InstanceMethod("keys", &dbimou::keys),
         InstanceMethod("keysFrom", &dbimou::keys_from),
+        InstanceMethod("getRange", &dbimou::get_range),
+        InstanceMethod("keysRange", &dbimou::keys_range),
+        InstanceMethod("valuesRange", &dbimou::values_range),
         InstanceMethod("drop", &dbimou::drop),
         
         // Свойства только для чтения
@@ -40,12 +287,7 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info)
     if (arg_len < 3) {
         throw Napi::Error::New(env, "put: txnmou, key and value required");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "put: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "put");
     try {
         std::uint64_t t;
         auto key = mdbx::is_ordinal(key_mode_) ?
@@ -68,14 +310,10 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info)
     if (arg_len < 2) {
         throw Napi::Error::New(env, "get: txnmou and key required");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "get: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "get");
 
     try {
+        auto conv = get_convmou();
         std::uint64_t t;
         auto key = mdbx::is_ordinal(key_mode_) ?
             keymou::from(info[1], env, t) : 
@@ -86,8 +324,7 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info)
             return env.Undefined();
         }
         
-        return (value_flag_.val & base_flag::string) ? 
-            val.to_string(env) : val.to_buffer(env);
+        return conv.convert_value(env, val);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("get: ") + e.what());
     }
@@ -102,12 +339,7 @@ Napi::Value dbimou::del(const Napi::CallbackInfo& info)
     if (arg_len < 2) {
         throw Napi::Error::New(env, "del: txnmou and key required");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "del: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "del");
 
     try {
         std::uint64_t t;
@@ -131,12 +363,7 @@ Napi::Value dbimou::has(const Napi::CallbackInfo& info)
     if (arg_len < 2) {
         throw Napi::Error::New(env, "has: txnmou and key required");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "has: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "has");
 
     try {
         std::uint64_t t;
@@ -160,12 +387,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info)
     if (arg_len < 2) {
         throw Napi::Error::New(env, "for_each: txnmou and function required");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "for_each: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "for_each");
 
     // Проверяем тип вызова: forEach(txn, fn), forEach(txn, fromKey, fn) или forEach(txn, fromKey, cursorMode, fn)
     if (info.Length() == 2 && info[1].IsFunction()) {
@@ -173,6 +395,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info)
         auto fn = info[1].As<Napi::Function>();
         
         try {
+            auto conv = get_convmou();
             auto stat = get_stat(*txn);
             
             // Проверяем, есть ли записи в базе данных
@@ -182,46 +405,20 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info)
 
             auto cursor = open_cursor(*txn);
             uint32_t index{};
-            if (mdbx::is_ordinal(key_mode_)) {
-                cursor.scan([&](const mdbx::pair& f) {
-                    keymou key{f.key};
-                    valuemou val{f.value};
-                    // Конвертируем ключ
-                    Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
-                        key.to_bigint(env) : key.to_number(env);
-                    // Конвертируем значение
-                    Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
-                        val.to_string(env) : val.to_buffer(env);
-                    // Формируем результат
-                    Napi::Value result = fn.Call({ rc_key, rc_val, 
-                        Napi::Number::New(env, static_cast<double>(index)) });
-
-                    index++;
-
-                    // true will stop the scan, false will continue
-                    return result.IsBoolean() ? result.ToBoolean() : false;
+            cursor.scan([&](const mdbx::pair& f) {
+                keymou key{f.key};
+                valuemou val{f.value};
+                Napi::Value result = fn.Call({
+                    conv.convert_key(env, key),
+                    conv.convert_value(env, val),
+                    Napi::Number::New(env, static_cast<double>(index))
                 });
-            } else {
-                cursor.scan([&](const mdbx::pair& f) {
-                    keymou key{f.key};
-                    valuemou val{f.value};
-                    // Конвертируем ключ
-                    Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
-                        key.to_string(env) : key.to_buffer(env);
 
-                    // Конвертируем значение
-                    Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
-                        val.to_string(env) : val.to_buffer(env);
-                    // Формируем результат
-                    Napi::Value result = fn.Call({ rc_key, rc_val, 
-                        Napi::Number::New(env, static_cast<double>(index)) });
+                index++;
 
-                    index++;
-
-                    // true will stop the scan, false will continue
-                    return result.IsBoolean() ? result.ToBoolean() : false;
-                });
-            }
+                // true will stop the scan, false will continue
+                return result.IsBoolean() ? result.ToBoolean() : false;
+            });
 
             return Napi::Number::New(env, static_cast<double>(index));
         } catch (const std::exception& e) {
@@ -247,12 +444,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info)
         throw Napi::Error::New(env, "for_each_from: txnmou, fromKey and function required");
     }
     
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "for_each_from: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "for_each_from");
     
     // Определяем позицию функции: info[2] или info[3]
     Napi::Function fn;
@@ -265,6 +457,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info)
     }
     
     try {
+        auto conv = get_convmou();
         auto cursor = dbi::open_cursor(*txn);
         auto stat = dbi::get_stat(*txn);
         
@@ -309,58 +502,30 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info)
         std::size_t index{};
         bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
                                   cursor_mode == move_operation::multi_exactkey_value_equal);
-        if (mdbx::is_ordinal(key_mode_)) {
-            cursor.scan_from([&](const mdbx::pair& f) {
-                keymou key{f.key};
-                valuemou val{f.value};
-                if (is_key_equal_mode) {
+        cursor.scan_from([&](const mdbx::pair& f) {
+            keymou key{f.key};
+            valuemou val{f.value};
+            if (is_key_equal_mode) {
+                if (mdbx::is_ordinal(key_mode_)) {
                     if (t != key.as_int64()) {
                         return true; // останавливаем сканирование
                     }
+                } else if (from_key != key) {
+                    return true; // останавливаем сканирование
                 }
+            }
 
-                // Конвертируем ключ
-                Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
-                    key.to_bigint(env) : key.to_number(env);
-                // Конвертируем значение
-                Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
-                    val.to_string(env) : val.to_buffer(env);
-                // Формируем результат
-                Napi::Value result = fn.Call({ rc_key, rc_val, 
-                    Napi::Number::New(env, static_cast<double>(index)) });
+            Napi::Value result = fn.Call({
+                conv.convert_key(env, key),
+                conv.convert_value(env, val),
+                Napi::Number::New(env, static_cast<double>(index))
+            });
 
-                index++;
+            index++;
 
-                // true will stop the scan, false will continue
-                return result.IsBoolean() ? result.ToBoolean() : false;
-            }, from_key, cursor_mode, turn_mode);
-        } else {
-            cursor.scan_from([&](const mdbx::pair& f) {
-                keymou key{f.key};
-                valuemou val{f.value};
-                if (is_key_equal_mode) {
-                    if (from_key != key) {
-                        return true; // останавливаем сканирование
-                    }
-                }
-
-                // Конвертируем ключ
-                Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
-                    key.to_string(env) : key.to_buffer(env);
-
-                // Конвертируем значение
-                Napi::Value rc_val = (value_flag_.val & base_flag::string) ?
-                    val.to_string(env) : val.to_buffer(env);
-                // Формируем результат
-                Napi::Value result = fn.Call({ rc_key, rc_val, 
-                    Napi::Number::New(env, static_cast<double>(index)) });
-
-                index++;
-
-                // true will stop the scan, false will continue
-                return result.IsBoolean() ? result.ToBoolean() : false;
-            }, from_key, cursor_mode, turn_mode);
-        }
+            // true will stop the scan, false will continue
+            return result.IsBoolean() ? result.ToBoolean() : false;
+        }, from_key, cursor_mode, turn_mode);
 
         return Napi::Number::New(env, static_cast<double>(index));
     } catch (const std::exception& e) {
@@ -375,12 +540,7 @@ Napi::Value dbimou::stat(const Napi::CallbackInfo& info)
     if (arg_len < 1) {
         throw Napi::Error::New(env, "stat: txnmou required");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "stat: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "stat");
     
     try {
         auto stat = dbi::get_stat(*txn);
@@ -414,14 +574,10 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info)
     if (arg_len < 1) {
         throw Napi::Error::New(env, "keys: txnmou required");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "keys: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "keys");
     
     try {
+        auto conv = get_convmou();
         auto stat = get_stat(*txn);
         
         // Создаем массив для ключей
@@ -440,9 +596,6 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info)
         std::array<mdbx::slice, MDBXMOU_BATCH_LIMIT> pairs;
 
         uint32_t index{};
-        auto is_ordinal = mdbx::is_ordinal(key_mode_);
-        auto is_bigint = key_flag_.val & base_flag::bigint;
-        auto is_string = key_flag_.val & base_flag::string;
         
         // Первый вызов с MDBX_FIRST
         size_t count = cursor.get_batch(pairs, MDBX_FIRST);
@@ -451,13 +604,7 @@ Napi::Value dbimou::keys(const Napi::CallbackInfo& info)
             // pairs[0] = key1, pairs[1] = value1, pairs[2] = key2, ...
             for (size_t i = 0; i < count; i += 2) {
                 keymou key{pairs[i]};
-                Napi::Value rc_key;
-                if (is_ordinal) {
-                    rc_key = is_bigint ? key.to_bigint(env) : key.to_number(env);
-                } else {
-                    rc_key = is_string ? key.to_string(env) : key.to_buffer(env);
-                }
-                keys.Set(index++, rc_key);
+                keys.Set(index++, conv.convert_key(env, key));
             }
             
             // Следующий batch
@@ -479,14 +626,10 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info)
     if (arg_len < 2) {
         throw Napi::Error::New(env, "keysFrom: txnmou and 'from' key required");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    // Дополнительная проверка - есть ли у объекта нужный constructor
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "keysFrom: first argument must be MDBX_Txn instance");
-    }    
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "keysFrom");
 
     try {
+        auto conv = get_convmou();
         auto cursor = dbi::open_cursor(*txn);
         
         // Парсим аргументы: txn, from, limit, cursorMode
@@ -530,51 +673,28 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info)
         Napi::Array keys = Napi::Array::New(env);
         uint32_t index{};
         bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
-                                  cursor_mode == move_operation::multi_exactkey_value_equal);
+            cursor_mode == move_operation::multi_exactkey_value_equal);
         
-        if (mdbx::is_ordinal(key_mode_)) {
-            cursor.scan_from([&](const mdbx::pair& f) {
-                if (index >= count) {
-                    return true; // останавливаем сканирование
-                }
-                
-                keymou key{f.key};
-                if (is_key_equal_mode) {
+        cursor.scan_from([&](const mdbx::pair& f) {
+            if (index >= count) {
+                return true; // останавливаем сканирование
+            }
+
+            keymou key{f.key};
+            if (is_key_equal_mode) {
+                if (mdbx::is_ordinal(key_mode_)) {
                     if (t != key.as_int64()) {
                         return true; // останавливаем сканирование
                     }
-                }
-
-                // Конвертируем ключ
-                Napi::Value rc_key = (key_flag_.val & base_flag::bigint) ?
-                    key.to_bigint(env) : key.to_number(env);
-                
-                keys.Set(index++, rc_key);
-                                
-                return false; // продолжаем сканирование
-            }, from_key, cursor_mode, turn_mode);
-        } else {     
-            cursor.scan_from([&](const mdbx::pair& f) {
-                if (index >= count) {
+                } else if (from_key != key) {
                     return true; // останавливаем сканирование
                 }
+            }
 
-                keymou key{f.key};
-                if (is_key_equal_mode) {
-                    if (from_key != key) {
-                        return true; // останавливаем сканирование
-                    }
-                }                
+            keys.Set(index++, conv.convert_key(env, key));
 
-                // Конвертируем ключ
-                Napi::Value rc_key = (key_flag_.val & base_flag::string) ?
-                    key.to_string(env) : key.to_buffer(env);
-                
-                keys.Set(index++, rc_key);
-                
-                return false; // продолжаем сканирование
-            }, from_key, cursor_mode, turn_mode);
-        }
+            return false; // продолжаем сканирование
+        }, from_key, cursor_mode, turn_mode);
         
         return keys;
     } catch (const std::exception& e) {
@@ -584,17 +704,28 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info)
     return env.Undefined();
 }
 
+Napi::Value dbimou::get_range(const Napi::CallbackInfo& info)
+{
+    return run_range_query(info, *this, "getRange", range_output::items);
+}
+
+Napi::Value dbimou::keys_range(const Napi::CallbackInfo& info)
+{
+    return run_range_query(info, *this, "keysRange", range_output::keys);
+}
+
+Napi::Value dbimou::values_range(const Napi::CallbackInfo& info)
+{
+    return run_range_query(info, *this, "valuesRange", range_output::values);
+}
+
 Napi::Value dbimou::drop(const Napi::CallbackInfo& info) 
 {
     Napi::Env env = info.Env();
     if (info.Length() < 1) {
         throw Napi::TypeError::New(env, "First argument must be a transaction");
     }
-    auto arg0 = info[0].As<Napi::Object>();
-    if (!arg0.InstanceOf(txnmou::ctor.Value())) {
-        throw Napi::TypeError::New(env, "First argument must be a txnmou instance");
-    }
-    auto txn = Napi::ObjectWrap<txnmou>::Unwrap(arg0);
+    auto txn = txnmou::unwrap_checked(env, info[0], "drop");
     bool delete_db = false;
     if (info.Length() > 1 && info[1].IsBoolean()) {
         delete_db = info[1].As<Napi::Boolean>().Value();

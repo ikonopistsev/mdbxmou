@@ -1,6 +1,6 @@
 # mdbxmou
 
-High-performance Node.js binding for [libmdbx](https://github.com/erthink/libmdbx) — a fast, lightweight, embedded key-value database.
+Node.js binding for [libmdbx](https://github.com/Mithril-mine/libmdbx) — a fast, lightweight, embedded key-value database.
 
 ## Features
 
@@ -344,6 +344,40 @@ const bigIntKeys = dbi.keysFrom(txn, 42n, 50);
 // Key equal mode (for multi-value databases)
 const equalKeys = dbi.keysFrom(txn, 5, 10, 'keyEqual');
 ```
+
+**getRange(txn, [options]) → Array<{ key, value }>**
+```javascript
+const rows = dbi.getRange(txn, { start: 10, end: 15 });
+// [
+//   { key: 10, value: ... },
+//   { key: 11, value: ... },
+//   ...
+// ]
+```
+
+**keysRange(txn, [options]) → Array**
+```javascript
+const keys = dbi.keysRange(txn, { start: 10, end: 20, limit: 5 });
+// [10, 11, 12, 13, 14]
+```
+
+**valuesRange(txn, [options]) → Array**
+```javascript
+const values = dbi.valuesRange(txn, {
+  start: 10,
+  end: 15,
+  reverse: true,
+  includeEnd: false
+});
+// values for keys 14, 13, 12, 11, 10
+```
+
+Range options:
+- `start`, `end` - inclusive bounds by default
+- `includeStart`, `includeEnd` - control bound inclusion
+- `reverse` - scan from upper bound to lower bound
+- `limit` - maximum number of returned items
+- `offset` - skip N items after initial positioning
 
 **drop(txn, [delete_db]) → void**
 ```javascript
@@ -750,6 +784,60 @@ function cursorExample() {
 cursorExample();
 ```
 
+### Range Queries
+
+```javascript
+const { MDBX_Env, MDBX_Param } = require('mdbxmou');
+
+function rangeExample() {
+  const env = new MDBX_Env();
+  env.openSync({
+    path: './range-data',
+    valueFlag: MDBX_Param.valueFlag.string
+  });
+
+  const writeTxn = env.startWrite();
+  const dbi = writeTxn.createMap(MDBX_Param.keyMode.ordinal);
+  for (let i = 0; i < 10; i++) {
+    dbi.put(writeTxn, i, `value_${i}`);
+  }
+  writeTxn.commit();
+
+  const readTxn = env.startRead();
+  const readDbi = readTxn.openMap(MDBX_Param.keyMode.ordinal);
+
+  const rows = readDbi.getRange(readTxn, { start: 3, end: 6 });
+  console.log(rows);
+  // [
+  //   { key: 3, value: 'value_3' },
+  //   { key: 4, value: 'value_4' },
+  //   { key: 5, value: 'value_5' },
+  //   { key: 6, value: 'value_6' }
+  // ]
+
+  const keys = readDbi.keysRange(readTxn, {
+    start: 3,
+    end: 8,
+    offset: 1,
+    limit: 3
+  });
+  console.log(keys); // [4, 5, 6]
+
+  const values = readDbi.valuesRange(readTxn, {
+    start: 3,
+    end: 6,
+    reverse: true,
+    includeEnd: false
+  });
+  console.log(values); // ['value_5', 'value_4', 'value_3']
+
+  readTxn.commit();
+  env.closeSync();
+}
+
+rangeExample();
+```
+
 ### Query API (Advanced Async)
 
 ```javascript
@@ -869,6 +957,7 @@ node test/readme-sync-example.js
 node test/readme-async-example.js
 node test/readme-key-types.js
 node test/readme-cursor-example.js
+node test/readme-range-example.js
 node test/readme-query-example.js
 node test/readme-keys-example.js
 node test/readme-error-handling.js

@@ -72,32 +72,7 @@ namespace mdbxmou
             throw Napi::Error::New(env, mdbx_strerror(rc));
         }
 
-        // Возвращаем {key, value}
-        auto result = Napi::Object::New(env);
-
-        auto key_mode = dbi_->get_key_mode();
-        auto key_flag = dbi_->get_key_flag();
-        auto value_flag = dbi_->get_value_flag();
-
-        // Ключ
-        if (mdbx::is_ordinal(key_mode)) {
-            if (key_flag.val & base_flag::bigint) {
-                result.Set("key", key.to_bigint(env));
-            } else {
-                result.Set("key", key.to_number(env));
-            }
-        } else {
-            result.Set("key", key.to_string(env));
-        }
-
-        // Значение
-        if (value_flag.val & base_flag::string) {
-            result.Set("value", val.to_string(env));
-        } else {
-            result.Set("value", val.to_buffer(env));
-        }
-
-        return result;
+        return dbi_->get_convmou().make_result(env, key, val);
     }
 
     Napi::Value cursormou::first(const Napi::CallbackInfo &info)
@@ -224,31 +199,7 @@ namespace mdbxmou
             throw Napi::Error::New(env, mdbx_strerror(rc));
         }
 
-        // Возвращаем {key, value}
-        auto result = Napi::Object::New(env);
-
-        auto key_flag = dbi_->get_key_flag();
-        auto value_flag = dbi_->get_value_flag();
-
-        // Ключ
-        if (mdbx::is_ordinal(key_mode)) {
-            if (key_flag.val & base_flag::bigint) {
-                result.Set("key", key.to_bigint(env));
-            } else {
-                result.Set("key", key.to_number(env));
-            }
-        } else {
-            result.Set("key", key.to_string(env));
-        }
-
-        // Значение
-        if (value_flag.val & base_flag::string) {
-            result.Set("value", val.to_string(env));
-        } else {
-            result.Set("value", val.to_buffer(env));
-        }
-
-        return result;
+        return dbi_->get_convmou().make_result(env, key, val);
     }
 
     Napi::Value cursormou::seek(const Napi::CallbackInfo &info)
@@ -338,12 +289,9 @@ namespace mdbxmou
         auto callback = info[0].As<Napi::Function>();
         bool backward = info.Length() > 1 && info[1].ToBoolean().Value();
 
-        auto key_mode = dbi_->get_key_mode();
-        auto key_flag = dbi_->get_key_flag();
-        auto value_flag = dbi_->get_value_flag();
-
         MDBX_cursor_op start_op = backward ? MDBX_LAST : MDBX_FIRST;
         MDBX_cursor_op move_op = backward ? MDBX_PREV : MDBX_NEXT;
+        auto conv = dbi_->get_convmou();
 
         keymou key{};
         valuemou val{};
@@ -351,25 +299,7 @@ namespace mdbxmou
         auto rc = mdbx_cursor_get(cursor_, key, val, start_op);
         while (MDBX_SUCCESS == rc)
         {
-            auto result = Napi::Object::New(env);
-
-            // Ключ
-            if (mdbx::is_ordinal(key_mode)) {
-                if (key_flag.val & base_flag::bigint) {
-                    result.Set("key", key.to_bigint(env));
-                } else {
-                    result.Set("key", key.to_number(env));
-                }
-            } else {
-                result.Set("key", key.to_string(env));
-            }
-
-            // Значение
-            if (value_flag.val & base_flag::string) {
-                result.Set("value", val.to_string(env));
-            } else {
-                result.Set("value", val.to_buffer(env));
-            }
+            auto result = conv.make_result(env, key, val);
 
             // Вызов callback
             auto ret = callback.Call({result});

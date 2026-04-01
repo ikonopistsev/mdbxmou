@@ -1,5 +1,6 @@
 #pragma once
 
+#include "convmou.hpp"
 #include "dbi.hpp"
 #include "querymou.hpp"
 #include "env_arg0.hpp"
@@ -71,6 +72,9 @@ public:
     Napi::Value stat(const Napi::CallbackInfo&);
     Napi::Value keys(const Napi::CallbackInfo&);
     Napi::Value keys_from(const Napi::CallbackInfo&);
+    Napi::Value get_range(const Napi::CallbackInfo&);
+    Napi::Value keys_range(const Napi::CallbackInfo&);
+    Napi::Value values_range(const Napi::CallbackInfo&);
     Napi::Value drop(const Napi::CallbackInfo&);
 
 private:
@@ -117,6 +121,10 @@ public:
 
     base_flag get_value_flag() const noexcept {
         return value_flag_;
+    }
+
+    convmou get_convmou() const noexcept {
+        return {key_mode_, key_flag_, value_flag_};
     }
 };
 

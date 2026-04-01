@@ -1,4 +1,5 @@
 #include "envmou_query.hpp"
+#include "convmou.hpp"
 #include "envmou.hpp"
 
 namespace mdbxmou {
@@ -31,28 +32,16 @@ void async_query::Execute()
 static Napi::Value write_row(Napi::Env env, const query_line& row) 
 {
     auto& param = row.item;
-    auto key_mode = row.key_mod;
-    auto key_flag = row.key_flag;
     auto mode = row.mode;
+    convmou conv{row.key_mod, row.key_flag, row.value_flag};
     auto js_arr = Napi::Array::New(env, param.size());
     for (std::size_t j = 0; j < param.size(); ++j) {
         const auto& item = param[j];
-        Napi::Value key_value;
         Napi::Object js_item = Napi::Object::New(env);
-        if (mdbx::is_ordinal(key_mode)) {
-            if (key_flag.val & base_flag::number) {
-                key_value = Napi::Number::New(env, static_cast<double>(item.id_buf));
-            } else {
-                key_value = Napi::BigInt::New(env, item.id_buf);
-            }
-        } else {
-            if (key_flag.val & base_flag::string) {
-                key_value = Napi::String::New(env, item.key_buf.data(), item.key_buf.size());
-            } else {
-                key_value = Napi::Buffer<char>::Copy(env, item.key_buf.data(), item.key_buf.size());
-            }
-        }
-        js_item.Set("key", key_value);
+        auto key = mdbx::is_ordinal(row.key_mod) ?
+            keymou{item.id_buf} :
+            keymou{item.key_buf};
+        js_item.Set("key", conv.convert_key(env, key));
 
         // все методы которые должны показать value в результате
         const auto mask{query_mode::get|query_mode::upsert|
@@ -63,14 +52,8 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
             if (val_buf.empty()) {
                 js_item.Set("value", env.Null());
             } else {
-                auto value_flag = row.value_flag;
-                Napi::Value val_value;
-                if (value_flag.val & base_flag::string) {
-                    val_value = Napi::String::New(env, val_buf.data(), val_buf.size());
-                } else {
-                    val_value = Napi::Buffer<char>::Copy(env, val_buf.data(), val_buf.size());
-                }
-                js_item.Set("value", val_value);
+                js_item.Set("value",
+                    conv.convert_value(env, valuemou{val_buf}));
             }
         }
 

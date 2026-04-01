@@ -50,6 +50,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "msgpackr": "^1.11.9",
     "typescript": "^5.6.3"
   },
   "scripts": {
@@ -58,6 +59,8 @@
     "e4": "node ./test/e4.js",
     "e4async": "node ./test/e4async.mjs",
     "e5": "node ./test/e5.js",
+    "e7": "node ./test/e7.js",
+    "e8": "node ./test/e8.js",
     "test:types": "node ./test/types/run.mjs",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
@@ -65,7 +68,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "description": "Node bindings for mdbx",
   "repository": {
     "type": "git",
