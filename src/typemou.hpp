@@ -171,17 +171,78 @@ struct query_mode
     };
     int val{get};
 
+    bool is_get() const noexcept {
+        return (val & get) != 0;
+    }
+
+    bool is_del() const noexcept {
+        return (val & del) != 0;
+    }
+
+    bool is_write() const noexcept {
+        return !is_get() && !is_del();
+    }
+
     static inline query_mode parse(const txn_mode& mode, const Napi::Value& arg0) {
         query_mode rc{arg0.As<Napi::Number>().Int32Value() & mask};
-        if ((mode.val & txn_mode::ro) && (rc.val & (del|write_mask))) {
+        if ((rc.is_get() || rc.is_del()) && (rc.val & write_mask)) {
+            throw std::runtime_error(
+                "queryMode must be one of get/del/upsert/update/insertUnique");
+        }
+        if (rc.is_get() && rc.is_del()) {
+            throw std::runtime_error(
+                "queryMode must be one of get/del/upsert/update/insertUnique");
+        }
+        if ((mode.val & txn_mode::ro) && (rc.is_del() || rc.is_write())) {
             throw std::runtime_error("rw query in read-only transaction");
         }
         return rc;
     }
 
+    int write_flags() const noexcept {
+        return val & write_mask;
+    }
+
     operator mdbx::put_mode() const noexcept {
         return static_cast<mdbx::put_mode>(val & write_mask);
     }    
+};
+
+struct put_flag
+{
+    enum type : int {
+        no_overwrite = MDBX_NOOVERWRITE,
+        no_dup_data = MDBX_NODUPDATA,
+        current = MDBX_CURRENT,
+        all_dups = MDBX_ALLDUPS,
+        reserve = MDBX_RESERVE,
+        append = MDBX_APPEND,
+        append_dup = MDBX_APPENDDUP,
+        multiple = MDBX_MULTIPLE,
+        query_mask = MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_CURRENT |
+            MDBX_APPEND | MDBX_APPENDDUP,
+        mask = MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_CURRENT |
+            MDBX_ALLDUPS | MDBX_RESERVE | MDBX_APPEND |
+            MDBX_APPENDDUP | MDBX_MULTIPLE
+    };
+    int val{};
+
+    static inline put_flag parse(const Napi::Value& arg0) {
+        return {arg0.As<Napi::Number>().Int32Value() & mask};
+    }
+
+    static inline put_flag parse_query(const Napi::Value& arg0) {
+        put_flag rc = parse(arg0);
+        if (rc.val & ~query_mask) {
+            throw Napi::TypeError::New(arg0.Env(),
+                "query putFlag supports only noOverwrite/noDupData/current/append/appendDup");
+        }
+        return rc;
+    }
+
+    operator MDBX_put_flags_t() const noexcept {
+        return static_cast<MDBX_put_flags_t>(val & mask);
+    }
 };
 
 struct key_mode

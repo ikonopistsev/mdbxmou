@@ -37,7 +37,13 @@ const result = await env.query({
 });
 result.length;
 
+await env.query({
+  dbi,
+  mode: MDBX_Param.queryMode.upsert,
+  putFlag: MDBX_Param.putFlag.noOverwrite,
+  item: [{ key: 3, value: "three" }]
+});
+
 await env.close();
 
 void native.MDBX_Param.envFlag.validation;
-

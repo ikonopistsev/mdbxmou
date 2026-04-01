@@ -97,6 +97,18 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     MDBXMOU_DECLARE_FLAG_NAME(queryMode, "del", query_mode::del);
     mdbx_mou.Set("queryMode", queryMode);
 
+    using mdbxmou::put_flag;
+    Napi::Object putFlag = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(putFlag, "noOverwrite", put_flag::no_overwrite);
+    MDBXMOU_DECLARE_FLAG_NAME(putFlag, "noDupData", put_flag::no_dup_data);
+    MDBXMOU_DECLARE_FLAG_NAME(putFlag, "current", put_flag::current);
+    MDBXMOU_DECLARE_FLAG_NAME(putFlag, "allDups", put_flag::all_dups);
+    MDBXMOU_DECLARE_FLAG_NAME(putFlag, "reserve", put_flag::reserve);
+    MDBXMOU_DECLARE_FLAG_NAME(putFlag, "append", put_flag::append);
+    MDBXMOU_DECLARE_FLAG_NAME(putFlag, "appendDup", put_flag::append_dup);
+    MDBXMOU_DECLARE_FLAG_NAME(putFlag, "multiple", put_flag::multiple);
+    mdbx_mou.Set("putFlag", putFlag);
+
     using move_operation = mdbx::cursor::move_operation;
     Napi::Object cursor_mode = Napi::Object::New(env);
     MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "first", move_operation::first);

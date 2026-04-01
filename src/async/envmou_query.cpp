@@ -13,9 +13,9 @@ void async_query::Execute()
         {
             mdbx::map_handle dbi{req.id};
             auto mode = req.mode;
-            if (mode.val & query_mode::get) {
+            if (mode.is_get()) {
                 do_get(txn, dbi, req);
-            } else if (mode.val & query_mode::del) {
+            } else if (mode.is_del()) {
                 do_del(txn, dbi, req);
             } else {
                 do_put(txn, dbi, req);
@@ -43,11 +43,7 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
             keymou{item.key_buf};
         js_item.Set("key", conv.convert_key(env, key));
 
-        // все методы которые должны показать value в результате
-        const auto mask{query_mode::get|query_mode::upsert|
-            query_mode::update|query_mode::insert_unique};
-        if (mode.val & mask) 
-        {
+        if (mode.is_get() || mode.is_write()) {
             auto& val_buf = item.val_buf;
             if (val_buf.empty()) {
                 js_item.Set("value", env.Null());
@@ -58,7 +54,7 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
         }
 
         // выдадим флаги удаления и успешности
-        if (mode.val & query_mode::del) {
+        if (mode.is_del()) {
             js_item.Set("found", Napi::Boolean::New(env, item.found));
         }
         js_arr.Set(static_cast<uint32_t>(j), js_item);
@@ -133,7 +129,8 @@ void async_query::do_get(const txnmou_managed& txn,
 void async_query::do_put(txnmou_managed& txn, 
     mdbx::map_handle dbi, query_line& arg0)
 {
-    auto mode = arg0.mode;
+    auto flags = static_cast<MDBX_put_flags_t>(
+        arg0.mode.write_flags() | arg0.put_flags.val);
     // очищаем put флаги
     auto key_mode = arg0.key_mod;
     for (auto& q : arg0.item) 
@@ -141,7 +138,7 @@ void async_query::do_put(txnmou_managed& txn,
         auto key = mdbx::is_ordinal(key_mode) ?
             keymou{q.id_buf} : keymou{q.key_buf};
         mdbx::slice val{q.val_buf.data(), q.val_buf.size()};
-        txn.put(dbi, key, val, mode);
+        mdbx::error::success_or_throw(txn.put(dbi, key, &val, flags));
     }
 }
 

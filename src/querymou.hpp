@@ -57,6 +57,7 @@ struct query_line
 {
     base_flag value_flag{};
     query_mode mode{};
+    put_flag put_flags{};
     // буффер для запроса / ответа
     std::vector<async_keyval> item{};
     void parse(txn_mode txn, const Napi::Object& arg0);

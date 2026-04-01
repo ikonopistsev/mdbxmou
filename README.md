@@ -190,13 +190,20 @@ const txn = env.startRead();
 ```javascript
 const result = await env.query([
   {
-    dbMode: MDBX_Param.dbMode.accede,
-    keyMode: MDBX_Param.keyMode.ordinal,
+    dbi,
     mode: MDBX_Param.queryMode.get,
     item: [{ key: 1 }, { key: 2 }]
+  },
+  {
+    dbi,
+    mode: MDBX_Param.queryMode.upsert,
+    putFlag: MDBX_Param.putFlag.noOverwrite,
+    item: [{ key: 3, value: "v3" }]
   }
 ]);
 ```
+
+`query()` uses the passed `dbi` and inherits key/value settings from it. `queryMode` selects the operation (`get`, `del`, or base write mode), and optional `putFlag` adds write-only MDBX flags. In `query()` only `noOverwrite`, `noDupData`, `current`, `append`, and `appendDup` are supported.
 
 ### Transaction
 
@@ -285,10 +292,16 @@ txn.abort();
 
 #### Methods
 
-**put(txn, key, value)**
+**put(txn, key, value, [flags])**
 ```javascript
 dbi.put(txn, 123, "value");
 dbi.put(txn, "key", Buffer.from("binary data"));
+
+// Insert only if key does not exist
+dbi.put(txn, 123, "value", MDBX_Param.putFlag.noOverwrite);
+
+// Fast append for sorted inserts
+dbi.put(txn, 124, "value", MDBX_Param.putFlag.append);
 ```
 
 **get(txn, key) → value**
@@ -461,7 +474,7 @@ Insert or update a record at cursor position.
 cursor.put('newKey', 'newValue');
 
 // With flags (MDBX_NOOVERWRITE, etc.)
-cursor.put('key', 'value', MDBX_Param.queryMode.insertUnique);
+cursor.put('key', 'value', MDBX_Param.putFlag.noOverwrite);
 ```
 
 **del([flags]) → boolean**
@@ -856,7 +869,8 @@ async function queryExample() {
   const results = await env.query([
     {
       dbi,
-      mode: MDBX_Param.queryMode.insertUnique,
+      mode: MDBX_Param.queryMode.upsert,
+      putFlag: MDBX_Param.putFlag.noOverwrite,
       item: [
         { key: 1, value: JSON.stringify({ name: "Alice" }) },
         { key: 2, value: JSON.stringify({ name: "Bob" }) }
@@ -1027,10 +1041,22 @@ Note: For ordinal (integer) keys, use keyFlag.number or keyFlag.bigint to specif
 
 ### Query Modes
 - `MDBX_Param.queryMode.get` - Read operations
-- `MDBX_Param.queryMode.upsert` - Write operations (insert or update)
-- `MDBX_Param.queryMode.update` - Update existing (MDBX_CURRENT)
-- `MDBX_Param.queryMode.insertUnique` - Insert unique (MDBX_NOOVERWRITE)
+- `MDBX_Param.queryMode.upsert` - Base write mode (insert or update)
+- `MDBX_Param.queryMode.update` - Base write mode with `MDBX_CURRENT`
+- `MDBX_Param.queryMode.insertUnique` - Base write mode with `MDBX_NOOVERWRITE`
 - `MDBX_Param.queryMode.del` - Delete operations
+
+### Put Flags
+- `MDBX_Param.putFlag.noOverwrite` - `MDBX_NOOVERWRITE`
+- `MDBX_Param.putFlag.noDupData` - `MDBX_NODUPDATA`
+- `MDBX_Param.putFlag.current` - `MDBX_CURRENT`
+- `MDBX_Param.putFlag.allDups` - `MDBX_ALLDUPS`
+- `MDBX_Param.putFlag.reserve` - `MDBX_RESERVE`
+- `MDBX_Param.putFlag.append` - `MDBX_APPEND`
+- `MDBX_Param.putFlag.appendDup` - `MDBX_APPENDDUP`
+- `MDBX_Param.putFlag.multiple` - `MDBX_MULTIPLE`
+
+For `env.query()` write requests, only `noOverwrite`, `noDupData`, `current`, `append`, and `appendDup` are supported.
 
 ### Cursor Modes
 - `MDBX_Param.cursorMode.first` - First key

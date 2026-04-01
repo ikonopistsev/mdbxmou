@@ -202,7 +202,7 @@ export interface MDBX_Dbi<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDB
   readonly keyFlag: number;
   readonly valueFlag: number;
 
-  put(txn: MDBX_Txn, key: K, value: MDBXValue): void;
+  put(txn: MDBX_Txn, key: K, value: MDBXValue, flags?: number): void;
   get(txn: MDBX_Txn, key: K): V | undefined;
   del(txn: MDBX_Txn, key: K): boolean;
   has(txn: MDBX_Txn, key: K): boolean;
@@ -264,6 +264,7 @@ export interface MDBXQueryRequest {
   dbi: MDBX_Dbi;
   mode?: number;
   queryMode?: number;
+  putFlag?: number;
   item: MDBXQueryItem[];
 }
 
@@ -387,6 +388,17 @@ export interface MDBX_Param {
     readonly insertUnique: number;
     readonly get: number;
     readonly del: number;
+  };
+
+  readonly putFlag: {
+    readonly noOverwrite: number;
+    readonly noDupData: number;
+    readonly current: number;
+    readonly allDups: number;
+    readonly reserve: number;
+    readonly append: number;
+    readonly appendDup: number;
+    readonly multiple: number;
   };
 
   readonly cursorMode: {

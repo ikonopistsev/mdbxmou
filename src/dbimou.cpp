@@ -295,7 +295,14 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info)
             keymou::from(info[1], env, key_buf_);
 
         auto val = valuemou::from(info[2], env, val_buf_);
-        dbi::put(*txn, key, val, *this);
+        MDBX_put_flags_t flags = MDBX_UPSERT;
+        if (arg_len > 3 && !info[3].IsUndefined() && !info[3].IsNull()) {
+            if (!info[3].IsNumber()) {
+                throw Napi::TypeError::New(env, "put: flags must be a number");
+            }
+            flags = put_flag::parse(info[3]);
+        }
+        dbi::put(*txn, key, val, flags);
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("put: ") + e.what());
     }

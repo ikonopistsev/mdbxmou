@@ -44,7 +44,7 @@ void async_keyval::parse(const query_line& common, const Napi::Object& item)
 {
     async_key::parse(common, item);    
     // проверяем надо ли что-то писать
-    if (common.mode.val & query_mode::write_mask) {
+    if (common.mode.is_write()) {
         valuemou val{};
         auto item_val = item.Get("value");
         val = (common.value_flag & base_flag::string) ?
@@ -62,6 +62,13 @@ void query_line::parse(txn_mode txn, const Napi::Object& arg0)
         mode = query_mode::parse(txn, arg0.Get("mode").As<Napi::Number>());
     } else if (arg0.Has("queryMode")) {
         mode = query_mode::parse(txn, arg0.Get("queryMode").As<Napi::Number>());
+    }
+    if (arg0.Has("putFlag")) {
+        put_flags = put_flag::parse_query(arg0.Get("putFlag"));
+        if (!mode.is_write()) {
+            throw Napi::TypeError::New(arg0.Env(),
+                "query putFlag requires write queryMode");
+        }
     }
     auto items_array = arg0.Get("item").As<Napi::Array>();
     auto item_len = items_array.Length();

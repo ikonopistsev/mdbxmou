@@ -25,7 +25,8 @@ const { MDBX_Env, MDBX_Param } = require("../lib/nativemou.js");
   const results = await env.query([
     {
       dbi,
-      mode: MDBX_Param.queryMode.insertUnique,
+      mode: MDBX_Param.queryMode.upsert,
+      putFlag: MDBX_Param.putFlag.noOverwrite,
       item: [
         { key: 1, value: alice },
         { key: 2, value: bob },
