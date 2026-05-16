@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.13] - 2026-05-16
+
+### Changed
+- **libmdbx dependency**: Updated bundled `deps/libmdbx` from `v0.13.11` to `v0.13.12`
+  - Includes stable-branch fixes for dupsort nested tree counting, neighbor nested cursor adjustment after dupsort deletion, snapshot info page size reporting, dump/load tooling, and corrupted meta-page handling.
+
 ## [0.3.12] - 2026-04-01
 
 ### Added
