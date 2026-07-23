@@ -16,7 +16,9 @@ const { MDBX_Env, MDBX_Param } = require("../lib/nativemou.js");
 
   const writeTxn = env.startWrite();
   const dbi = writeTxn.createMap("multiOrdinal", keyMode.ordinal, valueMode.multiOrdinal);
+  const expectedDbiFlags = keyMode.ordinal | valueMode.multiOrdinal;
   assert.equal(dbi.valueFlag, valueFlag.number);
+  assert.equal(dbi.flags(writeTxn), expectedDbiFlags);
 
   dbi.put(writeTxn, 5, 30);
   dbi.put(writeTxn, 5, 10);
@@ -28,6 +30,7 @@ const { MDBX_Env, MDBX_Param } = require("../lib/nativemou.js");
   const readDbi = readTxn.openMap("multiOrdinal", keyMode.ordinal, valueMode.multiOrdinal);
 
   assert.equal(readDbi.valueFlag, valueFlag.number);
+  assert.equal(readDbi.flags(readTxn), expectedDbiFlags);
   assert.equal(readDbi.get(readTxn, 5), 10);
   assert.equal(readDbi.get(readTxn, 6), 40);
 

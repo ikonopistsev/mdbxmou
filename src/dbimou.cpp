@@ -300,6 +300,7 @@ void dbimou::init(const char *class_name, Napi::Env env)
         InstanceMethod("has", &dbimou::has),
         InstanceMethod("forEach", &dbimou::for_each),
         InstanceMethod("stat", &dbimou::stat),
+        InstanceMethod("flags", &dbimou::flags),
         InstanceMethod("keys", &dbimou::keys),
         InstanceMethod("keysFrom", &dbimou::keys_from),
         InstanceMethod("getRange", &dbimou::get_range),
@@ -610,6 +611,28 @@ Napi::Value dbimou::stat(const Napi::CallbackInfo& info)
         return result;
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, std::string("stat: ") + e.what());
+    }
+
+    return env.Undefined();
+}
+
+Napi::Value dbimou::flags(const Napi::CallbackInfo& info)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        throw Napi::Error::New(env, "flags: txnmou required");
+    }
+    auto txn = txnmou::unwrap_checked(env, info[0], "flags");
+
+    try {
+        unsigned flags{};
+        auto rc = ::mdbx_dbi_flags(*txn, id_, &flags);
+        if (rc != MDBX_SUCCESS) {
+            mdbx::error::throw_exception(rc);
+        }
+        return Napi::Number::New(env, static_cast<double>(flags));
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, std::string("flags: ") + e.what());
     }
 
     return env.Undefined();

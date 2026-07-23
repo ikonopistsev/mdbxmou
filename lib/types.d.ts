@@ -231,6 +231,7 @@ export interface MDBX_Dbi<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDB
   ): number;
 
   stat(txn: MDBX_Txn): MDBXDbiStat;
+  flags(txn: MDBX_Txn): number;
   keys(txn: MDBX_Txn): K[];
   keysFrom(txn: MDBX_Txn, fromKey: K, limit?: number, cursorMode?: MDBXCursorMode): K[];
   getRange(txn: MDBX_Txn, options?: MDBXRangeOptions<K>): MDBXCursorResult<K, V>[];

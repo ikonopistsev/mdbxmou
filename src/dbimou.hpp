@@ -71,6 +71,7 @@ public:
     Napi::Value has(const Napi::CallbackInfo&);
     Napi::Value for_each(const Napi::CallbackInfo&);
     Napi::Value stat(const Napi::CallbackInfo&);
+    Napi::Value flags(const Napi::CallbackInfo&);
     Napi::Value keys(const Napi::CallbackInfo&);
     Napi::Value keys_from(const Napi::CallbackInfo&);
     Napi::Value get_range(const Napi::CallbackInfo&);
