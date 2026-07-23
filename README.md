@@ -269,7 +269,8 @@ const dbi = txn.openMap({
   keyFlag: MDBX_Param.keyFlag.string,
   valueFlag: MDBX_Param.valueFlag.string,
   keyMode: MDBX_Param.keyMode.reverse,
-  valueMode: MDBX_Param.valueMode.multi
+  valueMode: MDBX_Param.valueMode.multi,
+  flags: MDBX_Param.dbMode.accede
 });
 ```
 
@@ -1101,7 +1102,8 @@ For `valueMode.multiOrdinal`, values are returned as `number` by default, or as 
 - `MDBX_Param.envOption.spillMaxDenominator` - Raw `MDBX_opt_spill_max_denominator`
 - `MDBX_Param.envOption.spillMinDenominator` - Raw `MDBX_opt_spill_min_denominator`
 - `MDBX_Param.envOption.spillParent4childDenominator` - Raw `MDBX_opt_spill_parent4child_denominator`
-- `MDBX_Param.envOption.mergeThreshold16dot16Percent` - Raw `MDBX_opt_merge_threshold_16dot16_percent`
+- `MDBX_Param.envOption.mergeThreshold` - Raw `MDBX_opt_merge_threshold`
+- `MDBX_Param.envOption.mergeThreshold16dot16Percent` - Backward-compatible alias for `MDBX_opt_merge_threshold`
 - `MDBX_Param.envOption.writethroughThreshold` - Raw `MDBX_opt_writethrough_threshold`
 - `MDBX_Param.envOption.prefaultWriteEnable` - Raw `MDBX_opt_prefault_write_enable`
 - `MDBX_Param.envOption.gcTimeLimit` - Raw `MDBX_opt_gc_time_limit`
@@ -1110,6 +1112,12 @@ For `valueMode.multiOrdinal`, values are returned as `number` by default, or as 
 - `MDBX_Param.envOption.subpageRoomThreshold` - Raw `MDBX_opt_subpage_room_threshold`
 - `MDBX_Param.envOption.subpageReservePrereq` - Raw `MDBX_opt_subpage_reserve_prereq`
 - `MDBX_Param.envOption.subpageReserveLimit` - Raw `MDBX_opt_subpage_reserve_limit`
+- `MDBX_Param.envOption.splitReserve` - Raw `MDBX_opt_split_reserve`
+
+### Copy Flags
+- `MDBX_Param.copyFlag.defaults` - Raw `MDBX_CP_DEFAULTS`
+- `MDBX_Param.copyFlag.compact` - Raw `MDBX_CP_COMPACT`
+- `MDBX_Param.copyFlag.overwrite` - Raw `MDBX_CP_OVERWRITE`
 
 ### Database Modes  
 - `MDBX_Param.dbMode.create` - Create database if it doesn't exist

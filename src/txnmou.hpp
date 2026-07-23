@@ -28,7 +28,8 @@ private:
     void dec_counter() noexcept;
 
     Napi::Value get_dbi(const char* name, base_flag key_flag, base_flag value_flag,
-        key_mode key_mode, value_mode value_mode, db_mode db_mode);
+        key_mode key_mode, value_mode value_mode, db_mode db_mode,
+        int db_flags_override = -1);
     Napi::Value get_dbi(const Napi::Object& arg0, db_mode db_mode);
     Napi::Value get_dbi(const Napi::CallbackInfo& info, db_mode db_mode);
 

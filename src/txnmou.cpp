@@ -88,7 +88,7 @@ void txnmou::dec_counter() noexcept
 
 Napi::Value txnmou::get_dbi(const char* name, base_flag key_flag, 
     base_flag value_flag, key_mode key_mode, value_mode value_mode, 
-    db_mode db_mode)
+    db_mode db_mode, int db_flags_override)
 {
     Napi::Env env = Env();
 
@@ -101,7 +101,9 @@ Napi::Value txnmou::get_dbi(const char* name, base_flag key_flag,
     }
 
     MDBX_dbi dbi{};
-    auto flags = static_cast<MDBX_db_flags_t>(db_mode.val|key_mode.val|value_mode.val);
+    auto flags = db_flags_override >= 0
+        ? static_cast<MDBX_db_flags_t>(db_flags_override)
+        : static_cast<MDBX_db_flags_t>(db_mode.val|key_mode.val|value_mode.val);
     auto rc = mdbx_dbi_open(*this, (name && name[0]) ? name : nullptr, flags, &dbi);
     if (rc != MDBX_SUCCESS) {
         throw Napi::Error::New(env, std::string("mdbx_dbi_open: ") + mdbx_strerror(rc));
@@ -124,6 +126,7 @@ Napi::Value txnmou::get_dbi(const Napi::Object& arg0, db_mode db_mode)
     key_mode key_mode{};
     value_mode value_mode{};
     std::string db_name{};
+    int db_flags_override = -1;
 
     if (arg0.Has("name")) {
         auto value = arg0.Get("name");
@@ -163,8 +166,22 @@ Napi::Value txnmou::get_dbi(const Napi::Object& arg0, db_mode db_mode)
         }
     }
 
+    if (arg0.Has("flags")) {
+        auto value = arg0.Get("flags");
+        if (!value.IsUndefined() && !value.IsNull()) {
+            db_flags_override = value.As<Napi::Number>().Int32Value();
+        }
+    }
+
+    if (arg0.Has("create")) {
+        auto value = arg0.Get("create");
+        if (!value.IsUndefined() && !value.IsNull() && value.ToBoolean().Value()) {
+            db_mode.val |= db_mode::create;
+        }
+    }
+
     return get_dbi(db_name.empty() ? nullptr : db_name.c_str(), 
-        key_flag, value_flag, key_mode, value_mode, db_mode);
+        key_flag, value_flag, key_mode, value_mode, db_mode, db_flags_override);
 }
 
 Napi::Value txnmou::get_dbi(const Napi::CallbackInfo& info, db_mode db_mode)

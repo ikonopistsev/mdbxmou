@@ -73,6 +73,16 @@ export interface MDBXDbiStat {
   modTxnId: number;
 }
 
+export interface MDBXMapOptions {
+  name?: string;
+  keyFlag?: number;
+  valueFlag?: number;
+  keyMode?: number | bigint;
+  valueMode?: number;
+  flags?: number;
+  create?: boolean;
+}
+
 /** Result of cursor navigation/search operations */
 export interface MDBXCursorResult<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDBXValue> {
   key: K;
@@ -237,12 +247,14 @@ export interface MDBX_Txn {
   openMap(keyMode: number | bigint): MDBX_Dbi;
   openMap(name: string): MDBX_Dbi;
   openMap(name: string, keyMode: number | bigint): MDBX_Dbi;
+  openMap(options: MDBXMapOptions): MDBX_Dbi;
 
   createMap(keyMode: number | bigint): MDBX_Dbi;
   createMap(name: string): MDBX_Dbi;
   createMap(keyMode: number | bigint, valueMode: number): MDBX_Dbi;
   createMap(name: string, keyMode: number | bigint): MDBX_Dbi;
   createMap(name: string, keyMode: number | bigint, valueMode: number): MDBX_Dbi;
+  createMap(options: MDBXMapOptions): MDBX_Dbi;
 
   /** Open a cursor for the given dbi */
   openCursor<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDBXValue>(
@@ -340,6 +352,7 @@ export interface MDBX_Param {
     readonly spillMaxDenominator: number;
     readonly spillMinDenominator: number;
     readonly spillParent4childDenominator: number;
+    readonly mergeThreshold: number;
     readonly mergeThreshold16dot16Percent: number;
     readonly writethroughThreshold: number;
     readonly prefaultWriteEnable: number;
@@ -349,6 +362,13 @@ export interface MDBX_Param {
     readonly subpageRoomThreshold: number;
     readonly subpageReservePrereq: number;
     readonly subpageReserveLimit: number;
+    readonly splitReserve: number;
+  };
+
+  readonly copyFlag: {
+    readonly defaults: number;
+    readonly compact: number;
+    readonly overwrite: number;
   };
 
   readonly txnMode: {

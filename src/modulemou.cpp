@@ -39,7 +39,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "spillMaxDenominator", MDBX_option::MDBX_opt_spill_max_denominator);
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "spillMinDenominator", MDBX_option::MDBX_opt_spill_min_denominator);
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "spillParent4childDenominator", MDBX_option::MDBX_opt_spill_parent4child_denominator);
-    MDBXMOU_DECLARE_FLAG_NAME(envOption, "mergeThreshold16dot16Percent", MDBX_option::MDBX_opt_merge_threshold_16dot16_percent);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "mergeThreshold", MDBX_option::MDBX_opt_merge_threshold);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "mergeThreshold16dot16Percent", MDBX_option::MDBX_opt_merge_threshold);
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "writethroughThreshold", MDBX_option::MDBX_opt_writethrough_threshold);
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "prefaultWriteEnable", MDBX_option::MDBX_opt_prefault_write_enable);
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "gcTimeLimit", MDBX_option::MDBX_opt_gc_time_limit);
@@ -48,7 +49,14 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "subpageRoomThreshold", MDBX_option::MDBX_opt_subpage_room_threshold);
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "subpageReservePrereq", MDBX_option::MDBX_opt_subpage_reserve_prereq);
     MDBXMOU_DECLARE_FLAG_NAME(envOption, "subpageReserveLimit", MDBX_option::MDBX_opt_subpage_reserve_limit);
+    MDBXMOU_DECLARE_FLAG_NAME(envOption, "splitReserve", MDBX_option::MDBX_opt_split_reserve);
     mdbx_mou.Set("envOption", envOption);
+
+    Napi::Object copyFlag = Napi::Object::New(env);
+    MDBXMOU_DECLARE_FLAG_NAME(copyFlag, "defaults", MDBX_CP_DEFAULTS);
+    MDBXMOU_DECLARE_FLAG_NAME(copyFlag, "compact", MDBX_CP_COMPACT);
+    MDBXMOU_DECLARE_FLAG_NAME(copyFlag, "overwrite", MDBX_CP_OVERWRITE);
+    mdbx_mou.Set("copyFlag", copyFlag);
 
     using mdbxmou::txn_mode;
     Napi::Object txnMode = Napi::Object::New(env);
