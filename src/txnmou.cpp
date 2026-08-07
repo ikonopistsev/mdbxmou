@@ -2,6 +2,7 @@
 #include "envmou.hpp"
 #include "cursormou.hpp"
 #include <exception>
+#include <new>
 
 #if NAPI_VERSION != 8
 #error "mdbxmou requires N-API v8"
@@ -17,11 +18,21 @@ static_assert(Napi::details::HasExtendedFinalizer<txnmou>::value,
 	"txnmou must use the extended N-API finalizer");
 
 Napi::FunctionReference txnmou::ctor{};
+const napi_type_tag txnmou::type_tag_{
+	0xd4f5b982e8a7419aULL,
+	0x9c63f1472e0db5c4ULL,
+};
 
 bool txnmou::is_instance(const Napi::Value& value) noexcept
 {
-	return value.IsObject() &&
-		value.As<Napi::Object>().InstanceOf(ctor.Value());
+	if (!value.IsObject()) {
+		return false;
+	}
+
+	bool matches{};
+	return napi_check_object_type_tag(
+			   value.Env(), value, &type_tag_, &matches) == napi_ok &&
+		matches;
 }
 
 txnmou* txnmou::unwrap_checked(
@@ -31,7 +42,13 @@ txnmou* txnmou::unwrap_checked(
 		throw Napi::TypeError::New(env,
 			std::string(method_name) + ": argument must be MDBX_Txn instance");
 	}
-	return Napi::ObjectWrap<txnmou>::Unwrap(value.As<Napi::Object>());
+
+	void* wrapper{};
+	if (napi_unwrap(env, value, &wrapper) != napi_ok || !wrapper) {
+		throw Napi::TypeError::New(env,
+			std::string(method_name) + ": argument must be MDBX_Txn instance");
+	}
+	return static_cast<txnmou*>(wrapper);
 }
 
 txnmou::~txnmou() noexcept
@@ -52,6 +69,13 @@ void txnmou::init(const char* class_name, Napi::Env env)
 			InstanceMethod("createMap", &txnmou::create_map),
 			InstanceMethod("openCursor", &txnmou::open_cursor),
 			InstanceMethod("isActive", &txnmou::is_active_js),
+#if defined(MDBXMOU_TESTING)
+			InstanceMethod("_debugIssueView", &txnmou::debug_issue_view),
+			InstanceMethod("_debugViewStats", &txnmou::debug_view_stats),
+			InstanceMethod("_debugPruneViews", &txnmou::debug_prune_views),
+			InstanceMethod(
+				"_debugFailNextDetach", &txnmou::debug_fail_next_detach),
+#endif
 		});
 
 	ctor = Napi::Persistent(func);
@@ -182,29 +206,221 @@ void txnmou::Finalize(Napi::Env env)
 	release_environment(owner);
 }
 
-void txnmou::track_view(napi_env, napi_value)
+Napi::Value txnmou::issue_view(napi_env env,
+	const mdbx::slice& value,
+	bool tracked,
+	view_issue_fault fault)
 {
-	throw std::logic_error("borrowed view tracking is not implemented");
+	auto result = make_external_value_view(env, value, fault);
+	if (tracked && result.borrowed) {
+		track_view(env, result.array_buffer, fault);
+	}
+	return Napi::Value(env, result.data_view);
 }
 
-void txnmou::detach_issued_or_throw(napi_env)
+Napi::Value txnmou::issue_borrowed_view(napi_env env, const mdbx::slice& value)
 {
-	assert(issued_views_.empty());
+	return issue_view(env, value, track_borrowed_views_);
 }
 
-void txnmou::detach_issued_noexcept(napi_env) noexcept
+void txnmou::track_view(
+	napi_env env, napi_value array_buffer, view_issue_fault fault)
 {
-	if (!issued_views_.empty()) {
+	maybe_prune_dead_views(env);
+
+	napi_ref ref{};
+	if (napi_create_reference(env, array_buffer, 0, &ref) != napi_ok) {
+		detach_pending_external_view(
+			env, array_buffer, "mdbxmou::txnmou::track_view");
+		throw Napi::Error::New(
+			env, "failed to create MDBX borrowed ArrayBuffer reference");
+	}
+
+	const auto rollback = [&]() noexcept {
+		detach_pending_external_view(
+			env, array_buffer, "mdbxmou::txnmou::track_view");
+		// Once detached, a reference cleanup failure can leak bookkeeping but
+		// cannot expose MDBX memory through the unpublished ArrayBuffer.
+		(void)napi_delete_reference(env, ref);
+	};
+
+	try {
+		if (fault == view_issue_fault::after_reference) {
+			throw Napi::Error::New(
+				env, "debug fault after weak reference creation");
+		}
+		if (fault == view_issue_fault::registry_push) {
+			throw std::bad_alloc{};
+		}
+		issued_views_.push_back({ref});
+	} catch (const std::bad_alloc&) {
+		rollback();
+		throw Napi::Error::New(
+			env, "failed to store MDBX borrowed ArrayBuffer reference");
+	} catch (...) {
+		rollback();
+		throw;
+	}
+}
+
+txnmou::detach_result txnmou::detach_issued(napi_env env) noexcept
+{
+	std::size_t write_index{};
+	detach_result result{};
+
+	for (const auto item : issued_views_) {
+		bool keep{};
+		napi_value array_buffer{};
+
+#if defined(MDBXMOU_TESTING)
+		const auto fail_get = consume_detach_fault(detach_fault::get_reference);
+#else
+		constexpr bool fail_get{false};
+#endif
+		if (fail_get ||
+			napi_get_reference_value(
+				env, item.array_buffer_ref, &array_buffer) != napi_ok) {
+			keep = true;
+			result.buffers_safe = false;
+		}
+
+		if (!keep && array_buffer) {
+			bool detached{};
+#if defined(MDBXMOU_TESTING)
+			const auto fail_is =
+				consume_detach_fault(detach_fault::is_detached);
+#else
+			constexpr bool fail_is{false};
+#endif
+			if (fail_is ||
+				napi_is_detached_arraybuffer(env, array_buffer, &detached) !=
+					napi_ok) {
+				keep = true;
+				result.buffers_safe = false;
+			}
+
+			if (!keep && !detached) {
+#if defined(MDBXMOU_TESTING)
+				const auto fail_detach =
+					consume_detach_fault(detach_fault::detach);
+#else
+				constexpr bool fail_detach{false};
+#endif
+				auto detach_status = napi_ok;
+				if (!fail_detach) {
+#if defined(MDBXMOU_TESTING)
+					++detach_calls_;
+#endif
+					detach_status = napi_detach_arraybuffer(env, array_buffer);
+				}
+				if (fail_detach || detach_status != napi_ok) {
+					keep = true;
+					result.buffers_safe = false;
+				}
+			}
+		}
+
+		if (!keep) {
+#if defined(MDBXMOU_TESTING)
+			const auto fail_delete =
+				consume_detach_fault(detach_fault::delete_reference);
+#else
+			constexpr bool fail_delete{false};
+#endif
+			if (fail_delete ||
+				napi_delete_reference(env, item.array_buffer_ref) != napi_ok) {
+				keep = true;
+			}
+		}
+
+		if (keep) {
+			result.references_released = false;
+			issued_views_[write_index++] = item;
+		}
+	}
+
+	issued_views_.resize(write_index);
+	update_prune_threshold();
+	return result;
+}
+
+void txnmou::detach_issued_or_throw(napi_env env)
+{
+	const auto result = detach_issued(env);
+	if (!result.buffers_safe || !result.references_released) {
+		throw Napi::Error::New(env, "failed to detach MDBX borrowed views");
+	}
+}
+
+void txnmou::detach_issued_noexcept(napi_env env) noexcept
+{
+	const auto result = detach_issued(env);
+	if (!result.buffers_safe) {
 		// Snapshot teardown cannot continue until every registered external buffer
 		// is detached; otherwise JavaScript retains pointers to unmapped memory.
 		Napi::Error::Fatal("mdbxmou::txnmou::detach_issued_noexcept",
 			"borrowed views remain attached during transaction finalization");
 	}
+
+	if (!result.references_released) {
+		// Every remaining target is dead or detached. Finalization cannot be
+		// retried, so release refs best-effort and let environment teardown reclaim
+		// any Node-API bookkeeping that still cannot be deleted.
+		for (const auto item : issued_views_) {
+			(void)napi_delete_reference(env, item.array_buffer_ref);
+		}
+		issued_views_.clear();
+		update_prune_threshold();
+	}
 }
 
-void txnmou::prune_dead_views(napi_env) noexcept
+void txnmou::maybe_prune_dead_views(napi_env env) noexcept
 {
-	assert(issued_views_.empty());
+	if (issued_views_.size() >= next_prune_at_) {
+		prune_dead_views(env);
+	}
+}
+
+void txnmou::prune_dead_views(napi_env env) noexcept
+{
+	std::size_t write_index{};
+	std::size_t removed{};
+
+	for (const auto item : issued_views_) {
+		napi_value array_buffer{};
+		const auto get_status =
+			napi_get_reference_value(env, item.array_buffer_ref, &array_buffer);
+		const auto dead = get_status == napi_ok && !array_buffer;
+		const auto deleted = dead &&
+			napi_delete_reference(env, item.array_buffer_ref) == napi_ok;
+
+		if (deleted) {
+			++removed;
+		} else {
+			issued_views_[write_index++] = item;
+		}
+	}
+
+	issued_views_.resize(write_index);
+#if defined(MDBXMOU_TESTING)
+	++prune_runs_;
+	pruned_refs_ += removed;
+#else
+	(void)removed;
+#endif
+	update_prune_threshold();
+}
+
+void txnmou::update_prune_threshold() noexcept
+{
+	const auto size = issued_views_.size();
+	if (size < initial_prune_threshold) {
+		next_prune_at_ = initial_prune_threshold;
+	} else if (size > std::numeric_limits<std::size_t>::max() / 2) {
+		next_prune_at_ = std::numeric_limits<std::size_t>::max();
+	} else {
+		next_prune_at_ = size * 2;
+	}
 }
 
 Napi::Value txnmou::get_dbi(const char* name,
@@ -435,8 +651,152 @@ Napi::Value txnmou::is_active_js(const Napi::CallbackInfo& info)
 	return Napi::Boolean::New(info.Env(), is_active());
 }
 
-void txnmou::attach(
-	const Napi::Object& env_object, MDBX_txn* txn, txn_mode mode)
+#if defined(MDBXMOU_TESTING)
+bool txnmou::consume_detach_fault(detach_fault fault) noexcept
+{
+	if (next_detach_fault_ != fault) {
+		return false;
+	}
+	next_detach_fault_ = detach_fault::none;
+	return true;
+}
+
+Napi::Value txnmou::debug_issue_view(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	try {
+		if (!is_active()) {
+			throw Napi::Error::New(
+				env, "debugIssueView: txn already completed");
+		}
+		if (!is_readonly()) {
+			throw Napi::Error::New(
+				env, "debugIssueView: read-only transaction required");
+		}
+		if (info.Length() < 2 || !info[0].IsObject()) {
+			throw Napi::TypeError::New(
+				env, "debugIssueView: dbi and key required");
+		}
+
+		auto dbi_object = info[0].As<Napi::Object>();
+		if (!dbi_object.InstanceOf(dbimou::ctor.Value())) {
+			throw Napi::TypeError::New(env,
+				"debugIssueView: first argument must be MDBX_Dbi instance");
+		}
+		auto* dbi_wrapper = dbimou::Unwrap(dbi_object);
+
+		bool tracked{true};
+		view_issue_fault fault{view_issue_fault::none};
+		if (info.Length() > 2 && !info[2].IsUndefined()) {
+			if (!info[2].IsObject()) {
+				throw Napi::TypeError::New(
+					env, "debugIssueView: options must be an object");
+			}
+			auto options = info[2].As<Napi::Object>();
+			if (options.Has("tracked")) {
+				auto value = options.Get("tracked");
+				if (!value.IsBoolean()) {
+					throw Napi::TypeError::New(
+						env, "debugIssueView: tracked must be a boolean");
+				}
+				tracked = value.As<Napi::Boolean>().Value();
+			}
+			if (options.Has("fault")) {
+				auto value = options.Get("fault");
+				if (!value.IsString()) {
+					throw Napi::TypeError::New(
+						env, "debugIssueView: fault must be a string");
+				}
+				const auto name = value.As<Napi::String>().Utf8Value();
+				if (name == "afterArrayBuffer") {
+					fault = view_issue_fault::after_array_buffer;
+				} else if (name == "afterDataView") {
+					fault = view_issue_fault::after_data_view;
+				} else if (name == "afterReference") {
+					fault = view_issue_fault::after_reference;
+				} else if (name == "registryPush") {
+					fault = view_issue_fault::registry_push;
+				} else if (name != "none") {
+					throw Napi::TypeError::New(
+						env, "debugIssueView: unknown fault");
+				}
+			}
+		}
+
+		buffer_type key_buffer{};
+		std::uint64_t key_number{};
+		const auto key = mdbx::is_ordinal(dbi_wrapper->get_key_mode())
+			? keymou::from(info[1], env, key_number)
+			: keymou::from(info[1], env, key_buffer);
+		const auto& raw_dbi = static_cast<const dbi&>(*dbi_wrapper);
+		const auto value = raw_dbi.get(txn_.get(), key);
+		if (value.is_null()) {
+			return env.Undefined();
+		}
+		return issue_view(env, value, tracked, fault);
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& error) {
+		throw Napi::Error::New(env, error.what());
+	} catch (...) {
+		throw Napi::Error::New(env, "debugIssueView: native operation failed");
+	}
+}
+
+Napi::Value txnmou::debug_view_stats(const Napi::CallbackInfo& info)
+{
+	auto result = Napi::Object::New(info.Env());
+	result.Set("issued",
+		Napi::Number::New(
+			info.Env(), static_cast<double>(issued_views_.size())));
+	result.Set("nextPruneAt",
+		Napi::Number::New(info.Env(), static_cast<double>(next_prune_at_)));
+	result.Set("pruneRuns",
+		Napi::Number::New(info.Env(), static_cast<double>(prune_runs_)));
+	result.Set("prunedRefs",
+		Napi::Number::New(info.Env(), static_cast<double>(pruned_refs_)));
+	result.Set("detachCalls",
+		Napi::Number::New(info.Env(), static_cast<double>(detach_calls_)));
+	return result;
+}
+
+Napi::Value txnmou::debug_prune_views(const Napi::CallbackInfo& info)
+{
+	prune_dead_views(info.Env());
+	return debug_view_stats(info);
+}
+
+Napi::Value txnmou::debug_fail_next_detach(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	if (info.Length() < 1 || !info[0].IsString()) {
+		throw Napi::TypeError::New(
+			env, "debugFailNextDetach: fault name required");
+	}
+
+	const auto name = info[0].As<Napi::String>().Utf8Value();
+	if (name == "none") {
+		next_detach_fault_ = detach_fault::none;
+	} else if (name == "getReference") {
+		next_detach_fault_ = detach_fault::get_reference;
+	} else if (name == "isDetached") {
+		next_detach_fault_ = detach_fault::is_detached;
+	} else if (name == "detach") {
+		next_detach_fault_ = detach_fault::detach;
+	} else if (name == "deleteReference") {
+		next_detach_fault_ = detach_fault::delete_reference;
+	} else {
+		throw Napi::TypeError::New(env, "debugFailNextDetach: unknown fault");
+	}
+	return env.Undefined();
+}
+#endif
+
+void txnmou::attach(const Napi::Object& env_object,
+	MDBX_txn* txn,
+	txn_mode mode,
+	bool track_borrowed_views,
+	bool writemap)
 {
 	assert(!txn_);
 	assert(env_ref_.IsEmpty());
@@ -447,6 +807,8 @@ void txnmou::attach(
 	++(*env);
 	env_ref_ = std::move(env_ref);
 	mode_ = mode;
+	track_borrowed_views_ = track_borrowed_views;
+	writemap_ = writemap;
 	txn_.reset(txn);
 }
 

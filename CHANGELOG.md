@@ -76,6 +76,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **ID:** `MDBXMOU-0001-S3-M2`
+  **Summary:** CommonJS named type export for borrowed views.
+  **Long description:** The CommonJS declaration entrypoint now exposes
+  `MDBX_BorrowedView`, so consumers can use
+  `import type { MDBX_BorrowedView } from "mdbxmou"`. The type continues to
+  have a single definition in `lib/types.d.ts`.
 - **DBI drop() method**: Added `dbi.drop(txn, delete_db)` method for clearing database contents
   - `dbi.drop(txn, false)`: Clears all data but keeps database structure 
   - `dbi.drop(txn, true)`: Completely removes database and closes DBI handle
@@ -83,6 +89,11 @@ All notable changes to this project will be documented in this file.
 - **Comprehensive test coverage**: Added test/e6.js for drop functionality testing
 
 ### Changed
+- **ID:** `MDBXMOU-0001-S3-M3`
+  **Summary:** Explicit `undefined` preserves borrowed-view tracking defaults.
+  **Long description:** `trackBorrowedViews` remains strict for explicit
+  non-boolean values, while an explicitly supplied `undefined` is treated like
+  an omitted optional property and retains the safe default value `true`.
 - **API Documentation**: Complete README.md overhaul with transaction-based examples
   - All examples now properly show transaction parameter as first argument
   - Removed outdated MDBX_Async_Env references
@@ -97,6 +108,13 @@ All notable changes to this project will be documented in this file.
 - **CursorMode constants**: Updated to camelCase naming convention (e.g., `keyGreaterThan` instead of `key_greater_than`)
 
 ### Fixed
+- **ID:** `MDBXMOU-0001-S3-M1`
+  **Summary:** Native transaction identity no longer depends on JavaScript
+  prototypes.
+  **Long description:** Transaction wrappers now carry an N-API type tag.
+  Validation checks that tag without invoking JavaScript traps, so revoked
+  proxies and prototype-spoofed native wrappers fail with a stable `TypeError`
+  instead of terminating Node or allowing native type confusion.
 - **Empty database handling**: forEach no longer throws exceptions when called on empty databases
 - **Transaction syntax**: All code examples updated to match actual API requirements
 

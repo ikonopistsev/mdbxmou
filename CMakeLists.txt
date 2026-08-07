@@ -4,6 +4,8 @@ project(mdbxmou)
 
 add_definitions(-DNAPI_CPP_EXCEPTIONS)
 
+option(MDBXMOU_TESTING "Enable internal native test hooks" OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -23,12 +25,16 @@ add_library(${PROJECT_NAME} SHARED
     "src/querymou.cpp"
     "src/envmou.cpp" 
     "src/txnmou.cpp"
+    "src/viewmou.cpp"
     "src/convmou.cpp"
     "src/dbimou.cpp"
     "src/cursormou.cpp"
     "src/dbi.cpp")
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE NAPI_VERSION=8)
+if(MDBXMOU_TESTING)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE MDBXMOU_TESTING=1)
+endif()
 
 # Gives our library file a .node extension without any "lib" prefix
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "" SUFFIX ".node")

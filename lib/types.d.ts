@@ -61,6 +61,27 @@ export interface MDBXEnvOpenOptions {
   maxDbi?: number;
   mode?: number;
   geometry?: MDBXEnvGeometry;
+  trackBorrowedViews?: boolean;
+}
+
+declare const mdbxBorrowedView: unique symbol;
+
+export interface MDBX_BorrowedView {
+  readonly [mdbxBorrowedView]: true;
+  readonly buffer: ArrayBuffer;
+  readonly byteOffset: number;
+  readonly byteLength: number;
+
+  getInt8(byteOffset: number): number;
+  getUint8(byteOffset: number): number;
+  getInt16(byteOffset: number, littleEndian?: boolean): number;
+  getUint16(byteOffset: number, littleEndian?: boolean): number;
+  getInt32(byteOffset: number, littleEndian?: boolean): number;
+  getUint32(byteOffset: number, littleEndian?: boolean): number;
+  getBigInt64(byteOffset: number, littleEndian?: boolean): bigint;
+  getBigUint64(byteOffset: number, littleEndian?: boolean): bigint;
+  getFloat32(byteOffset: number, littleEndian?: boolean): number;
+  getFloat64(byteOffset: number, littleEndian?: boolean): number;
 }
 
 export interface MDBXDbiStat {
@@ -214,6 +235,7 @@ export interface MDBX_Dbi<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDB
 
   put(txn: MDBX_Txn, key: K, value: MDBXValue, flags?: number): void;
   get(txn: MDBX_Txn, key: K): V | undefined;
+  getView(txn: MDBX_Txn, key: K): MDBX_BorrowedView | undefined;
   del(txn: MDBX_Txn, key: K): boolean;
   has(txn: MDBX_Txn, key: K): boolean;
 

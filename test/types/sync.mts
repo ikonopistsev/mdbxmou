@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-import native, { MDBX_Env, MDBX_Param, type MDBXCursorMode } from "mdbxmou";
+import native, {
+  MDBX_Env,
+  MDBX_Param,
+  type MDBX_BorrowedView,
+  type MDBXCursorMode
+} from "mdbxmou";
 
 const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), "mdbxmou-ts-"));
 const dbPath = path.join(tmp, "e4");
@@ -25,6 +30,13 @@ const r = env.startRead();
 const dbi2 = r.openMap(BigInt(MDBX_Param.keyMode.ordinal));
 const v = dbi2.get(r, 2n);
 v?.toString();
+const view: MDBX_BorrowedView | undefined = dbi2.getView(r, 2n);
+view?.getUint32(0, true);
+// @ts-expect-error borrowed views intentionally omit mutable DataView setters
+view?.setUint8(0, 1);
+
+// @ts-expect-error trackBorrowedViews accepts booleans only
+env.openSync({ path: dbPath, trackBorrowedViews: "false" });
 
 const cursorMode: MDBXCursorMode = "keyGreaterOrEqual";
 dbi2.forEach(r, 0n, cursorMode, (_k, _val) => false);

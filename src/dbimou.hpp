@@ -61,24 +61,25 @@ public:
 
     static void init(const char *class_name, Napi::Env env);
 
-    // valuemou read(const MDBX_txn* txn);
-    // valuemou read(const MDBX_txn* txn, const keymou& key);
+	// valuemou read(const MDBX_txn* txn);
+	// valuemou read(const MDBX_txn* txn, const keymou& key);
 
-    // Основные операции (только синхронные)
-    Napi::Value put(const Napi::CallbackInfo&);
-    Napi::Value get(const Napi::CallbackInfo&);
-    Napi::Value del(const Napi::CallbackInfo&);
-    Napi::Value has(const Napi::CallbackInfo&);
-    Napi::Value for_each(const Napi::CallbackInfo&);
-    Napi::Value stat(const Napi::CallbackInfo&);
-    Napi::Value flags(const Napi::CallbackInfo&);
-    Napi::Value keys(const Napi::CallbackInfo&);
-    Napi::Value keys_from(const Napi::CallbackInfo&);
-    Napi::Value get_range(const Napi::CallbackInfo&);
-    Napi::Value get_count(const Napi::CallbackInfo&);
-    Napi::Value keys_range(const Napi::CallbackInfo&);
-    Napi::Value values_range(const Napi::CallbackInfo&);
-    Napi::Value drop(const Napi::CallbackInfo&);
+	// Основные операции (только синхронные)
+	Napi::Value put(const Napi::CallbackInfo&);
+	Napi::Value get(const Napi::CallbackInfo&);
+	Napi::Value get_view(const Napi::CallbackInfo&);
+	Napi::Value del(const Napi::CallbackInfo&);
+	Napi::Value has(const Napi::CallbackInfo&);
+	Napi::Value for_each(const Napi::CallbackInfo&);
+	Napi::Value stat(const Napi::CallbackInfo&);
+	Napi::Value flags(const Napi::CallbackInfo&);
+	Napi::Value keys(const Napi::CallbackInfo&);
+	Napi::Value keys_from(const Napi::CallbackInfo&);
+	Napi::Value get_range(const Napi::CallbackInfo&);
+	Napi::Value get_count(const Napi::CallbackInfo&);
+	Napi::Value keys_range(const Napi::CallbackInfo&);
+	Napi::Value values_range(const Napi::CallbackInfo&);
+	Napi::Value drop(const Napi::CallbackInfo&);
 
 private:
     // Внутренний метод для forEach с начальным ключом

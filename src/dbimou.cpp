@@ -291,35 +291,38 @@ Napi::Value run_range_count(const Napi::CallbackInfo& info, dbimou& self, const 
 
 Napi::FunctionReference dbimou::ctor{};
 
-void dbimou::init(const char *class_name, Napi::Env env)
+void dbimou::init(const char* class_name, Napi::Env env)
 {
-    auto func = DefineClass(env, class_name, {
-        InstanceMethod("put", &dbimou::put),
-        InstanceMethod("get", &dbimou::get),
-        InstanceMethod("del", &dbimou::del),
-        InstanceMethod("has", &dbimou::has),
-        InstanceMethod("forEach", &dbimou::for_each),
-        InstanceMethod("stat", &dbimou::stat),
-        InstanceMethod("flags", &dbimou::flags),
-        InstanceMethod("keys", &dbimou::keys),
-        InstanceMethod("keysFrom", &dbimou::keys_from),
-        InstanceMethod("getRange", &dbimou::get_range),
-        InstanceMethod("getCount", &dbimou::get_count),
-        InstanceMethod("keysRange", &dbimou::keys_range),
-        InstanceMethod("valuesRange", &dbimou::values_range),
-        InstanceMethod("drop", &dbimou::drop),
-        
-        // Свойства только для чтения
-        InstanceAccessor("id", &dbimou::get_id, nullptr),
-        InstanceAccessor("dbMode", &dbimou::get_mode, nullptr),
-        InstanceAccessor("keyMode", &dbimou::get_key_mode, nullptr),
-        InstanceAccessor("valueMode", &dbimou::get_value_mode, nullptr),
-        InstanceAccessor("keyFlag", &dbimou::get_key_flag, nullptr),
-        InstanceAccessor("valueFlag", &dbimou::get_value_flag, nullptr),
-    });
+	auto func = DefineClass(env,
+		class_name,
+		{
+			InstanceMethod("put", &dbimou::put),
+			InstanceMethod("get", &dbimou::get),
+			InstanceMethod("getView", &dbimou::get_view),
+			InstanceMethod("del", &dbimou::del),
+			InstanceMethod("has", &dbimou::has),
+			InstanceMethod("forEach", &dbimou::for_each),
+			InstanceMethod("stat", &dbimou::stat),
+			InstanceMethod("flags", &dbimou::flags),
+			InstanceMethod("keys", &dbimou::keys),
+			InstanceMethod("keysFrom", &dbimou::keys_from),
+			InstanceMethod("getRange", &dbimou::get_range),
+			InstanceMethod("getCount", &dbimou::get_count),
+			InstanceMethod("keysRange", &dbimou::keys_range),
+			InstanceMethod("valuesRange", &dbimou::values_range),
+			InstanceMethod("drop", &dbimou::drop),
 
-    ctor = Napi::Persistent(func);
-    ctor.SuppressDestruct();
+			// Свойства только для чтения
+			InstanceAccessor("id", &dbimou::get_id, nullptr),
+			InstanceAccessor("dbMode", &dbimou::get_mode, nullptr),
+			InstanceAccessor("keyMode", &dbimou::get_key_mode, nullptr),
+			InstanceAccessor("valueMode", &dbimou::get_value_mode, nullptr),
+			InstanceAccessor("keyFlag", &dbimou::get_key_flag, nullptr),
+			InstanceAccessor("valueFlag", &dbimou::get_value_flag, nullptr),
+		});
+
+	ctor = Napi::Persistent(func);
+	ctor.SuppressDestruct();
 }
 
 Napi::Value dbimou::put(const Napi::CallbackInfo& info) 
@@ -381,14 +384,55 @@ Napi::Value dbimou::get(const Napi::CallbackInfo& info)
     return env.Undefined();
 }
 
-Napi::Value dbimou::del(const Napi::CallbackInfo& info) 
+Napi::Value dbimou::get_view(const Napi::CallbackInfo& info)
 {
-    Napi::Env env = info.Env();
-    auto arg_len = info.Length();
-    if (arg_len < 2) {
-        throw Napi::Error::New(env, "del: txnmou and key required");
-    }
-    auto txn = txnmou::unwrap_checked(env, info[0], "del");
+	Napi::Env env = info.Env();
+	// MDBXMOU-0001-S3-M1: validate wrappers inside the native error boundary.
+	try {
+		if (info.Length() < 2) {
+			throw Napi::TypeError::New(
+				env, "getView: transaction and key required");
+		}
+
+		auto* txn = txnmou::unwrap_checked(env, info[0], "getView");
+		if (!txn->is_active()) {
+			throw Napi::Error::New(env, "getView: txn already completed");
+		}
+		if (!txn->is_readonly()) {
+			throw Napi::TypeError::New(
+				env, "getView: read-only transaction required");
+		}
+		if (txn->is_writemap()) {
+			throw Napi::Error::New(
+				env, "getView: MDBX_WRITEMAP is not supported");
+		}
+
+		std::uint64_t key_number{};
+		auto key = mdbx::is_ordinal(key_mode_)
+			? keymou::from(info[1], env, key_number)
+			: keymou::from(info[1], env, key_buf_);
+		auto value = dbi::get(*txn, key);
+		if (value.is_null()) {
+			return env.Undefined();
+		}
+		return txn->issue_borrowed_view(env, value);
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& error) {
+		throw Napi::Error::New(env, std::string("getView: ") + error.what());
+	} catch (...) {
+		throw Napi::Error::New(env, "getView: unknown native exception");
+	}
+}
+
+Napi::Value dbimou::del(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	auto arg_len = info.Length();
+	if (arg_len < 2) {
+		throw Napi::Error::New(env, "del: txnmou and key required");
+	}
+	auto txn = txnmou::unwrap_checked(env, info[0], "del");
 
     try {
         std::uint64_t t;
