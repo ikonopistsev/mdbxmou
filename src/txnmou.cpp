@@ -618,12 +618,7 @@ Napi::Value txnmou::open_cursor(const Napi::CallbackInfo& info)
 	}
 
 	auto arg0 = info[0].As<Napi::Object>();
-	if (!arg0.InstanceOf(dbimou::ctor.Value())) {
-		throw Napi::TypeError::New(
-			env, "openCursor: first argument must be MDBX_Dbi instance");
-	}
-
-	auto dbi = dbimou::Unwrap(arg0);
+	auto* dbi = dbimou::unwrap_checked(env, arg0, "openCursor");
 
 	MDBX_cursor* cursor{};
 	auto rc = mdbx_cursor_open(txn_.get(), dbi->get_id(), &cursor);
@@ -679,11 +674,8 @@ Napi::Value txnmou::debug_issue_view(const Napi::CallbackInfo& info)
 		}
 
 		auto dbi_object = info[0].As<Napi::Object>();
-		if (!dbi_object.InstanceOf(dbimou::ctor.Value())) {
-			throw Napi::TypeError::New(env,
-				"debugIssueView: first argument must be MDBX_Dbi instance");
-		}
-		auto* dbi_wrapper = dbimou::Unwrap(dbi_object);
+		auto* dbi_wrapper =
+			dbimou::unwrap_checked(env, dbi_object, "debugIssueView");
 
 		bool tracked{true};
 		view_issue_fault fault{view_issue_fault::none};

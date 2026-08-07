@@ -108,6 +108,12 @@ All notable changes to this project will be documented in this file.
 - **CursorMode constants**: Updated to camelCase naming convention (e.g., `keyGreaterThan` instead of `key_greater_than`)
 
 ### Fixed
+- **ID:** `MDBXMOU-0001-S4-M1`
+  **Summary:** DBI identity no longer depends on JavaScript prototypes.
+  **Long description:** DBI wrappers now carry an N-API type tag. Cursor and
+  asynchronous query parsing validate that tag before unwrapping native state,
+  so prototype-spoofed objects fail with a stable JavaScript error instead of being
+  interpreted as an `MDBX_Dbi` wrapper.
 - **ID:** `MDBXMOU-0001-S3-M1`
   **Summary:** Native transaction identity no longer depends on JavaScript
   prototypes.

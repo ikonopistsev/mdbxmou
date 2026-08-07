@@ -290,6 +290,39 @@ Napi::Value run_range_count(const Napi::CallbackInfo& info, dbimou& self, const 
 } // namespace
 
 Napi::FunctionReference dbimou::ctor{};
+const napi_type_tag dbimou::type_tag_{
+    0x6f43d8a92c1e475bULL,
+    0xb5810ed347fa962cULL,
+};
+
+bool dbimou::is_instance(const Napi::Value& value) noexcept
+{
+    if (!value.IsObject()) {
+        return false;
+    }
+
+    bool matches{};
+    return napi_check_object_type_tag(
+               value.Env(), value, &type_tag_, &matches) == napi_ok &&
+        matches;
+}
+
+dbimou* dbimou::unwrap_checked(
+    const Napi::Env& env, const Napi::Value& value, const char* method_name)
+{
+    std::string message{method_name};
+    message += ": argument must be MDBX_Dbi instance";
+
+    if (!is_instance(value)) {
+        throw Napi::TypeError::New(env, message);
+    }
+
+    void* wrapper{};
+    if (napi_unwrap(env, value, &wrapper) != napi_ok || !wrapper) {
+        throw Napi::TypeError::New(env, message);
+    }
+    return static_cast<dbimou*>(wrapper);
+}
 
 void dbimou::init(const char* class_name, Napi::Env env)
 {

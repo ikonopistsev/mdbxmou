@@ -67,6 +67,7 @@
     "test:stage2": "node build.js --testing && node --expose-gc --test ./test/stage2-borrowed-views.test.js",
     "test:stage2:surface": "node build.js && node ./test/stage2/production-surface.js",
     "test:stage3": "node build.js --testing && node --test ./test/stage3-get-view.test.js && node build.js && node ./test/stage3/production-surface.js && node ./test/types/run.mjs",
+    "test:stage4": "node build.js --testing && node --test ./test/stage4-dbi-safety.test.js",
     "test:types": "node ./test/types/run.mjs",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
