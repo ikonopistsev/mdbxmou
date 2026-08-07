@@ -62,6 +62,7 @@
     "e7": "node ./test/e7.js",
     "e8": "node ./test/e8.js",
     "e9": "node ./test/e9.js",
+    "test:stage1": "node --test ./test/stage1-lifecycle.test.js",
     "test:types": "node ./test/types/run.mjs",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
@@ -69,7 +70,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Node bindings for mdbx",
   "repository": {
     "type": "git",

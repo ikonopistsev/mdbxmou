@@ -6,6 +6,7 @@
 #include "async/envmou_keys.hpp"
 #include "async/envmou_close.hpp"
 #include <cmath>
+#include <exception>
 #include <limits>
 
 #ifdef _WIN32
@@ -17,6 +18,21 @@
 namespace mdbxmou {
 
 namespace {
+
+struct abort_transaction final {
+	void operator()(MDBX_txn* txn) const noexcept
+	{
+		const auto rc = mdbx_txn_abort(txn);
+		if (rc == MDBX_THREAD_MISMATCH) {
+			// Begin and rollback run on this thread under the environment lock. A
+			// mismatch breaks that invariant, and no owner remains to retry abort;
+			// continuing would leave the environment with an unreachable live txn.
+			Napi::Error::Fatal("mdbxmou::abort_transaction",
+				"MDBX_THREAD_MISMATCH while rolling back an unattached "
+				"transaction");
+		}
+	}
+};
 
 std::uint64_t parse_option_value(const Napi::Env &env, const Napi::Value &arg0)
 {
@@ -362,30 +378,35 @@ Napi::Value envmou::get_version(const Napi::CallbackInfo& info)
     return Napi::Value::From(info.Env(), version);
 }
 
-Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, txn_mode mode) 
+Napi::Value envmou::start_transaction(
+	const Napi::CallbackInfo& info, txn_mode mode)
 {
-    auto env = info.Env();
-    
-    try {
-        lock_guard l(*this);
+	auto env = info.Env();
 
-        check();
+	try {
+		lock_guard l(*this);
 
-        MDBX_txn* txn;
-        auto rc = mdbx_txn_begin(*this, nullptr, mode, &txn);
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, std::string("Env: ") + mdbx_strerror(rc));
-        }
+		check();
 
-        // Создаем новый объект txnmou
-        auto txn_obj = txnmou::ctor.New({});
-        auto txn_wrapper = txnmou::Unwrap(txn_obj);
-        txn_wrapper->attach(*this, txn, mode);
+		MDBX_txn* txn{};
+		auto rc = mdbx_txn_begin(*this, nullptr, mode, &txn);
+		if (rc != MDBX_SUCCESS) {
+			throw Napi::Error::New(
+				env, std::string("Env: ") + mdbx_strerror(rc));
+		}
+		std::unique_ptr<MDBX_txn, abort_transaction> txn_owner{txn};
 
-        return txn_obj;
-    } catch (const std::exception& e) {
-        throw Napi::Error::New(env, e.what());
-    }
+		// Создаем новый объект txnmou
+		auto txn_obj = txnmou::ctor.New({});
+		auto txn_wrapper = txnmou::Unwrap(txn_obj);
+		txn_wrapper->attach(
+			info.This().As<Napi::Object>(), txn_owner.get(), mode);
+		txn_owner.release();
+
+		return txn_obj;
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, e.what());
+	}
 }
 
 Napi::Value envmou::query(const Napi::CallbackInfo& info)

@@ -1,88 +1,127 @@
 #pragma once
 
 #include "dbimou.hpp"
+#include <cassert>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace mdbxmou {
 
 class envmou;
 
-class txnmou final 
-    : public Napi::ObjectWrap<txnmou>
+class txnmou final : public Napi::ObjectWrap<txnmou>
 {
 private:
-    envmou* env_{nullptr};
-    
-    // свободу txn
-    struct free_txn
-    {
-        void operator()(MDBX_txn *txn) const noexcept {
-            mdbx_txn_abort(txn);
-        }
-    };
+	struct issued_view_ref final {
+		napi_ref array_buffer_ref{};
+	};
 
-    std::unique_ptr<MDBX_txn, free_txn> txn_{};
-    txn_mode mode_{};
-    std::size_t cursor_count_{};
-    
-    // Уменьшает счетчик транзакций
-    void dec_counter() noexcept;
+	enum class completion_kind {
+		commit,
+		abort,
+	};
 
-    Napi::Value get_dbi(const char* name, base_flag key_flag, base_flag value_flag,
-        key_mode key_mode, value_mode value_mode, db_mode db_mode,
-        int db_flags_override = -1);
-    Napi::Value get_dbi(const Napi::Object& arg0, db_mode db_mode);
-    Napi::Value get_dbi(const Napi::CallbackInfo& info, db_mode db_mode);
+	struct free_txn {
+		void operator()(MDBX_txn* txn) const noexcept
+		{
+			mdbx_txn_abort(txn);
+		}
+	};
 
-public:    
-    static Napi::FunctionReference ctor;
-    static bool is_instance(const Napi::Value& value) noexcept;
-    static txnmou* unwrap_checked(const Napi::Env& env,
-        const Napi::Value& value, const char* method_name);
+	Napi::ObjectReference env_ref_{};
+	std::unique_ptr<MDBX_txn, free_txn> txn_{};
+	txn_mode mode_{};
+	std::size_t cursor_count_{};
+	std::vector<issued_view_ref> issued_views_{};
 
-    txnmou(const Napi::CallbackInfo& info)
-        : Napi::ObjectWrap<txnmou>(info) 
-    {   }
+	envmou* get_environment(napi_env env) const noexcept;
+	int complete_native(completion_kind kind, envmou& env) noexcept;
+	void release_environment(envmou* env) noexcept;
 
-    ~txnmou() {
-        if (txn_) {
-            dec_counter();
-        }
-    }
+	void track_view(napi_env env, napi_value array_buffer);
+	void detach_issued_or_throw(napi_env env);
+	void detach_issued_noexcept(napi_env env) noexcept;
+	void prune_dead_views(napi_env env) noexcept;
 
-    static void init(const char *class_name, Napi::Env env);
+	Napi::Value get_dbi(const char* name,
+		base_flag key_flag,
+		base_flag value_flag,
+		key_mode key_mode,
+		value_mode value_mode,
+		db_mode db_mode,
+		int db_flags_override = -1);
+	Napi::Value get_dbi(const Napi::Object& arg0, db_mode db_mode);
+	Napi::Value get_dbi(const Napi::CallbackInfo& info, db_mode db_mode);
+	Napi::Value is_active_js(const Napi::CallbackInfo& info);
 
-    Napi::Value commit(const Napi::CallbackInfo&);
-    Napi::Value abort(const Napi::CallbackInfo&);
-    
-    Napi::Value open_map(const Napi::CallbackInfo& info) {
-        return get_dbi(info, db_mode{});
-    }
-    Napi::Value create_map(const Napi::CallbackInfo& info) {
-        return get_dbi(info, {db_mode::create});
-    }
-    
-    Napi::Value open_cursor(const Napi::CallbackInfo&);
+public:
+	static Napi::FunctionReference ctor;
+	static bool is_instance(const Napi::Value& value) noexcept;
+	static txnmou* unwrap_checked(const Napi::Env& env,
+		const Napi::Value& value,
+		const char* method_name);
 
-    operator MDBX_txn*() noexcept {
-        return txn_.get();
-    }
+	txnmou(const Napi::CallbackInfo& info)
+		: Napi::ObjectWrap<txnmou>(info)
+	{
+	}
 
-    // Cursor counting
-    txnmou& operator++() noexcept { 
-        ++cursor_count_; return *this; 
-    }
-    
-    txnmou& operator--() noexcept { 
-        --cursor_count_; return *this; 
-    }
-    
-    std::size_t cursor_count() const noexcept { 
-        return cursor_count_; 
-    }
+	~txnmou() noexcept override;
 
-    Napi::Value is_active(const Napi::CallbackInfo&);
+	void Finalize(Napi::Env env) override;
 
-    void attach(envmou& env, MDBX_txn* txn, txn_mode mode);
+	static void init(const char* class_name, Napi::Env env);
+
+	Napi::Value commit(const Napi::CallbackInfo&);
+	Napi::Value abort(const Napi::CallbackInfo&);
+
+	Napi::Value open_map(const Napi::CallbackInfo& info)
+	{
+		return get_dbi(info, db_mode{});
+	}
+
+	Napi::Value create_map(const Napi::CallbackInfo& info)
+	{
+		return get_dbi(info, {db_mode::create});
+	}
+
+	Napi::Value open_cursor(const Napi::CallbackInfo&);
+
+	operator MDBX_txn*() noexcept
+	{
+		return txn_.get();
+	}
+
+	txnmou& operator++() noexcept
+	{
+		++cursor_count_;
+		return *this;
+	}
+
+	txnmou& operator--() noexcept
+	{
+		assert(cursor_count_ > 0);
+		--cursor_count_;
+		return *this;
+	}
+
+	std::size_t cursor_count() const noexcept
+	{
+		return cursor_count_;
+	}
+
+	[[nodiscard]] bool is_active() const noexcept
+	{
+		return txn_ != nullptr;
+	}
+
+	[[nodiscard]] bool is_readonly() const noexcept
+	{
+		return (mode_.val & txn_mode::ro) != 0;
+	}
+
+	void attach(const Napi::Object& env_object, MDBX_txn* txn, txn_mode mode);
 };
 
-} // namespace mdbxmou
+}  // namespace mdbxmou
