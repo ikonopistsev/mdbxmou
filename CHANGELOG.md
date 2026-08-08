@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
   **Long description:** README and TypeScript declarations now document raw
   borrowed views, tracked and untracked transaction lifetimes, detach behavior,
   read-only and WRITEMAP restrictions, and the current single-isolate boundary.
+  `GETVIEW.md` separately lists the caller-owned constraints, GC/transfer risks,
+  Worker limitation and cases where applications should keep using `get()`.
 - **ID:** `MDBXMOU-0001-S5-BENCH`
   **Summary:** Reproducible public `get()`/`getView()` benchmark runner.
   **Long description:** A standalone benchmark now compares copied, tracked,

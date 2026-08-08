@@ -11,43 +11,70 @@ updated_at: 2026-08-08
 
 # `getView()` Performance Report
 
-## Резюме
+Read the caller-owned lifetime and safety contract in
+[GETVIEW.md](GETVIEW.md) before using this API in production.
 
-`getView()` дает практическую пользу там, где приложение читает небольшую часть
-большого value. В warm single-process тесте `touch8` tracked mode дал
-`0.93x` относительно копирующего `get()` на 4 KiB, `1.68-9.19x` на
-16 KiB-1 MiB и `78.18x` на 8 MiB. Untracked mode показал соответственно
-`1.16x`, `1.75-7.66x` и `66.14x`.
+## Executive Summary
 
-При полном чтении с вычислением простой контрольной суммы выигрыш ожидаемо
-меньше: каждый байт все равно проходит через JavaScript. В зависимости от
-размера tracked `getView()` дал `0.99-1.19x`, untracked - `0.53-1.20x`
-относительно `get()`. Нижнее значение untracked получено на 4 KiB. На него
-могли повлиять измеряемое создание wrapper, разные mappings, фиксированный
-порядок fixtures и обычный шум запуска; этот baseline не доказывает регрессию
-runtime API.
+The benchmark compared copied `get()` reads with two `getView()` modes:
 
-Tracking имеет измеримую, но ограниченную цену. При 100 000 живых views
-размером 4 KiB выдача составила около `0.79 млн views/s`, а detach всех
-buffers при завершении transaction занял `9.49 ms`. Untracked mode выдал около
-`0.80 млн views/s` и завершил transaction за `0.006 ms`, но этот режим
-не дает runtime-инвалидацию и остается unsafe opt-out.
+- **Tracked mode** is the safe default (`trackBorrowedViews: true`). The
+  transaction tracks borrowed buffers and detaches them before `commit()` or
+  `abort()` releases the MDBX snapshot.
+- **Untracked mode** is an unsafe opt-out (`trackBorrowedViews: false`). It
+  removes reference tracking and detach work; the caller must discard every
+  view before transaction completion and must never access it afterward.
 
-Низкая или нестабильная разница между tracked и untracked read throughput не
-является проблемой Stage 5: performance threshold намеренно отсутствует.
-Главный результат - корректный baseline и подтверждение, что выигрыш зависит от
-доли реально прочитанных данных. Изменять реализацию по этим цифрам сейчас не
-требуется.
+The production benchmark ran on Linux x64 with Node.js 26 and warm values from
+4 KiB to 8 MiB. It measured partial access to eight bytes, a full JavaScript
+checksum over every byte, and transaction completion with up to 100,000 live
+views.
 
-## Термины
+**Conclusion:** use `get()` by default. `getView()` is valuable when an
+application reads only a small part of a large binary value. It does not make
+the application's parsing or business logic faster. When every byte is read,
+JavaScript processing and memory bandwidth dominate, so the zero-copy gain is
+usually modest and can be negative for small values. In this baseline the
+4 KiB tracked partial read reached `0.93x` of `get()`, while the untracked full
+checksum reached `0.50 GiB/s` against `0.94 GiB/s` for `get()`. Keep tracked
+mode enabled unless a concrete hot path has been measured and can satisfy the
+stricter untracked lifetime contract.
 
-- **Tracked mode** - обычный безопасный режим `getView()` при
-  `trackBorrowedViews: true` (значение по умолчанию). Transaction отслеживает
-  выданные borrowed buffers и инвалидирует их при `commit()` или `abort()`.
-- **Untracked mode** - тот же `getView()` при явном
-  `trackBorrowedViews: false`. Библиотека не хранит refs и не выполняет detach;
-  caller обязан удалить все ссылки и прекратить доступ до завершения
-  transaction.
+### Partial Read: Eight Bytes per Value
+
+Ratios are relative to copied `get()` throughput; values above `1.00x` are
+faster.
+
+| Value | Tracked / `get()` | Untracked / `get()` |
+|---:|---:|---:|
+| 4 KiB | 0.93x | 1.16x |
+| 16 KiB | 1.68x | 1.75x |
+| 64 KiB | 2.79x | 2.53x |
+| 256 KiB | 9.19x | 7.66x |
+| 1 MiB | 3.25x | 3.18x |
+| 8 MiB | 78.18x | 66.14x |
+
+### Full Read: JavaScript Checksum
+
+| Value | `get()` GiB/s | Tracked GiB/s | Untracked GiB/s |
+|---:|---:|---:|---:|
+| 4 KiB | 0.94 | 0.92 | 0.50 |
+| 16 KiB | 0.53 | 0.55 | 0.55 |
+| 64 KiB | 0.55 | 0.56 | 0.56 |
+| 256 KiB | 0.55 | 0.56 | 0.56 |
+| 1 MiB | 0.52 | 0.56 | 0.56 |
+| 8 MiB | 0.47 | 0.56 | 0.57 |
+
+With 100,000 live 4 KiB views, tracked issuance reached approximately
+0.79 million views/s and transaction completion detached all buffers in
+9.49 ms. Untracked completion took approximately 0.006 ms, but provides no
+runtime invalidation. These figures are a reproducible baseline, not an SLA or
+a future capacity estimate.
+
+## Подробный Отчет На Русском
+
+### Термины И Примечания
+
 - **Checksum** в этом отчете - не криптографический hash, а сложение всех байтов
   value в `uint32`. Операция заставляет JavaScript прочитать весь payload и
   позволяет сравнить результат с заранее рассчитанным значением.
@@ -211,11 +238,13 @@ untracked, по этому baseline нельзя.
 | 1 MiB | 0.52 | 0.56 | 0.56 |
 | 8 MiB | 0.47 | 0.56 | 0.57 |
 
-Полная контрольная сумма в этом запуске ограничена JavaScript-циклом примерно
-на уровне `0.47-0.94 GiB/s`. Zero-copy сохраняет умеренный выигрыш на больших
-values, потому что убирает предварительный copy-out, но не может убрать сам
-полный проход по bytes. Разброс между размерами подтверждает, что этот desktop
-baseline нельзя использовать как SLA или точную оценку пропускной способности.
+Полная контрольная сумма в этом запуске ограничена JavaScript-циклом и
+пропускной способностью памяти примерно на уровне `0.47-0.94 GiB/s`. Отдельно
+выделяется 4 KiB untracked: `0.50 GiB/s` против `0.94 GiB/s` у `get()`. На
+результат могли повлиять wrapper allocation, mappings, порядок samples и шум
+запуска, но baseline не гарантирует выигрыш на малых values. Zero-copy
+сохраняет умеренный выигрыш на больших values, потому что убирает copy-out, но
+не сам проход по bytes.
 
 ## Tracking И Completion
 
@@ -272,16 +301,3 @@ completion значение уже было нулевым.
 - `getInto()` пока отсутствует и не сравнивался.
 - Никакой performance threshold не применялся и regression budget пока не
   устанавливается.
-
-## Вывод
-
-Результат подтверждает выбранное назначение API: `getView()` полезен для
-контролируемого синхронного чтения части больших MDBX values. Для полного
-сканирования value выигрыш умеренный, потому что обработка bytes доминирует над
-copy-out. Safe-default tracked mode остается пригодным: даже detach 100 000
-живых views занял несколько миллисекунд, а untracked mode следует применять
-только после отдельного измерения конкретного hot path.
-
-Следующий performance-шаг - не оптимизация этого кода по одному desktop run, а
-воспроизводимая широкая матрица с dataset больше RAM, конкурентными readers и
-writer, разными паттернами доступа и отдельным сравнением с `mmap-cache`.

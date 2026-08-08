@@ -324,6 +324,11 @@ For `valueMode.multiOrdinal`, `get()` returns the first duplicate value for the 
 
 **getView(txn, key) → MDBX_BorrowedView | undefined**
 
+> `getView()` is an advanced borrowed-memory API and should not be used as a
+> default replacement for `get()`. Read [GETVIEW.md](GETVIEW.md) before using it
+> in production; the caller owns strict lifetime, no-transfer and single-isolate
+> obligations that cannot all be enforced at runtime.
+
 `getView()` returns a standard JavaScript `DataView` over the bytes mapped by
 MDBX. Unlike `get()`, it does not copy or decode the value. This is intended for
 large values or hot read paths where the caller can keep all access inside a

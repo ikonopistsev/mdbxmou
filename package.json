@@ -42,6 +42,7 @@
     "test/stage5-benchmark.js",
     "build.js",
     "CMakeLists.txt",
+    "GETVIEW.md",
     "PERFORMANCE.md",
     "README.md",
     "LICENSE"
