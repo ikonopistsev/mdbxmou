@@ -17,7 +17,8 @@ All notable changes to this project will be documented in this file.
   **Long description:** A standalone benchmark now compares copied, tracked,
   and untracked reads for partial and full payload consumption. It also records
   transaction completion, retention, GC, and memory observations without
-  imposing a performance threshold or joining the regular test suite.
+  imposing a performance threshold or joining the regular test suite. The
+  measured baseline and methodology are published in `PERFORMANCE.md`.
 - **ID:** `MDBXMOU-0001-S3-M2`
   **Summary:** CommonJS named type export for borrowed views.
   **Long description:** The CommonJS declaration entrypoint now exposes

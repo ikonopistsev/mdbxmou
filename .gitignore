@@ -1,3 +1,7 @@
+/.clang-format
 /.task/
+/.test/
+/CODESTYLE.md
+/tools/clang-format.mjs
 /build/
 /node_modules/

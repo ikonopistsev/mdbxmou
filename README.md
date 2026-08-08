@@ -411,6 +411,9 @@ current native addon also supports only one JavaScript isolate loading it per
 process. Do not load it from `worker_threads`; use separate OS processes, each
 with its own environment and transaction, until multi-isolate support is added.
 
+The reproducible benchmark and measured Linux x64 baseline are documented in
+[PERFORMANCE.md](PERFORMANCE.md).
+
 **del(txn, key) → boolean**
 ```javascript
 const deleted = dbi.del(txn, 123);
@@ -1258,7 +1261,8 @@ For `env.query()` write requests, only `noOverwrite`, `noDupData`, `current`, `a
 5. **Transaction scope** - Always pass transaction object to DBI methods
 6. **Zero-copy reads** - Use `getView()` for large values when processing stays
    inside a short read transaction; benchmark against `get()` for your access
-   pattern before disabling borrowed-view tracking
+   pattern before disabling borrowed-view tracking. See
+   [PERFORMANCE.md](PERFORMANCE.md) for the published methodology and baseline.
 
 ## License
 
