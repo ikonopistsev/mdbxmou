@@ -91,6 +91,9 @@ Options:
 - `maxDbi` - Maximum number of databases (optional, default `32`)
 - `mode` - Filesystem permissions mode (optional, default `0664`)
 - `geometry` - Map size/geometry options (optional)
+- `trackBorrowedViews` - Track and detach non-empty buffers borrowed by
+  `getView()` when their transaction completes (optional, default `true`; keep
+  enabled unless profiling proves that reference tracking is a bottleneck)
 
 Note: When `keyFlag` or `valueFlag` are set at environment level, they become defaults for all subsequent operations unless explicitly overridden.
 
@@ -316,6 +319,97 @@ const binary = dbi.get(txn, "key");
 ```
 
 For `valueMode.multiOrdinal`, `get()` returns the first duplicate value for the key, decoded as `number` by default.
+
+#### Zero-copy reads with `getView()`
+
+**getView(txn, key) → MDBX_BorrowedView | undefined**
+
+`getView()` returns a standard JavaScript `DataView` over the bytes mapped by
+MDBX. Unlike `get()`, it does not copy or decode the value. This is intended for
+large values or hot read paths where the caller can keep all access inside a
+short read transaction.
+
+```javascript
+const env = new MDBX_Env();
+env.openSync({ path: "./data" });
+
+try {
+    let dbi;
+    const writeTxn = env.startWrite();
+    try {
+        dbi = writeTxn.createMap();
+        dbi.put(writeTxn, "binary-key", Buffer.from([0x78, 0x56, 0x34, 0x12]));
+        writeTxn.commit();
+    } finally {
+        if (writeTxn.isActive()) {
+            writeTxn.abort();
+        }
+    }
+
+    const readTxn = env.startRead();
+    try {
+        const view = dbi.getView(readTxn, "binary-key");
+        if (view) {
+            console.log(view.getUint32(0, true)); // 305419896
+        }
+    } finally {
+        if (readTxn.isActive()) {
+            readTxn.abort();
+        }
+    }
+} finally {
+    env.closeSync();
+}
+```
+
+In this API:
+
+- a **borrowed view** is a `DataView` whose bytes are owned by the active MDBX
+  read transaction;
+- its **backing buffer** is the `ArrayBuffer` available as `view.buffer`;
+- **detach** invalidates that backing buffer. A detached buffer has
+  `byteLength === 0`, and reading through its `DataView` is no longer valid;
+- a **tracked** non-empty view uses the default safety mode: the transaction
+  records its borrowed backing buffer and detaches it during `commit()` or
+  `abort()`;
+- an **untracked** view is the advanced opt-out enabled by opening the
+  environment with `trackBorrowedViews: false`.
+
+The lifetime contract is strict:
+
+1. Pass an active read-only transaction created by the same environment. Write
+   transactions are rejected.
+2. Read the view only before that transaction commits or aborts. A `DataView`
+   does not keep its transaction alive, so retain the transaction object
+   explicitly for the whole access period.
+3. Complete every transaction before calling `env.close()` or
+   `env.closeSync()`.
+4. Do not transfer the view's backing buffer to another JavaScript isolate. If
+   another execution context needs the bytes, copy them into ordinary owned
+   memory while the transaction is still active.
+
+With the default `trackBorrowedViews: true`, retaining the JavaScript view
+object after transaction completion is memory-safe, but its backing buffer is
+detached and its data cannot be read. Missing keys return `undefined`. A stored
+empty value has no borrowed MDBX pointer and returns an ordinary zero-length
+`DataView`; there is therefore no buffer to track or detach. The returned bytes
+are raw and do not use `valueFlag` decoding.
+
+The runtime object is a normal `DataView`, so JavaScript still exposes setter
+methods. Treat it as read-only: mutating MDBX-owned mapped bytes is outside the
+contract. TypeScript uses `MDBX_BorrowedView`, which intentionally exposes only
+the read methods.
+
+`trackBorrowedViews: false` removes the transaction's reference tracking and
+detach work. It is an unsafe performance option: do not store, return, capture,
+or otherwise retain a view; drop every reference and finish all reads before
+`commit()` or `abort()`. An untracked buffer can still appear attached after
+completion even though its memory is no longer valid.
+
+`getView()` is unavailable when the environment uses `MDBX_WRITEMAP`. The
+current native addon also supports only one JavaScript isolate loading it per
+process. Do not load it from `worker_threads`; use separate OS processes, each
+with its own environment and transaction, until multi-isolate support is added.
 
 **del(txn, key) → boolean**
 ```javascript
@@ -1162,6 +1256,9 @@ For `env.query()` write requests, only `noOverwrite`, `noDupData`, `current`, `a
 3. **Reuse transactions** - Keep read transactions open for multiple operations
 4. **Memory mapping** - MDBX uses memory-mapped files for fast I/O
 5. **Transaction scope** - Always pass transaction object to DBI methods
+6. **Zero-copy reads** - Use `getView()` for large values when processing stays
+   inside a short read transaction; benchmark against `get()` for your access
+   pattern before disabling borrowed-view tracking
 
 ## License
 

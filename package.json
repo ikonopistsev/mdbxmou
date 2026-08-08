@@ -39,6 +39,7 @@
     "src/**/*",
     "deps/**/*",
     "!deps/**/.git",
+    "test/stage5-benchmark.js",
     "build.js",
     "CMakeLists.txt",
     "README.md",
@@ -69,6 +70,7 @@
     "test:stage3": "node build.js --testing && node --test ./test/stage3-get-view.test.js && node build.js && node ./test/stage3/production-surface.js && node ./test/types/run.mjs",
     "test:stage4": "node build.js --testing && node --test ./test/stage4-dbi-safety.test.js",
     "test:types": "node ./test/types/run.mjs",
+    "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
     "install": "node build.js"

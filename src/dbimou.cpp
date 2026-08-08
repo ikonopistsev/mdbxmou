@@ -308,20 +308,19 @@ bool dbimou::is_instance(const Napi::Value& value) noexcept
 }
 
 dbimou* dbimou::unwrap_checked(
-    const Napi::Env& env, const Napi::Value& value, const char* method_name)
+	const Napi::Env& env, const Napi::Value& value, const char* method_name)
 {
-    std::string message{method_name};
-    message += ": argument must be MDBX_Dbi instance";
+	if (!is_instance(value)) {
+		throw Napi::TypeError::New(env,
+			std::string(method_name) + ": argument must be MDBX_Dbi instance");
+	}
 
-    if (!is_instance(value)) {
-        throw Napi::TypeError::New(env, message);
-    }
-
-    void* wrapper{};
-    if (napi_unwrap(env, value, &wrapper) != napi_ok || !wrapper) {
-        throw Napi::TypeError::New(env, message);
-    }
-    return static_cast<dbimou*>(wrapper);
+	void* wrapper{};
+	if (napi_unwrap(env, value, &wrapper) != napi_ok || !wrapper) {
+		throw Napi::TypeError::New(env,
+			std::string(method_name) + ": argument must be MDBX_Dbi instance");
+	}
+	return static_cast<dbimou*>(wrapper);
 }
 
 void dbimou::init(const char* class_name, Napi::Env env)
