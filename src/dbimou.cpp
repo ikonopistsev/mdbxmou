@@ -52,7 +52,7 @@ struct range_options final
     bool include_end{true};
     std::size_t limit{std::numeric_limits<std::size_t>::max()};
     std::size_t offset{};
-    // MDBXMOU-RANGE-LIFETIME-01: keep owning data only; bind keymou after moves.
+    // Keep owning data only; bind keymou after range_options moves.
     std::uint64_t start_num{};
     std::uint64_t end_num{};
     buffer_type start_buf{};

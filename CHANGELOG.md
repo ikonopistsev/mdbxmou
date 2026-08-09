@@ -2,21 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-
-### Fixed
-- **ID:** `MDBXMOU-RANGE-LIFETIME-01`
-  **Summary:** Range bounds remain valid across object moves.
-  **Long description:** Range options no longer retain non-owning `keymou`
-  slices into their own movable storage. This fixes empty or incorrect
-  `getRange()`, `keysRange()`, `valuesRange()` and `getCount()` results on MSVC
-  and in builds where copy elision is disabled.
-- **ID:** `MDBXMOU-WINDOWS-BUILD-01`
-  **Summary:** Windows source builds require the compatible libmdbx revision.
-  **Long description:** CMake now requires `libmdbx >= 0.14.2` and reports how
-  to update a stale submodule. Checked numeric conversions also remove the
-  observed MSVC `C4244` and `C4267` warnings.
-
 ## [0.5.0] - 2026-08-08
 
 ### Added
