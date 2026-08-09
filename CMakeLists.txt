@@ -6,6 +6,32 @@ add_definitions(-DNAPI_CPP_EXCEPTIONS)
 
 option(MDBXMOU_TESTING "Enable internal native test hooks" OFF)
 
+set(MDBXMOU_MIN_LIBMDBX_VERSION "0.14.2")
+set(MDBXMOU_LIBMDBX_VERSION_FILE
+    "${CMAKE_CURRENT_SOURCE_DIR}/deps/libmdbx/VERSION.json")
+if(NOT EXISTS "${MDBXMOU_LIBMDBX_VERSION_FILE}")
+  message(FATAL_ERROR
+      "libmdbx submodule is missing. Run: git submodule update --init --recursive")
+endif()
+file(READ "${MDBXMOU_LIBMDBX_VERSION_FILE}" MDBXMOU_LIBMDBX_VERSION_JSON)
+string(REGEX MATCH
+    "\"semver\"[ \\t\\r\\n]*:[ \\t\\r\\n]*\"([0-9]+\\.[0-9]+\\.[0-9]+)"
+    MDBXMOU_LIBMDBX_VERSION_MATCH
+    "${MDBXMOU_LIBMDBX_VERSION_JSON}")
+set(MDBXMOU_LIBMDBX_VERSION "${CMAKE_MATCH_1}")
+if(NOT MDBXMOU_LIBMDBX_VERSION)
+  message(FATAL_ERROR
+      "Unable to read libmdbx version from ${MDBXMOU_LIBMDBX_VERSION_FILE}")
+endif()
+if("${MDBXMOU_LIBMDBX_VERSION}" VERSION_LESS
+    "${MDBXMOU_MIN_LIBMDBX_VERSION}")
+  message(FATAL_ERROR
+      "mdbxmou requires libmdbx >= ${MDBXMOU_MIN_LIBMDBX_VERSION}, but found "
+      "${MDBXMOU_LIBMDBX_VERSION}. Run:\n"
+      "  git submodule sync --recursive\n"
+      "  git submodule update --init --recursive")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

@@ -2,6 +2,7 @@
 #include "envmou.hpp"
 #include "txnmou.hpp"
 #include "typemou.hpp"
+#include <cstdint>
 #include <limits>
 
 namespace mdbxmou {
@@ -223,15 +224,20 @@ Napi::Array collect_range(const Napi::Env& env, dbimou& self, txnmou& txn, const
     Napi::Array result = Napi::Array::New(env);
     auto conv = self.get_convmou();
     scan_range(self, txn, options, [&](const keymou& key, const valuemou& value, std::size_t index) {
+        if (index >= std::numeric_limits<std::uint32_t>::max()) {
+            throw Napi::RangeError::New(
+                env, "getRange result exceeds JavaScript array index limit");
+        }
+        const auto array_index = static_cast<std::uint32_t>(index);
         switch (output) {
             case range_output::items:
-                result.Set(index, conv.make_result(env, key, value));
+                result.Set(array_index, conv.make_result(env, key, value));
                 break;
             case range_output::keys:
-                result.Set(index, conv.convert_key(env, key));
+                result.Set(array_index, conv.convert_key(env, key));
                 break;
             case range_output::values:
-                result.Set(index, conv.convert_value(env, value));
+                result.Set(array_index, conv.convert_value(env, value));
                 break;
         }
         return false;
