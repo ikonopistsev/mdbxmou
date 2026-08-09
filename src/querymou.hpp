@@ -19,7 +19,7 @@ struct async_common
     // общий используется для открытия db
     value_mode val_mod{};
 
-    dbimou* parse(const Napi::Object& arg0);
+    dbimou* parse(const Napi::Object& arg0, const char* method_name);
 };
 
 struct async_key 

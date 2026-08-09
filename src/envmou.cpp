@@ -6,6 +6,7 @@
 #include "async/envmou_keys.hpp"
 #include "async/envmou_close.hpp"
 #include <cmath>
+#include <exception>
 #include <limits>
 
 #ifdef _WIN32
@@ -17,6 +18,21 @@
 namespace mdbxmou {
 
 namespace {
+
+struct abort_transaction final {
+	void operator()(MDBX_txn* txn) const noexcept
+	{
+		const auto rc = mdbx_txn_abort(txn);
+		if (rc == MDBX_THREAD_MISMATCH) {
+			// Begin and rollback run on this thread under the environment lock. A
+			// mismatch breaks that invariant, and no owner remains to retry abort;
+			// continuing would leave the environment with an unreachable live txn.
+			Napi::Error::Fatal("mdbxmou::abort_transaction",
+				"MDBX_THREAD_MISMATCH while rolling back an unattached "
+				"transaction");
+		}
+	}
+};
 
 std::uint64_t parse_option_value(const Napi::Env &env, const Napi::Value &arg0)
 {
@@ -106,43 +122,55 @@ mdbx::env::geometry envmou::parse_geometry(const Napi::Value& arg0)
 
 env_arg0 envmou::parse(const Napi::Value& arg0)
 {
-    env_arg0 rc;
+	env_arg0 rc;
 
-    auto obj = arg0.As<Napi::Object>();
+	auto obj = arg0.As<Napi::Object>();
 
-    rc.path = obj.Get("path").As<Napi::String>().Utf8Value();
-    if (obj.Has("maxDbi")) {
-        auto value = obj.Get("maxDbi").As<Napi::Number>();
-        rc.max_dbi = static_cast<MDBX_dbi>(value.Uint32Value());
-    } 
+	rc.path = obj.Get("path").As<Napi::String>().Utf8Value();
+	if (obj.Has("maxDbi")) {
+		auto value = obj.Get("maxDbi").As<Napi::Number>();
+		rc.max_dbi = static_cast<MDBX_dbi>(value.Uint32Value());
+	}
 
-    if (obj.Has("maxReaders")) {
-        auto value = obj.Get("maxReaders").As<Napi::Number>();
-        rc.max_readers = value.Uint32Value();
-    }
+	if (obj.Has("maxReaders")) {
+		auto value = obj.Get("maxReaders").As<Napi::Number>();
+		rc.max_readers = value.Uint32Value();
+	}
 
-    if (obj.Has("geometry")) {
-        rc.geom = parse_geometry(obj.Get("geometry"));
-    }
+	if (obj.Has("geometry")) {
+		rc.geom = parse_geometry(obj.Get("geometry"));
+	}
 
-    if (obj.Has("flags")) {
-        rc.flag = env_flag::parse(obj.Get("flags"));
-    }
+	if (obj.Has("flags")) {
+		rc.flag = env_flag::parse(obj.Get("flags"));
+	}
 
-    if (obj.Has("mode")) {
-        auto value = obj.Get("mode").As<Napi::Number>();
-        rc.file_mode = static_cast<mdbx_mode_t>(value.Int32Value());
-    }
+	if (obj.Has("mode")) {
+		auto value = obj.Get("mode").As<Napi::Number>();
+		rc.file_mode = static_cast<mdbx_mode_t>(value.Int32Value());
+	}
 
-    if (obj.Has("keyFlag")) {
-        rc.key_flag = base_flag::parse_key(obj.Get("keyFlag"));
-    }
+	if (obj.Has("keyFlag")) {
+		rc.key_flag = base_flag::parse_key(obj.Get("keyFlag"));
+	}
 
-    if (obj.Has("valueFlag")) {
-        rc.value_flag = base_flag::parse_value(obj.Get("valueFlag"));
-    }
+	if (obj.Has("valueFlag")) {
+		rc.value_flag = base_flag::parse_value(obj.Get("valueFlag"));
+	}
 
-    return rc;
+	if (obj.Has("trackBorrowedViews")) {
+		auto value = obj.Get("trackBorrowedViews");
+		// MDBXMOU-0001-S3-M3: explicit undefined keeps the optional default.
+		if (!value.IsUndefined() && !value.IsBoolean()) {
+			throw Napi::TypeError::New(
+				obj.Env(), "trackBorrowedViews must be a boolean");
+		}
+		if (value.IsBoolean()) {
+			rc.track_borrowed_views = value.As<Napi::Boolean>().Value();
+		}
+	}
+
+	return rc;
 }
 
 Napi::Value envmou::open(const Napi::CallbackInfo& info)
@@ -233,15 +261,23 @@ MDBX_env* envmou::create_and_open(const env_arg0& arg0)
 
 void envmou::attach(MDBX_env* env, const env_arg0& arg0)
 {
-    arg0_ = arg0;
-    
-    auto rc = mdbx_env_set_userctx(env, &arg0_);
-    if (rc != MDBX_SUCCESS) {
-        mdbx_env_close(env);
-        throw std::runtime_error(mdbx_strerror(rc));
-    }
+	arg0_ = arg0;
 
-    env_.reset(env);
+	unsigned flags{};
+	auto rc = mdbx_env_get_flags(env, &flags);
+	if (rc != MDBX_SUCCESS) {
+		mdbx_env_close(env);
+		throw std::runtime_error(mdbx_strerror(rc));
+	}
+	arg0_.flag.val = static_cast<int>(flags);
+
+	rc = mdbx_env_set_userctx(env, &arg0_);
+	if (rc != MDBX_SUCCESS) {
+		mdbx_env_close(env);
+		throw std::runtime_error(mdbx_strerror(rc));
+	}
+
+	env_.reset(env);
 }
 
 Napi::Value envmou::close(const Napi::CallbackInfo& info)
@@ -362,30 +398,38 @@ Napi::Value envmou::get_version(const Napi::CallbackInfo& info)
     return Napi::Value::From(info.Env(), version);
 }
 
-Napi::Value envmou::start_transaction(const Napi::CallbackInfo& info, txn_mode mode) 
+Napi::Value envmou::start_transaction(
+	const Napi::CallbackInfo& info, txn_mode mode)
 {
-    auto env = info.Env();
-    
-    try {
-        lock_guard l(*this);
+	auto env = info.Env();
 
-        check();
+	try {
+		lock_guard l(*this);
 
-        MDBX_txn* txn;
-        auto rc = mdbx_txn_begin(*this, nullptr, mode, &txn);
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, std::string("Env: ") + mdbx_strerror(rc));
-        }
+		check();
 
-        // Создаем новый объект txnmou
-        auto txn_obj = txnmou::ctor.New({});
-        auto txn_wrapper = txnmou::Unwrap(txn_obj);
-        txn_wrapper->attach(*this, txn, mode);
+		MDBX_txn* txn{};
+		auto rc = mdbx_txn_begin(*this, nullptr, mode, &txn);
+		if (rc != MDBX_SUCCESS) {
+			throw Napi::Error::New(
+				env, std::string("Env: ") + mdbx_strerror(rc));
+		}
+		std::unique_ptr<MDBX_txn, abort_transaction> txn_owner{txn};
 
-        return txn_obj;
-    } catch (const std::exception& e) {
-        throw Napi::Error::New(env, e.what());
-    }
+		// Создаем новый объект txnmou
+		auto txn_obj = txnmou::ctor.New({});
+		auto txn_wrapper = txnmou::Unwrap(txn_obj);
+		txn_wrapper->attach(info.This().As<Napi::Object>(),
+			txn_owner.get(),
+			mode,
+			arg0_.track_borrowed_views,
+			(arg0_.flag.val & env_flag::writemap) != 0);
+		txn_owner.release();
+
+		return txn_obj;
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, e.what());
+	}
 }
 
 Napi::Value envmou::query(const Napi::CallbackInfo& info)

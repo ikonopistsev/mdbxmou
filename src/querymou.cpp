@@ -3,16 +3,11 @@
 
 namespace mdbxmou {
 
-dbimou* async_common::parse(const Napi::Object& arg0)
+dbimou* async_common::parse(const Napi::Object& arg0, const char* method_name)
 {
-    dbimou* dbi{};
-    // если просто передали dbi
-    if (arg0.InstanceOf(dbimou::ctor.Value())) {
-        dbi = Napi::ObjectWrap<dbimou>::Unwrap(arg0);
-    } else {
-        auto t = arg0.Get("dbi").As<Napi::Object>();
-        dbi = Napi::ObjectWrap<dbimou>::Unwrap(t);
-    }
+    auto dbi_value = dbimou::is_instance(arg0) ?
+        Napi::Value{arg0} : arg0.Get("dbi");
+    auto* dbi = dbimou::unwrap_checked(arg0.Env(), dbi_value, method_name);
 
     id = dbi->get_id();
     key_mod = dbi->get_key_mode();
@@ -49,7 +44,7 @@ void async_keyval::parse(const query_line& common, const Napi::Object& item)
 void query_line::parse(txn_mode txn, const Napi::Object& arg0)
 {
     //  парсим общие параметры
-    auto dbi = async_common::parse(arg0);
+    auto dbi = async_common::parse(arg0, "query");
     value_flag = dbi->get_value_flag();
     if (arg0.Has("mode")) {
         mode = query_mode::parse(txn, arg0.Get("mode").As<Napi::Number>());
@@ -100,7 +95,7 @@ query_request parse_query(txn_mode txn, const Napi::Value& arg0)
 void keys_line::parse(const Napi::Object& arg0)
 {
     // парсим общие параметры
-    async_common::parse(arg0);
+    async_common::parse(arg0, "keys");
 
     // парсим параметры scan_from
     if (arg0.Has("from")) {

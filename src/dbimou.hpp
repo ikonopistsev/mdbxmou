@@ -16,6 +16,8 @@ class dbimou final
     : public Napi::ObjectWrap<dbimou>
     , public dbi
 {
+    static const napi_type_tag type_tag_;
+
     db_mode mode_{};
     key_mode key_mode_{};
     value_mode value_mode_{};
@@ -29,11 +31,18 @@ class dbimou final
     
 public:   
     static Napi::FunctionReference ctor;
+    static bool is_instance(const Napi::Value& value) noexcept;
+    static dbimou* unwrap_checked(const Napi::Env& env,
+        const Napi::Value& value,
+        const char* method_name);
 
     dbimou(const Napi::CallbackInfo& info)
         : Napi::ObjectWrap<dbimou>{info}
         , dbi{}
-    {   }
+    {
+        // MDBXMOU-0001-S4-M1: validate native identity without mutable prototypes.
+        info.This().As<Napi::Object>().TypeTag(&type_tag_);
+    }
 
     Napi::Value get_id(const Napi::CallbackInfo& info) {
         return Napi::BigInt::New(info.Env(), static_cast<int64_t>(id_));
@@ -61,24 +70,25 @@ public:
 
     static void init(const char *class_name, Napi::Env env);
 
-    // valuemou read(const MDBX_txn* txn);
-    // valuemou read(const MDBX_txn* txn, const keymou& key);
+	// valuemou read(const MDBX_txn* txn);
+	// valuemou read(const MDBX_txn* txn, const keymou& key);
 
-    // Основные операции (только синхронные)
-    Napi::Value put(const Napi::CallbackInfo&);
-    Napi::Value get(const Napi::CallbackInfo&);
-    Napi::Value del(const Napi::CallbackInfo&);
-    Napi::Value has(const Napi::CallbackInfo&);
-    Napi::Value for_each(const Napi::CallbackInfo&);
-    Napi::Value stat(const Napi::CallbackInfo&);
-    Napi::Value flags(const Napi::CallbackInfo&);
-    Napi::Value keys(const Napi::CallbackInfo&);
-    Napi::Value keys_from(const Napi::CallbackInfo&);
-    Napi::Value get_range(const Napi::CallbackInfo&);
-    Napi::Value get_count(const Napi::CallbackInfo&);
-    Napi::Value keys_range(const Napi::CallbackInfo&);
-    Napi::Value values_range(const Napi::CallbackInfo&);
-    Napi::Value drop(const Napi::CallbackInfo&);
+	// Основные операции (только синхронные)
+	Napi::Value put(const Napi::CallbackInfo&);
+	Napi::Value get(const Napi::CallbackInfo&);
+	Napi::Value get_view(const Napi::CallbackInfo&);
+	Napi::Value del(const Napi::CallbackInfo&);
+	Napi::Value has(const Napi::CallbackInfo&);
+	Napi::Value for_each(const Napi::CallbackInfo&);
+	Napi::Value stat(const Napi::CallbackInfo&);
+	Napi::Value flags(const Napi::CallbackInfo&);
+	Napi::Value keys(const Napi::CallbackInfo&);
+	Napi::Value keys_from(const Napi::CallbackInfo&);
+	Napi::Value get_range(const Napi::CallbackInfo&);
+	Napi::Value get_count(const Napi::CallbackInfo&);
+	Napi::Value keys_range(const Napi::CallbackInfo&);
+	Napi::Value values_range(const Napi::CallbackInfo&);
+	Napi::Value drop(const Napi::CallbackInfo&);
 
 private:
     // Внутренний метод для forEach с начальным ключом

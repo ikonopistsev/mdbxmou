@@ -2,6 +2,92 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [0.5.0] - 2026-08-08
+
+### Added
+- **ID:** `MDBXMOU-0001-S6-DOCS`
+  **Summary:** Public lifetime contract for zero-copy `getView()` reads.
+  **Long description:** README and TypeScript declarations now document raw
+  borrowed views, tracked and untracked transaction lifetimes, detach behavior,
+  read-only and WRITEMAP restrictions, and the current single-isolate boundary.
+  `GETVIEW.md` separately lists the caller-owned constraints, GC/transfer risks,
+  Worker limitation and cases where applications should keep using `get()`.
+- **ID:** `MDBXMOU-0001-S5-BENCH`
+  **Summary:** Reproducible public `get()`/`getView()` benchmark runner.
+  **Long description:** A standalone benchmark now compares copied, tracked,
+  and untracked reads for partial and full payload consumption. It also records
+  transaction completion, retention, GC, and memory observations without
+  imposing a performance threshold or joining the regular test suite. The
+  measured baseline and methodology are published in `PERFORMANCE.md`.
+- **ID:** `MDBXMOU-0001-S3-M2`
+  **Summary:** CommonJS named type export for borrowed views.
+  **Long description:** The CommonJS declaration entrypoint now exposes
+  `MDBX_BorrowedView`, so consumers can use
+  `import type { MDBX_BorrowedView } from "mdbxmou"`. The type continues to
+  have a single definition in `lib/types.d.ts`.
+- **DBI drop() method**: Added `dbi.drop(txn, delete_db)` method for clearing database contents
+  - `dbi.drop(txn, false)`: Clears all data but keeps database structure
+  - `dbi.drop(txn, true)`: Completely removes database and closes DBI handle
+- **Enhanced forEach error handling**: forEach method now properly handles empty databases without throwing exceptions
+- **Comprehensive test coverage**: Added test/e6.js for drop functionality testing
+
+### Changed
+- **ID:** `MDBXMOU-0001-S3-M3`
+  **Summary:** Explicit `undefined` preserves borrowed-view tracking defaults.
+  **Long description:** `trackBorrowedViews` remains strict for explicit
+  non-boolean values, while an explicitly supplied `undefined` is treated like
+  an omitted optional property and retains the safe default value `true`.
+- **API Documentation**: Complete README.md overhaul with transaction-based examples
+  - All examples now properly show transaction parameter as first argument
+  - Removed outdated MDBX_Async_Env references
+  - Added comprehensive API reference with correct syntax
+  - **Fixed argument order**: Corrected `createMap` and `openMap` method signatures to match actual implementation
+- **Async Keys API**: Updated documentation for `env.keys()` method variants
+  - `await env.keys(dbi)`: Direct DBI object passing
+  - `await env.keys({dbi: dbi})`: Object parameter with DBI
+  - `await env.keys([dbi, dbi])`: Multiple DBI objects
+  - `await env.keys([{dbi: dbi, limit: 1, from: 1}])`: Advanced configuration
+- **forEach method**: Added entry count check before cursor operations to prevent MDBX_NOTFOUND errors on empty databases
+- **CursorMode constants**: Updated to camelCase naming convention (e.g., `keyGreaterThan` instead of `key_greater_than`)
+
+### Fixed
+- **ID:** `MDBXMOU-0001-S4-M1`
+  **Summary:** DBI identity no longer depends on JavaScript prototypes.
+  **Long description:** DBI wrappers now carry an N-API type tag. Cursor and
+  asynchronous query parsing validate that tag before unwrapping native state,
+  so prototype-spoofed objects fail with a stable JavaScript error instead of being
+  interpreted as an `MDBX_Dbi` wrapper.
+- **ID:** `MDBXMOU-0001-S3-M1`
+  **Summary:** Native transaction identity no longer depends on JavaScript
+  prototypes.
+  **Long description:** Transaction wrappers now carry an N-API type tag.
+  Validation checks that tag without invoking JavaScript traps, so revoked
+  proxies and prototype-spoofed native wrappers fail with a stable `TypeError`
+  instead of terminating Node or allowing native type confusion.
+- **Empty database handling**: forEach no longer throws exceptions when called on empty databases
+- **Transaction syntax**: All code examples updated to match actual API requirements
+
+### Technical Details
+- **libmdbx version**: 0.14.2
+- **Node.js compatibility**: `>=22`, native C++ bindings with N-API
+- **Build system**: CMake with Ninja generator
+
+### Test Results
+- test/e2.js: Basic functionality test (passes)
+- test/e5.js: Async keys API test (passes)
+- test/e6.js: Drop method comprehensive test (passes)
+- All existing tests remain functional
+
+### Migration Guide
+
+#### From previous version
+
+- **Query API**: Replace database name strings with DBI objects in async operations
+- **CursorMode**: Update constant names to camelCase if used directly
+- No breaking changes for existing synchronous API usage
+
 ## [0.3.13] - 2026-05-16
 
 ### Changed
@@ -72,47 +158,3 @@ All notable changes to this project will be documented in this file.
 ### Technical
 - `txnmou_managed::commit()` and `abort()` now use `std::exchange()` for atomic handle release
 - Cursor uses `keymou`/`valuemou` directly with implicit `MDBX_val` conversion
-
-## [Unreleased]
-
-### Added
-- **DBI drop() method**: Added `dbi.drop(txn, delete_db)` method for clearing database contents
-  - `dbi.drop(txn, false)`: Clears all data but keeps database structure 
-  - `dbi.drop(txn, true)`: Completely removes database and closes DBI handle
-- **Enhanced forEach error handling**: forEach method now properly handles empty databases without throwing exceptions
-- **Comprehensive test coverage**: Added test/e6.js for drop functionality testing
-
-### Changed
-- **API Documentation**: Complete README.md overhaul with transaction-based examples
-  - All examples now properly show transaction parameter as first argument
-  - Removed outdated MDBX_Async_Env references
-  - Added comprehensive API reference with correct syntax
-  - **Fixed argument order**: Corrected `createMap` and `openMap` method signatures to match actual implementation
-- **Async Keys API**: Updated documentation for `env.keys()` method variants
-  - `await env.keys(dbi)`: Direct DBI object passing
-  - `await env.keys({dbi: dbi})`: Object parameter with DBI
-  - `await env.keys([dbi, dbi])`: Multiple DBI objects
-  - `await env.keys([{dbi: dbi, limit: 1, from: 1}])`: Advanced configuration
-- **forEach method**: Added entry count check before cursor operations to prevent MDBX_NOTFOUND errors on empty databases
-- **CursorMode constants**: Updated to camelCase naming convention (e.g., `keyGreaterThan` instead of `key_greater_than`)
-
-### Fixed
-- **Empty database handling**: forEach no longer throws exceptions when called on empty databases
-- **Transaction syntax**: All code examples updated to match actual API requirements
-
-### Technical Details
-- **libmdbx version**: 0.13.7
-- **Node.js compatibility**: Native C++ bindings with N-API
-- **Build system**: CMake with Ninja generator
-
-## Test Results
-- ✅ test/e2.js: Basic functionality test (passes)
-- ✅ test/e5.js: Async keys API test (passes)
-- ✅ test/e6.js: Drop method comprehensive test (passes)
-- ✅ All existing tests remain functional
-
-## Migration Guide
-### From previous version:
-- **Query API**: Replace database name strings with DBI objects in async operations
-- **CursorMode**: Update constant names to camelCase if used directly
-- No breaking changes for existing synchronous API usage

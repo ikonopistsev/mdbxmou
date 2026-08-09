@@ -13,6 +13,10 @@ function exec(cmd) {
     }
 }
 
+const testingFlag = process.argv.includes('--testing')
+    ? ' --CDMDBXMOU_TESTING=ON'
+    : '';
+
 // Create VERSION.json for libmdbx (needed for npm packages, which don't ship git metadata).
 // In a git checkout/submodule we must NOT create it, since libmdbx rejects multiple version sources.
 const versionFile = 'deps/libmdbx/VERSION.json';
@@ -47,4 +51,4 @@ if (!fs.existsSync(libmdbxGitMarker) && fs.existsSync(cmakeFile)) {
     }
 }
 
-exec("npx cmake-js rebuild --config Release --CDMDBX_TXN_CHECKOWNER=OFF --CDMDBX_BUILD_CXX=ON --CDMDBX_ENABLE_TESTS=OFF --CDMDBX_BUILD_SHARED_LIBRARY=OFF --CDMDBX_BUILD_TOOLS=OFF --CDMDBX_INSTALL_STATIC=ON");
+exec("npx cmake-js rebuild --config Release --CDMDBX_TXN_CHECKOWNER=OFF --CDMDBX_BUILD_CXX=ON --CDMDBX_ENABLE_TESTS=OFF --CDMDBX_BUILD_SHARED_LIBRARY=OFF --CDMDBX_BUILD_TOOLS=OFF --CDMDBX_INSTALL_STATIC=ON" + testingFlag);

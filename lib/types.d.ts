@@ -61,6 +61,47 @@ export interface MDBXEnvOpenOptions {
   maxDbi?: number;
   mode?: number;
   geometry?: MDBXEnvGeometry;
+  /**
+   * Track non-empty buffers borrowed through `getView()` and detach them when
+   * their transaction commits or aborts. Defaults to `true`. Empty values have
+   * no borrowed MDBX pointer and return an ordinary zero-length view.
+   *
+   * Set to `false` only for a measured hot path. In that mode callers must
+   * drop every borrowed view before transaction completion and never access it
+   * afterwards.
+   */
+  trackBorrowedViews?: boolean;
+}
+
+declare const mdbxBorrowedView: unique symbol;
+
+/**
+ * Read-only TypeScript surface for the standard `DataView` returned by
+ * `MDBX_Dbi.getView()`.
+ *
+ * For a non-empty value, the bytes belong to the active read transaction. With
+ * the default tracking mode, commit or abort detaches the borrowed backing
+ * `ArrayBuffer`. An empty value has no borrowed MDBX pointer and returns an
+ * ordinary zero-length view. The runtime value is still a normal mutable
+ * `DataView`; setter methods are omitted here to express the supported
+ * contract.
+ */
+export interface MDBX_BorrowedView {
+  readonly [mdbxBorrowedView]: true;
+  readonly buffer: ArrayBuffer;
+  readonly byteOffset: number;
+  readonly byteLength: number;
+
+  getInt8(byteOffset: number): number;
+  getUint8(byteOffset: number): number;
+  getInt16(byteOffset: number, littleEndian?: boolean): number;
+  getUint16(byteOffset: number, littleEndian?: boolean): number;
+  getInt32(byteOffset: number, littleEndian?: boolean): number;
+  getUint32(byteOffset: number, littleEndian?: boolean): number;
+  getBigInt64(byteOffset: number, littleEndian?: boolean): bigint;
+  getBigUint64(byteOffset: number, littleEndian?: boolean): bigint;
+  getFloat32(byteOffset: number, littleEndian?: boolean): number;
+  getFloat64(byteOffset: number, littleEndian?: boolean): number;
 }
 
 export interface MDBXDbiStat {
@@ -214,6 +255,17 @@ export interface MDBX_Dbi<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDB
 
   put(txn: MDBX_Txn, key: K, value: MDBXValue, flags?: number): void;
   get(txn: MDBX_Txn, key: K): V | undefined;
+  /**
+   * Borrow raw MDBX value bytes without copying or applying `valueFlag`
+   * decoding. Requires an active read-only transaction and an environment
+   * without `MDBX_WRITEMAP`.
+   *
+   * The returned view is valid only until `txn.commit()` or `txn.abort()`.
+   * Missing keys return `undefined`; empty values return an ordinary
+   * zero-length view without a borrowed MDBX pointer. Do not transfer a
+   * borrowed backing buffer to another JavaScript isolate.
+   */
+  getView(txn: MDBX_Txn, key: K): MDBX_BorrowedView | undefined;
   del(txn: MDBX_Txn, key: K): boolean;
   has(txn: MDBX_Txn, key: K): boolean;
 

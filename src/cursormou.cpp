@@ -1,330 +1,385 @@
 #include "cursormou.hpp"
 #include "dbimou.hpp"
 #include "txnmou.hpp"
+#include <cassert>
 
-namespace mdbxmou
+namespace mdbxmou {
+
+static_assert(Napi::details::HasExtendedFinalizer<cursormou>::value,
+	"cursormou must use the extended N-API finalizer");
+
+Napi::FunctionReference cursormou::ctor{};
+
+void cursormou::init(const char* class_name, Napi::Env env)
 {
+	auto func = DefineClass(env,
+		class_name,
+		{
+			InstanceMethod("first", &cursormou::first),
+			InstanceMethod("last", &cursormou::last),
+			InstanceMethod("next", &cursormou::next),
+			InstanceMethod("prev", &cursormou::prev),
+			InstanceMethod("seek", &cursormou::seek),
+			InstanceMethod("seekGE", &cursormou::seek_ge),
+			InstanceMethod("current", &cursormou::current),
+			InstanceMethod("eof", &cursormou::eof),
+			InstanceMethod("onFirst", &cursormou::on_first),
+			InstanceMethod("onLast", &cursormou::on_last),
+			InstanceMethod("onFirstMultival", &cursormou::on_first_multival),
+			InstanceMethod("onLastMultival", &cursormou::on_last_multival),
+			InstanceMethod("put", &cursormou::put),
+			InstanceMethod("del", &cursormou::del),
+			InstanceMethod("forEach", &cursormou::for_each),
+			InstanceMethod("close", &cursormou::close),
+		});
 
-    Napi::FunctionReference cursormou::ctor{};
+	ctor = Napi::Persistent(func);
+	ctor.SuppressDestruct();
+}
 
-    void cursormou::init(const char *class_name, Napi::Env env)
-    {
-        auto func = DefineClass(env, class_name, {
-            InstanceMethod("first", &cursormou::first),
-            InstanceMethod("last", &cursormou::last),
-            InstanceMethod("next", &cursormou::next),
-            InstanceMethod("prev", &cursormou::prev),
-            InstanceMethod("seek", &cursormou::seek),
-            InstanceMethod("seekGE", &cursormou::seek_ge),
-            InstanceMethod("current", &cursormou::current),
-            InstanceMethod("eof", &cursormou::eof),
-            InstanceMethod("onFirst", &cursormou::on_first),
-            InstanceMethod("onLast", &cursormou::on_last),
-            InstanceMethod("onFirstMultival", &cursormou::on_first_multival),
-            InstanceMethod("onLastMultival", &cursormou::on_last_multival),
-            InstanceMethod("put", &cursormou::put),
-            InstanceMethod("del", &cursormou::del),
-            InstanceMethod("forEach", &cursormou::for_each),
-            InstanceMethod("close", &cursormou::close),
-        });
+txnmou* cursormou::get_transaction(napi_env env) const noexcept
+{
+	if (txn_ref_.IsEmpty()) {
+		return nullptr;
+	}
 
-        ctor = Napi::Persistent(func);
-        ctor.SuppressDestruct();
-    }
+	napi_value txn_value{};
+	if (napi_get_reference_value(env, txn_ref_, &txn_value) != napi_ok ||
+		!txn_value) {
+		return nullptr;
+	}
 
-    void cursormou::do_close() noexcept
-    {
-        if (cursor_) {
-            ::mdbx_cursor_close(std::exchange(cursor_, nullptr));
-            if (txn_) {
-                --(*txn_);
-            }
-        }
-    }
+	void* txn{};
+	if (napi_unwrap(env, txn_value, &txn) != napi_ok) {
+		return nullptr;
+	}
 
-    cursormou::~cursormou()
-    {
-        do_close();
-    }
+	return static_cast<txnmou*>(txn);
+}
 
-    void cursormou::attach(txnmou &txn, dbimou &dbi, MDBX_cursor *cursor)
-    {
-        txn_ = &(++txn);
-        dbi_ = &dbi;
-        cursor_ = cursor;
-    }
+void cursormou::close_native(txnmou* txn) noexcept
+{
+	if (!cursor_) {
+		return;
+	}
 
-    // Внутренний хелпер для навигации
-    Napi::Value cursormou::move(const Napi::Env &env, MDBX_cursor_op op)
-    {
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
+	::mdbx_cursor_close(std::exchange(cursor_, nullptr));
+	if (txn) {
+		--(*txn);
+	}
 
-        keymou key{};
-        valuemou val{};
-        auto rc = mdbx_cursor_get(cursor_, key, val, op);
-        if (rc == MDBX_NOTFOUND) {
-            return env.Undefined();
-        }
+	dbi_ = nullptr;
+}
 
-        if (rc != MDBX_SUCCESS) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
+void cursormou::release_references() noexcept
+{
+	Napi::ObjectReference txn_ref{std::move(txn_ref_)};
+	Napi::ObjectReference dbi_ref{std::move(dbi_ref_)};
+}
 
-        return dbi_->get_convmou().make_result(env, key, val);
-    }
+cursormou::~cursormou() noexcept
+{
+	assert(cursor_ == nullptr);
+	assert(dbi_ == nullptr);
+	assert(txn_ref_.IsEmpty());
+	assert(dbi_ref_.IsEmpty());
+}
 
-    Napi::Value cursormou::first(const Napi::CallbackInfo &info)
-    {
-        return move(info.Env(), MDBX_FIRST);
-    }
+void cursormou::Finalize(Napi::Env env)
+{
+	close_native(get_transaction(env));
+	release_references();
+}
 
-    Napi::Value cursormou::last(const Napi::CallbackInfo &info)
-    {
-        return move(info.Env(), MDBX_LAST);
-    }
+void cursormou::attach(const Napi::Object& txn_object,
+	const Napi::Object& dbi_object,
+	MDBX_cursor* cursor)
+{
+	auto* txn = txnmou::Unwrap(txn_object);
+	auto* dbi = dbimou::Unwrap(dbi_object);
+	assert(txn);
+	assert(dbi);
 
-    Napi::Value cursormou::next(const Napi::CallbackInfo &info)
-    {
-        return move(info.Env(), MDBX_NEXT);
-    }
+	auto txn_ref = Napi::Persistent(txn_object);
+	auto dbi_ref = Napi::Persistent(dbi_object);
 
-    Napi::Value cursormou::prev(const Napi::CallbackInfo &info)
-    {
-        return move(info.Env(), MDBX_PREV);
-    }
+	txn_ref_ = std::move(txn_ref);
+	dbi_ref_ = std::move(dbi_ref);
+	++(*txn);
+	dbi_ = dbi;
+	cursor_ = cursor;
+}
 
-    Napi::Value cursormou::current(const Napi::CallbackInfo &info)
-    {
-        return move(info.Env(), MDBX_GET_CURRENT);
-    }
+// Внутренний хелпер для навигации
+Napi::Value cursormou::move(const Napi::Env& env, MDBX_cursor_op op)
+{
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
 
-    Napi::Value cursormou::eof(const Napi::CallbackInfo &info)
-    {
-        Napi::Env env = info.Env();
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
-        auto rc = ::mdbx_cursor_eof(cursor_);
-        if (rc == MDBX_RESULT_TRUE)
-            return Napi::Boolean::New(env, true);
-        if (rc == MDBX_RESULT_FALSE)
-            return Napi::Boolean::New(env, false);
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
+	keymou key{};
+	valuemou val{};
+	auto rc = mdbx_cursor_get(cursor_, key, val, op);
+	if (rc == MDBX_NOTFOUND) {
+		return env.Undefined();
+	}
 
-    Napi::Value cursormou::on_first(const Napi::CallbackInfo &info)
-    {
-        Napi::Env env = info.Env();
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
-        auto rc = ::mdbx_cursor_on_first(cursor_);
-        if (rc == MDBX_RESULT_TRUE)
-            return Napi::Boolean::New(env, true);
-        if (rc == MDBX_RESULT_FALSE)
-            return Napi::Boolean::New(env, false);
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
+	if (rc != MDBX_SUCCESS) {
+		throw Napi::Error::New(env, mdbx_strerror(rc));
+	}
 
-    Napi::Value cursormou::on_last(const Napi::CallbackInfo &info)
-    {
-        Napi::Env env = info.Env();
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
-        auto rc = ::mdbx_cursor_on_last(cursor_);
-        if (rc == MDBX_RESULT_TRUE)
-            return Napi::Boolean::New(env, true);
-        if (rc == MDBX_RESULT_FALSE)
-            return Napi::Boolean::New(env, false);
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
+	return dbi_->get_convmou().make_result(env, key, val);
+}
 
-    Napi::Value cursormou::on_first_multival(const Napi::CallbackInfo &info)
-    {
-        Napi::Env env = info.Env();
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
-        auto rc = ::mdbx_cursor_on_first_dup(cursor_);
-        if (rc == MDBX_RESULT_TRUE)
-            return Napi::Boolean::New(env, true);
-        if (rc == MDBX_RESULT_FALSE)
-            return Napi::Boolean::New(env, false);
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
+Napi::Value cursormou::first(const Napi::CallbackInfo& info)
+{
+	return move(info.Env(), MDBX_FIRST);
+}
 
-    Napi::Value cursormou::on_last_multival(const Napi::CallbackInfo &info)
-    {
-        Napi::Env env = info.Env();
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
-        auto rc = ::mdbx_cursor_on_last_dup(cursor_);
-        if (rc == MDBX_RESULT_TRUE)
-            return Napi::Boolean::New(env, true);
-        if (rc == MDBX_RESULT_FALSE)
-            return Napi::Boolean::New(env, false);
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
+Napi::Value cursormou::last(const Napi::CallbackInfo& info)
+{
+	return move(info.Env(), MDBX_LAST);
+}
 
-    // Хелпер для поиска
-    Napi::Value cursormou::seek_impl(const Napi::CallbackInfo &info, MDBX_cursor_op op)
-    {
-        Napi::Env env = info.Env();
+Napi::Value cursormou::next(const Napi::CallbackInfo& info)
+{
+	return move(info.Env(), MDBX_NEXT);
+}
 
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
+Napi::Value cursormou::prev(const Napi::CallbackInfo& info)
+{
+	return move(info.Env(), MDBX_PREV);
+}
 
-        if (info.Length() < 1) {
-            throw Napi::Error::New(env, "key required");
-        }
+Napi::Value cursormou::current(const Napi::CallbackInfo& info)
+{
+	return move(info.Env(), MDBX_GET_CURRENT);
+}
 
-        auto key_mode = dbi_->get_key_mode();
+Napi::Value cursormou::eof(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
+	auto rc = ::mdbx_cursor_eof(cursor_);
+	if (rc == MDBX_RESULT_TRUE) return Napi::Boolean::New(env, true);
+	if (rc == MDBX_RESULT_FALSE) return Napi::Boolean::New(env, false);
+	throw Napi::Error::New(env, mdbx_strerror(rc));
+}
 
-        keymou key = (mdbx::is_ordinal(key_mode)) ? 
-            keymou::from(info[0], env, key_num_) : 
-            keymou::from(info[0], env, key_buf_);
+Napi::Value cursormou::on_first(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
+	auto rc = ::mdbx_cursor_on_first(cursor_);
+	if (rc == MDBX_RESULT_TRUE) return Napi::Boolean::New(env, true);
+	if (rc == MDBX_RESULT_FALSE) return Napi::Boolean::New(env, false);
+	throw Napi::Error::New(env, mdbx_strerror(rc));
+}
 
-        valuemou val{};
-        auto rc = mdbx_cursor_get(cursor_, key, val, op);
-        if (MDBX_NOTFOUND == rc) {
-            return env.Undefined();
-        }
+Napi::Value cursormou::on_last(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
+	auto rc = ::mdbx_cursor_on_last(cursor_);
+	if (rc == MDBX_RESULT_TRUE) return Napi::Boolean::New(env, true);
+	if (rc == MDBX_RESULT_FALSE) return Napi::Boolean::New(env, false);
+	throw Napi::Error::New(env, mdbx_strerror(rc));
+}
 
-        if (MDBX_SUCCESS != rc) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
+Napi::Value cursormou::on_first_multival(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
+	auto rc = ::mdbx_cursor_on_first_dup(cursor_);
+	if (rc == MDBX_RESULT_TRUE) return Napi::Boolean::New(env, true);
+	if (rc == MDBX_RESULT_FALSE) return Napi::Boolean::New(env, false);
+	throw Napi::Error::New(env, mdbx_strerror(rc));
+}
 
-        return dbi_->get_convmou().make_result(env, key, val);
-    }
+Napi::Value cursormou::on_last_multival(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
+	auto rc = ::mdbx_cursor_on_last_dup(cursor_);
+	if (rc == MDBX_RESULT_TRUE) return Napi::Boolean::New(env, true);
+	if (rc == MDBX_RESULT_FALSE) return Napi::Boolean::New(env, false);
+	throw Napi::Error::New(env, mdbx_strerror(rc));
+}
 
-    Napi::Value cursormou::seek(const Napi::CallbackInfo &info)
-    {
-        return seek_impl(info, MDBX_SET_KEY);
-    }
+// Хелпер для поиска
+Napi::Value cursormou::seek_impl(
+	const Napi::CallbackInfo& info, MDBX_cursor_op op)
+{
+	Napi::Env env = info.Env();
 
-    Napi::Value cursormou::seek_ge(const Napi::CallbackInfo &info)
-    {
-        return seek_impl(info, MDBX_SET_RANGE);
-    }
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
 
-    Napi::Value cursormou::put(const Napi::CallbackInfo &info)
-    {
-        Napi::Env env = info.Env();
+	if (info.Length() < 1) {
+		throw Napi::Error::New(env, "key required");
+	}
 
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
+	auto key_mode = dbi_->get_key_mode();
 
-        if (info.Length() < 2) {
-            throw Napi::Error::New(env, "key and value required");
-        }
+	keymou key = (mdbx::is_ordinal(key_mode))
+		? keymou::from(info[0], env, key_num_)
+		: keymou::from(info[0], env, key_buf_);
 
-        auto key_mode = dbi_->get_key_mode();
+	valuemou val{};
+	auto rc = mdbx_cursor_get(cursor_, key, val, op);
+	if (MDBX_NOTFOUND == rc) {
+		return env.Undefined();
+	}
 
-        keymou key = (mdbx::is_ordinal(key_mode)) ? 
-            keymou::from(info[0], env, key_num_) : 
-            keymou::from(info[0], env, key_buf_);
+	if (MDBX_SUCCESS != rc) {
+		throw Napi::Error::New(env, mdbx_strerror(rc));
+	}
 
-        valuemou val = valuemou::from(info[1], env, val_buf_, val_num_,
-            is_ordinal(dbi_->get_value_mode()));
+	return dbi_->get_convmou().make_result(env, key, val);
+}
 
-        // Опциональный флаг put_mode (по умолчанию MDBX_UPSERT)
-        MDBX_put_flags_t flags = MDBX_UPSERT;
-        if (info.Length() > 2 && info[2].IsNumber()) {
-            flags = static_cast<MDBX_put_flags_t>(info[2].As<Napi::Number>().Int32Value());
-        }
+Napi::Value cursormou::seek(const Napi::CallbackInfo& info)
+{
+	return seek_impl(info, MDBX_SET_KEY);
+}
 
-        auto rc = mdbx_cursor_put(cursor_, key, val, flags);
-        if (MDBX_SUCCESS != rc) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
+Napi::Value cursormou::seek_ge(const Napi::CallbackInfo& info)
+{
+	return seek_impl(info, MDBX_SET_RANGE);
+}
 
-        return env.Undefined();
-    }
+Napi::Value cursormou::put(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
 
-    Napi::Value cursormou::del(const Napi::CallbackInfo &info)
-    {
-        Napi::Env env = info.Env();
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
 
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
+	if (info.Length() < 2) {
+		throw Napi::Error::New(env, "key and value required");
+	}
 
-        // Опциональный флаг (MDBX_NODUPDATA для удаления только текущего значения в multi-value)
-        MDBX_put_flags_t flags = MDBX_CURRENT;
-        if (info.Length() > 0 && info[0].IsNumber()) {
-            flags = static_cast<MDBX_put_flags_t>(info[0].As<Napi::Number>().Int32Value());
-        }
+	auto key_mode = dbi_->get_key_mode();
 
-        auto rc = mdbx_cursor_del(cursor_, flags);
-        if (MDBX_NOTFOUND == rc) {
-            return Napi::Boolean::New(env, false);
-        }
+	keymou key = (mdbx::is_ordinal(key_mode))
+		? keymou::from(info[0], env, key_num_)
+		: keymou::from(info[0], env, key_buf_);
 
-        if (MDBX_SUCCESS != rc) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
+	valuemou val = valuemou::from(
+		info[1], env, val_buf_, val_num_, is_ordinal(dbi_->get_value_mode()));
 
-        return Napi::Boolean::New(env, true);
-    }
+	// Опциональный флаг put_mode (по умолчанию MDBX_UPSERT)
+	MDBX_put_flags_t flags = MDBX_UPSERT;
+	if (info.Length() > 2 && info[2].IsNumber()) {
+		flags = static_cast<MDBX_put_flags_t>(
+			info[2].As<Napi::Number>().Int32Value());
+	}
 
-    // forEach(callback, backward = false)
-    // callback({key, value}) => true продолжить, false/undefined остановить
-    Napi::Value cursormou::for_each(const Napi::CallbackInfo &info)
-    {
-        Napi::Env env = info.Env();
+	auto rc = mdbx_cursor_put(cursor_, key, val, flags);
+	if (MDBX_SUCCESS != rc) {
+		throw Napi::Error::New(env, mdbx_strerror(rc));
+	}
 
-        if (!cursor_) {
-            throw Napi::Error::New(env, "cursor closed");
-        }
+	return env.Undefined();
+}
 
-        if (info.Length() < 1 || !info[0].IsFunction()) {
-            throw Napi::TypeError::New(env, "forEach: callback function required");
-        }
+Napi::Value cursormou::del(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
 
-        auto callback = info[0].As<Napi::Function>();
-        bool backward = info.Length() > 1 && info[1].ToBoolean().Value();
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
 
-        MDBX_cursor_op start_op = backward ? MDBX_LAST : MDBX_FIRST;
-        MDBX_cursor_op move_op = backward ? MDBX_PREV : MDBX_NEXT;
-        auto conv = dbi_->get_convmou();
+	// Опциональный флаг (MDBX_NODUPDATA для удаления только текущего значения в multi-value)
+	MDBX_put_flags_t flags = MDBX_CURRENT;
+	if (info.Length() > 0 && info[0].IsNumber()) {
+		flags = static_cast<MDBX_put_flags_t>(
+			info[0].As<Napi::Number>().Int32Value());
+	}
 
-        keymou key{};
-        valuemou val{};
-        // Первое позиционирование
-        auto rc = mdbx_cursor_get(cursor_, key, val, start_op);
-        while (MDBX_SUCCESS == rc)
-        {
-            auto result = conv.make_result(env, key, val);
+	auto rc = mdbx_cursor_del(cursor_, flags);
+	if (MDBX_NOTFOUND == rc) {
+		return Napi::Boolean::New(env, false);
+	}
 
-            // Вызов callback
-            auto ret = callback.Call({result});
+	if (MDBX_SUCCESS != rc) {
+		throw Napi::Error::New(env, mdbx_strerror(rc));
+	}
 
-            // true stops the scan, false/undefined continues (same as dbi.forEach)
-            if (ret.IsBoolean() && ret.ToBoolean()) {
-                break;
-            }
+	return Napi::Boolean::New(env, true);
+}
 
-            // Следующий элемент
-            rc = mdbx_cursor_get(cursor_, key, val, move_op);
-        }
+// forEach(callback, backward = false)
+// callback({key, value}) => true продолжить, false/undefined остановить
+Napi::Value cursormou::for_each(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
 
-        if (rc != MDBX_SUCCESS && rc != MDBX_NOTFOUND) {
-            throw Napi::Error::New(env, mdbx_strerror(rc));
-        }
+	if (!cursor_) {
+		throw Napi::Error::New(env, "cursor closed");
+	}
 
-        return env.Undefined();
-    }
+	if (info.Length() < 1 || !info[0].IsFunction()) {
+		throw Napi::TypeError::New(env, "forEach: callback function required");
+	}
 
-    Napi::Value cursormou::close(const Napi::CallbackInfo &info)
-    {
-        do_close();
-        return info.Env().Undefined();
-    }
+	auto callback = info[0].As<Napi::Function>();
+	bool backward = info.Length() > 1 && info[1].ToBoolean().Value();
 
-} // namespace mdbxmou
+	MDBX_cursor_op start_op = backward ? MDBX_LAST : MDBX_FIRST;
+	MDBX_cursor_op move_op = backward ? MDBX_PREV : MDBX_NEXT;
+	auto conv = dbi_->get_convmou();
+
+	keymou key{};
+	valuemou val{};
+	// Первое позиционирование
+	auto rc = mdbx_cursor_get(cursor_, key, val, start_op);
+	while (MDBX_SUCCESS == rc) {
+		auto result = conv.make_result(env, key, val);
+
+		// Вызов callback
+		auto ret = callback.Call({result});
+
+		// true stops the scan, false/undefined continues (same as dbi.forEach)
+		if (ret.IsBoolean() && ret.ToBoolean()) {
+			break;
+		}
+
+		// Следующий элемент
+		rc = mdbx_cursor_get(cursor_, key, val, move_op);
+	}
+
+	if (rc != MDBX_SUCCESS && rc != MDBX_NOTFOUND) {
+		throw Napi::Error::New(env, mdbx_strerror(rc));
+	}
+
+	return env.Undefined();
+}
+
+Napi::Value cursormou::close(const Napi::CallbackInfo& info)
+{
+	auto env = info.Env();
+	auto* txn = get_transaction(env);
+	if (cursor_ && !txn) {
+		throw Napi::Error::New(env, "cursor transaction owner unavailable");
+	}
+
+	close_native(txn);
+	release_references();
+	return env.Undefined();
+}
+
+}  // namespace mdbxmou

@@ -39,8 +39,11 @@
     "src/**/*",
     "deps/**/*",
     "!deps/**/.git",
+    "test/stage5-benchmark.js",
     "build.js",
     "CMakeLists.txt",
+    "GETVIEW.md",
+    "PERFORMANCE.md",
     "README.md",
     "LICENSE"
   ],
@@ -63,13 +66,17 @@
     "e8": "node ./test/e8.js",
     "e9": "node ./test/e9.js",
     "test:types": "node ./test/types/run.mjs",
+    "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
     "install": "node build.js"
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.4.1",
+  "version": "0.5.0",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Node bindings for mdbx",
   "repository": {
     "type": "git",
