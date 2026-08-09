@@ -52,13 +52,34 @@ struct range_options final
     bool include_end{true};
     std::size_t limit{std::numeric_limits<std::size_t>::max()};
     std::size_t offset{};
+    // MDBXMOU-RANGE-LIFETIME-01: keep owning data only; bind keymou after moves.
     std::uint64_t start_num{};
     std::uint64_t end_num{};
     buffer_type start_buf{};
     buffer_type end_buf{};
-    keymou start_key{};
-    keymou end_key{};
 };
+
+void parse_range_key(const Napi::Env& env, const Napi::Value& value,
+    bool ordinal, std::uint64_t& number, buffer_type& buffer)
+{
+    if (ordinal) {
+        keymou::from(value, env, number);
+        return;
+    }
+
+    if (value.IsBuffer()) {
+        const auto input = value.As<Napi::Buffer<char>>();
+        if (input.Length() == 0) {
+            buffer.clear();
+            return;
+        }
+        const auto* data = input.Data();
+        buffer.assign(data, data + input.Length());
+        return;
+    }
+
+    keymou::from(value, env, buffer);
+}
 
 range_options parse_range_options(const Napi::Env& env, const Napi::Value& arg0, const dbimou& self)
 {
@@ -88,21 +109,20 @@ range_options parse_range_options(const Napi::Env& env, const Napi::Value& arg0,
     options.reverse = parse_bool_option(env, obj, "reverse", false);
     options.include_start = parse_bool_option(env, obj, "includeStart", true);
     options.include_end = parse_bool_option(env, obj, "includeEnd", true);
+    const auto ordinal = mdbx::is_ordinal(self.get_key_mode());
 
     auto start = obj.Get("start");
     if (!start.IsUndefined() && !start.IsNull()) {
         options.has_start = true;
-        options.start_key = mdbx::is_ordinal(self.get_key_mode()) ?
-            keymou::from(start, env, options.start_num) :
-            keymou::from(start, env, options.start_buf);
+        parse_range_key(env, start, ordinal,
+            options.start_num, options.start_buf);
     }
 
     auto end = obj.Get("end");
     if (!end.IsUndefined() && !end.IsNull()) {
         options.has_end = true;
-        options.end_key = mdbx::is_ordinal(self.get_key_mode()) ?
-            keymou::from(end, env, options.end_num) :
-            keymou::from(end, env, options.end_buf);
+        parse_range_key(env, end, ordinal,
+            options.end_num, options.end_buf);
     }
 
     return options;
@@ -123,7 +143,9 @@ bool cursor_get(cursormou_managed& cursor, MDBX_cursor_op op, mdbx::slice& key, 
     }
 }
 
-bool outside_range(MDBX_txn* txn, MDBX_dbi dbi, const mdbx::slice& key, const range_options& options)
+bool outside_range(MDBX_txn* txn, MDBX_dbi dbi, const mdbx::slice& key,
+    const range_options& options, const keymou& start_key,
+    const keymou& end_key)
 {
     if (options.reverse) {
         if (!options.has_start) {
@@ -132,7 +154,7 @@ bool outside_range(MDBX_txn* txn, MDBX_dbi dbi, const mdbx::slice& key, const ra
         auto cmp = ::mdbx_cmp(
             txn, dbi,
             static_cast<const MDBX_val*>(&key),
-            static_cast<const MDBX_val*>(&options.start_key));
+            static_cast<const MDBX_val*>(&start_key));
         return cmp < 0 || (!options.include_start && cmp == 0);
     }
 
@@ -142,7 +164,7 @@ bool outside_range(MDBX_txn* txn, MDBX_dbi dbi, const mdbx::slice& key, const ra
     auto cmp = ::mdbx_cmp(
         txn, dbi,
         static_cast<const MDBX_val*>(&key),
-        static_cast<const MDBX_val*>(&options.end_key));
+        static_cast<const MDBX_val*>(&end_key));
     return cmp > 0 || (!options.include_end && cmp == 0);
 }
 
@@ -176,13 +198,18 @@ std::size_t scan_range(dbimou& self, txnmou& txn, const range_options& options, 
     auto cursor = self.open_cursor(txn);
     mdbx::slice key{};
     mdbx::slice value{};
+    const auto ordinal = mdbx::is_ordinal(self.get_key_mode());
+    const keymou start_key = ordinal ?
+        keymou{options.start_num} : keymou{options.start_buf};
+    const keymou end_key = ordinal ?
+        keymou{options.end_num} : keymou{options.end_buf};
 
     if (options.reverse) {
         if (options.has_end) {
-            key = options.end_key;
+            key = end_key;
         }
     } else if (options.has_start) {
-        key = options.start_key;
+        key = start_key;
     }
 
     if (!cursor_get(cursor, range_start_op(options), key, value)) {
@@ -194,7 +221,8 @@ std::size_t scan_range(dbimou& self, txnmou& txn, const range_options& options, 
     auto turn_op = range_turn_op(options);
 
     while (true) {
-        if (outside_range(txn, self.get_id(), key, options)) {
+        if (outside_range(txn, self.get_id(), key, options,
+                start_key, end_key)) {
             break;
         }
 
