@@ -30,7 +30,6 @@ class dbimou final
     std::uint64_t val_num_{};
     
 public:   
-    static Napi::FunctionReference ctor;
     static bool is_instance(const Napi::Value& value) noexcept;
     static dbimou* unwrap_checked(const Napi::Env& env,
         const Napi::Value& value,
@@ -68,7 +67,7 @@ public:
         return Napi::Number::New(info.Env(), static_cast<double>(value_flag_.val));
     }    
 
-    static void init(const char *class_name, Napi::Env env);
+    static Napi::Function init(const char *class_name, Napi::Env env);
 
 	// valuemou read(const MDBX_txn* txn);
 	// valuemou read(const MDBX_txn* txn, const keymou& key);

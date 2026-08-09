@@ -11,6 +11,19 @@ Node.js binding for [libmdbx](https://github.com/Mithril-mine/libmdbx) — a fas
 - **Batch operations** — Efficient multi-key read/write
 - **Memory-mapped** — High-performance memory-mapped I/O
 
+## Worker Threads
+
+The native addon may be loaded independently by the main thread and multiple
+`worker_threads`. Each isolate must create and retain its own MDBX environment,
+transactions, DBIs, and cursors, and must use a separate database path in this
+release. Opening the same database path from multiple isolates of one process
+is not supported or verified.
+
+Do not pass MDBX wrappers, native pointers, borrowed `DataView` objects, or
+their backing `ArrayBuffer` between isolates. Copied or serialized data may be
+sent normally. Separate OS processes may open the same database under the
+usual MDBX locking rules.
+
 ## Installation
 
 ```bash
@@ -326,7 +339,7 @@ For `valueMode.multiOrdinal`, `get()` returns the first duplicate value for the 
 
 > `getView()` is an advanced borrowed-memory API and should not be used as a
 > default replacement for `get()`. Read [GETVIEW.md](GETVIEW.md) before using it
-> in production; the caller owns strict lifetime, no-transfer and single-isolate
+> in production; the caller owns strict lifetime, no-transfer and isolate-local
 > obligations that cannot all be enforced at runtime.
 
 `getView()` returns a standard JavaScript `DataView` over the bytes mapped by
@@ -411,10 +424,10 @@ or otherwise retain a view; drop every reference and finish all reads before
 `commit()` or `abort()`. An untracked buffer can still appear attached after
 completion even though its memory is no longer valid.
 
-`getView()` is unavailable when the environment uses `MDBX_WRITEMAP`. The
-current native addon also supports only one JavaScript isolate loading it per
-process. Do not load it from `worker_threads`; use separate OS processes, each
-with its own environment and transaction, until multi-isolate support is added.
+`getView()` is unavailable when the environment uses `MDBX_WRITEMAP`. Multiple
+JavaScript isolates may load the addon, but each isolate must use its own
+wrappers and a separate database path. A borrowed view and its backing buffer
+must remain in the isolate that created them.
 
 The reproducible benchmark and measured Linux x64 baseline are documented in
 [PERFORMANCE.md](PERFORMANCE.md).

@@ -13,7 +13,6 @@ class txnmou;
 
 class envmou final : public Napi::ObjectWrap<envmou>
 {
-	static Napi::FunctionReference ctor;
 	static mdbx::env::geometry parse_geometry(const Napi::Value& obj);
 	static env_arg0 parse(const Napi::Value& obj);
 

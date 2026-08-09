@@ -101,7 +101,6 @@ private:
 	Napi::Value is_active_js(const Napi::CallbackInfo& info);
 
 public:
-	static Napi::FunctionReference ctor;
 	static bool is_instance(const Napi::Value& value) noexcept;
 	static txnmou* unwrap_checked(const Napi::Env& env,
 		const Napi::Value& value,
@@ -118,7 +117,7 @@ public:
 
 	void Finalize(Napi::Env env) override;
 
-	static void init(const char* class_name, Napi::Env env);
+	static Napi::Function init(const char* class_name, Napi::Env env);
 
 	Napi::Value commit(const Napi::CallbackInfo&);
 	Napi::Value abort(const Napi::CallbackInfo&);

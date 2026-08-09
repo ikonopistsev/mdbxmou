@@ -42,6 +42,7 @@ endif()
 add_subdirectory("deps/libmdbx")
 
 add_library(${PROJECT_NAME} SHARED
+    "src/addon_state.cpp"
     "src/async/envmou_copy_to.cpp"
     "src/async/envmou_close.cpp"
     "src/async/envmou_query.cpp"

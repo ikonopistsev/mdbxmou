@@ -1,4 +1,5 @@
 #include "txnmou.hpp"
+#include "addon_state.hpp"
 #include "envmou.hpp"
 #include "cursormou.hpp"
 #include <exception>
@@ -17,7 +18,6 @@ namespace mdbxmou {
 static_assert(Napi::details::HasExtendedFinalizer<txnmou>::value,
 	"txnmou must use the extended N-API finalizer");
 
-Napi::FunctionReference txnmou::ctor{};
 const napi_type_tag txnmou::type_tag_{
 	0xd4f5b982e8a7419aULL,
 	0x9c63f1472e0db5c4ULL,
@@ -58,7 +58,7 @@ txnmou::~txnmou() noexcept
 	assert(issued_views_.empty());
 }
 
-void txnmou::init(const char* class_name, Napi::Env env)
+Napi::Function txnmou::init(const char* class_name, Napi::Env env)
 {
 	auto func = DefineClass(env,
 		class_name,
@@ -78,8 +78,7 @@ void txnmou::init(const char* class_name, Napi::Env env)
 #endif
 		});
 
-	ctor = Napi::Persistent(func);
-	ctor.SuppressDestruct();
+	return func;
 }
 
 Napi::Value txnmou::commit(const Napi::CallbackInfo& info)
@@ -454,7 +453,7 @@ Napi::Value txnmou::get_dbi(const char* name,
 			env, std::string("mdbx_dbi_open: ") + mdbx_strerror(rc));
 	}
 	// создаем новый объект dbi
-	auto obj = dbimou::ctor.New({});
+	auto obj = addon_state::get(env).new_dbi();
 	auto ptr = dbimou::Unwrap(obj);
 	ptr->attach(dbi, db_mode, key_mode, value_mode, key_flag, value_flag);
 	return obj;
@@ -628,7 +627,7 @@ Napi::Value txnmou::open_cursor(const Napi::CallbackInfo& info)
 	}
 
 	try {
-		auto obj = cursormou::ctor.New({});
+		auto obj = addon_state::get(env).new_cursor();
 		auto ptr = cursormou::Unwrap(obj);
 		ptr->attach(info.This().As<Napi::Object>(), arg0, cursor);
 		cursor = nullptr;

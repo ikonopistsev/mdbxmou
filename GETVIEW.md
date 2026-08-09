@@ -69,8 +69,8 @@ if (owned !== undefined) {
 }
 ```
 
-The Worker may consume this owned copy, but it must not load `mdbxmou` while
-another isolate in the process has already loaded the addon.
+The Worker may consume this owned copy and may load its own `mdbxmou` addon
+instance. It must create its own wrappers and use a separate database path.
 
 ## Lifetime Modes
 
@@ -104,10 +104,14 @@ Do not call `ArrayBuffer.prototype.transfer()`, use a transfer list, or manually
 detach `view.buffer`. These operations can bypass transaction tracking; memory
 safety is no longer guaranteed after that contract violation.
 
-This release does not support loading the addon in multiple V8 isolates within
-one Node.js process, including `worker_threads`. It also does not support
-passing a borrowed view to a Worker. Copy the bytes first, or let another OS
-process open the database and create its own environment and transaction.
+The addon may be loaded independently in multiple V8 isolates within one
+Node.js process, including `worker_threads`. Each isolate must create its own
+environment, transaction, DBI, and cursor wrappers and use a separate database
+path. Opening the same database path from multiple isolates of one process is
+not supported or verified in this release.
+
+Passing a borrowed view, its backing buffer, an MDBX wrapper, or a native
+pointer to another isolate remains unsupported. Copy the bytes first.
 
 Separate OS processes may open the same MDBX database under normal MDBX locking
 rules. Process-local addon state is not shared between them. MDBX exclusive

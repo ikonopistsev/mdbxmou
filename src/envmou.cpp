@@ -1,4 +1,5 @@
 #include "envmou.hpp"
+#include "addon_state.hpp"
 #include "txnmou.hpp"
 #include "async/envmou_copy_to.hpp"
 #include "async/envmou_query.hpp"
@@ -69,8 +70,6 @@ std::uint64_t parse_sync_period(const Napi::Env &env, const Napi::Value &value)
 
 } // namespace
 
-Napi::FunctionReference envmou::ctor{};
-
 void envmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
 {
     auto func = DefineClass(env, class_name, {
@@ -88,8 +87,6 @@ void envmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
         InstanceMethod("setOption", &envmou::set_option),
         InstanceMethod("syncEx", &envmou::sync_ex),
     });
-    ctor = Napi::Persistent(func);
-    ctor.SuppressDestruct();
     exports.Set(class_name, func);
 }
 
@@ -435,7 +432,7 @@ Napi::Value envmou::start_transaction(
 		std::unique_ptr<MDBX_txn, abort_transaction> txn_owner{txn};
 
 		// Создаем новый объект txnmou
-		auto txn_obj = txnmou::ctor.New({});
+		auto txn_obj = addon_state::get(env).new_transaction();
 		auto txn_wrapper = txnmou::Unwrap(txn_obj);
 		txn_wrapper->attach(info.This().As<Napi::Object>(),
 			txn_owner.get(),

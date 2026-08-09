@@ -33,8 +33,7 @@ private:
 	void release_references() noexcept;
 
 public:
-	static Napi::FunctionReference ctor;
-	static void init(const char* class_name, Napi::Env env);
+	static Napi::Function init(const char* class_name, Napi::Env env);
 
 	cursormou(const Napi::CallbackInfo& info)
 		: Napi::ObjectWrap<cursormou>(info)

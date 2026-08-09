@@ -323,7 +323,6 @@ Napi::Value run_range_count(const Napi::CallbackInfo& info, dbimou& self, const 
 
 } // namespace
 
-Napi::FunctionReference dbimou::ctor{};
 const napi_type_tag dbimou::type_tag_{
     0x6f43d8a92c1e475bULL,
     0xb5810ed347fa962cULL,
@@ -357,7 +356,7 @@ dbimou* dbimou::unwrap_checked(
 	return static_cast<dbimou*>(wrapper);
 }
 
-void dbimou::init(const char* class_name, Napi::Env env)
+Napi::Function dbimou::init(const char* class_name, Napi::Env env)
 {
 	auto func = DefineClass(env,
 		class_name,
@@ -387,8 +386,7 @@ void dbimou::init(const char* class_name, Napi::Env env)
 			InstanceAccessor("valueFlag", &dbimou::get_value_flag, nullptr),
 		});
 
-	ctor = Napi::Persistent(func);
-	ctor.SuppressDestruct();
+	return func;
 }
 
 Napi::Value dbimou::put(const Napi::CallbackInfo& info) 

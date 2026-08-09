@@ -1,5 +1,26 @@
+#include "addon_state.hpp"
 #include "envmou.hpp"
 #include "cursormou.hpp"
+#include <memory>
+
+namespace {
+
+#if defined(MDBXMOU_TESTING)
+Napi::Value debug_addon_state(const Napi::CallbackInfo& info)
+{
+	const auto state = mdbxmou::addon_state::lifecycle();
+	auto result = Napi::Object::New(info.Env());
+	result.Set("created",
+		Napi::Number::New(info.Env(), static_cast<double>(state.created)));
+	result.Set("finalized",
+		Napi::Number::New(info.Env(), static_cast<double>(state.finalized)));
+	result.Set(
+		"live", Napi::Number::New(info.Env(), static_cast<double>(state.live)));
+	return result;
+}
+#endif
+
+}  // namespace
 
 using namespace Napi;
 
@@ -150,12 +171,23 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
 
 #undef MDBXMOU_DECLARE_FLAG_NAME
 
-    mdbxmou::envmou::init("MDBX_Env", env, exports);
-    mdbxmou::txnmou::init("MDBX_Txn", env);
-    mdbxmou::dbimou::init("MDBX_Dbi", env);
-    mdbxmou::cursormou::init("MDBX_Cursor", env);
+	mdbxmou::envmou::init("MDBX_Env", env, exports);
+	auto txn_ctor = mdbxmou::txnmou::init("MDBX_Txn", env);
+	auto dbi_ctor = mdbxmou::dbimou::init("MDBX_Dbi", env);
+	auto cursor_ctor = mdbxmou::cursormou::init("MDBX_Cursor", env);
 
-    return exports;
+	auto state =
+		std::make_unique<mdbxmou::addon_state>(txn_ctor, dbi_ctor, cursor_ctor);
+	env.SetInstanceData<mdbxmou::addon_state, mdbxmou::addon_state::finalize>(
+		state.get());
+	state.release();
+
+#if defined(MDBXMOU_TESTING)
+	exports.Set(
+		"_debugAddonState", Napi::Function::New(env, debug_addon_state));
+#endif
+
+	return exports;
 }
 
 NODE_API_MODULE(addon, Init)
