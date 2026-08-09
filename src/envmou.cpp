@@ -6,6 +6,7 @@
 #include "async/envmou_keys.hpp"
 #include "async/envmou_close.hpp"
 #include <cmath>
+#include <cstdint>
 #include <exception>
 #include <limits>
 
@@ -47,6 +48,23 @@ std::uint64_t parse_option_value(const Napi::Env &env, const Napi::Value &arg0)
     }
 
     return static_cast<std::uint64_t>(arg0.As<Napi::Number>().DoubleValue());
+}
+
+std::uint64_t parse_sync_period(const Napi::Env &env, const Napi::Value &value)
+{
+    if (!value.IsNumber())
+        throw Napi::TypeError::New(env, "syncPeriod must be a number");
+
+    constexpr double fixed_point_scale = 65536.0;
+    constexpr double max_sync_period_seconds =
+        static_cast<double>(std::numeric_limits<std::uint32_t>::max()) /
+        fixed_point_scale;
+    const auto seconds = value.As<Napi::Number>().DoubleValue();
+    if (!std::isfinite(seconds) || seconds < 0 ||
+        seconds > max_sync_period_seconds)
+        throw Napi::RangeError::New(env, "syncPeriod is out of range");
+
+    return static_cast<std::uint64_t>(seconds * fixed_point_scale);
 }
 
 } // namespace
@@ -532,7 +550,7 @@ Napi::Value envmou::set_option(const Napi::CallbackInfo &info)
 
     uint64_t val = 0;
     if (static_cast<MDBX_option>(opt) == MDBX_opt_sync_period)
-        val = info[1].As<Napi::Number>().DoubleValue() * 65536u;
+        val = parse_sync_period(env, info[1]);
     else
         val = parse_option_value(env, info[1]);
 
