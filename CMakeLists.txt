@@ -6,7 +6,7 @@ add_definitions(-DNAPI_CPP_EXCEPTIONS)
 
 option(MDBXMOU_TESTING "Enable internal native test hooks" OFF)
 
-set(MDBXMOU_MIN_LIBMDBX_VERSION "0.14.2")
+set(MDBXMOU_MIN_LIBMDBX_VERSION "0.14.3")
 set(MDBXMOU_LIBMDBX_VERSION_FILE
     "${CMAKE_CURRENT_SOURCE_DIR}/deps/libmdbx/VERSION.json")
 if(NOT EXISTS "${MDBXMOU_LIBMDBX_VERSION_FILE}")
@@ -61,6 +61,7 @@ add_library(${PROJECT_NAME} SHARED
 target_compile_definitions(${PROJECT_NAME} PRIVATE NAPI_VERSION=8)
 if(MDBXMOU_TESTING)
   target_compile_definitions(${PROJECT_NAME} PRIVATE MDBXMOU_TESTING=1)
+  target_sources(${PROJECT_NAME} PRIVATE "src/debug_writer.cpp")
 endif()
 
 # Gives our library file a .node extension without any "lib" prefix

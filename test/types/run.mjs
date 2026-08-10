@@ -7,10 +7,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..");
 const typesDir = path.join(repoRoot, "test", "types");
 
-const tscBin =
-  process.platform === "win32"
-    ? path.join(repoRoot, "node_modules", ".bin", "tsc.cmd")
-    : path.join(repoRoot, "node_modules", ".bin", "tsc");
+const tscBin = path.join(repoRoot, "node_modules", "typescript", "bin", "tsc");
 
 if (!fs.existsSync(tscBin)) {
   console.error("Missing TypeScript. Run: npm i");
@@ -34,7 +31,7 @@ for (const file of ["sync.mts", "async.mts", "cjs.cts"]) {
   fs.copyFileSync(path.join(typesDir, file), path.join(tmp, file));
 }
 
-const res = spawnSync(tscBin, ["-p", path.join(tmp, "tsconfig.json")], {
+const res = spawnSync(process.execPath, [tscBin, "-p", path.join(tmp, "tsconfig.json")], {
   stdio: "inherit"
 });
 

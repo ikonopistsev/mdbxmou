@@ -562,7 +562,7 @@ Napi::Value dbimou::for_each(const Napi::CallbackInfo& info)
 
             auto cursor = open_cursor(*txn);
             uint32_t index{};
-            cursor.scan([&](const mdbx::pair& f) {
+            cursor.scan_until([&](const mdbx::pair& f) {
                 keymou key{f.key};
                 valuemou val{f.value};
                 Napi::Value result = fn.Call({
@@ -659,7 +659,7 @@ Napi::Value dbimou::for_each_from(const Napi::CallbackInfo& info)
         std::size_t index{};
         bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
                                   cursor_mode == move_operation::multi_exactkey_value_equal);
-        cursor.scan_from([&](const mdbx::pair& f) {
+        cursor.scan_until_from([&](const mdbx::pair& f) {
             keymou key{f.key};
             valuemou val{f.value};
             if (is_key_equal_mode) {
@@ -854,7 +854,7 @@ Napi::Value dbimou::keys_from(const Napi::CallbackInfo& info)
         bool is_key_equal_mode = (cursor_mode == move_operation::key_equal || 
             cursor_mode == move_operation::multi_exactkey_value_equal);
         
-        cursor.scan_from([&](const mdbx::pair& f) {
+        cursor.scan_until_from([&](const mdbx::pair& f) {
             if (index >= count) {
                 return true; // останавливаем сканирование
             }

@@ -18,7 +18,7 @@ void scan_keys_from(mdbx::cursor_managed& cursor, keys_line& arg0,
         cursor_mode == mdbx::cursor::move_operation::multi_exactkey_value_equal);
 
     std::size_t index{};
-    cursor.scan_from([&](const mdbx::pair& f) {
+    cursor.scan_until_from([&](const mdbx::pair& f) {
         if (index >= arg0.limit) {
             return true;
         }

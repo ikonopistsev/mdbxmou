@@ -533,6 +533,13 @@ dbi.drop(txn, true);
 dbi.drop(txn);
 ```
 
+After a committed `drop(txn, true)`, discard that JavaScript DBI object and
+open or create a new one in a new transaction. An already active transaction
+may use its old snapshot only until the drop transaction commits; afterward
+the old handle reports `MDBX_BAD_DBI`. Reusing a stale wrapper after another
+DBI has reused the same native slot, for example after same-name recreation, is
+not supported.
+
 ### Cursor (MDBX_Cursor)
 
 Cursors provide low-level control for database traversal with positioning and iteration capabilities.

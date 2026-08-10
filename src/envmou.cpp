@@ -6,6 +6,9 @@
 #include "async/envmou_open.hpp"
 #include "async/envmou_keys.hpp"
 #include "async/envmou_close.hpp"
+#if defined(MDBXMOU_TESTING)
+#include "debug_writer.hpp"
+#endif
 #include <cmath>
 #include <cstdint>
 #include <exception>
@@ -86,6 +89,10 @@ void envmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
         InstanceMethod("keys", &envmou::keys),
         InstanceMethod("setOption", &envmou::set_option),
         InstanceMethod("syncEx", &envmou::sync_ex),
+#if defined(MDBXMOU_TESTING)
+        InstanceMethod("_debugStartWriter", &envmou::debug_start_writer),
+        InstanceMethod("_debugWriterState", &envmou::debug_writer_state),
+#endif
     });
     exports.Set(class_name, func);
 }
@@ -552,6 +559,9 @@ Napi::Value envmou::set_option(const Napi::CallbackInfo &info)
         val = parse_option_value(env, info[1]);
 
     auto rc = mdbx_env_set_option(*this, opt, val);
+#if defined(MDBXMOU_TESTING)
+    debug_writer_observe_env_call();
+#endif
     if (rc != MDBX_SUCCESS)
     {
         throw Napi::Error::New(env, mdbx_strerror(rc));
@@ -578,6 +588,9 @@ Napi::Value envmou::sync_ex(const Napi::CallbackInfo &info)
     check();
 
     auto rc = mdbx_env_sync_ex(*this, force, nonblock);
+#if defined(MDBXMOU_TESTING)
+    debug_writer_observe_env_call();
+#endif
     if (rc != MDBX_SUCCESS)
     {
         throw Napi::Error::New(env, mdbx_strerror(rc));
@@ -585,5 +598,171 @@ Napi::Value envmou::sync_ex(const Napi::CallbackInfo &info)
 
     return Napi::Number::New(env, rc);
 }
+
+#if defined(MDBXMOU_TESTING)
+Napi::Value envmou::debug_start_writer(const Napi::CallbackInfo& info)
+{
+	auto env = info.Env();
+	std::uint32_t hold_ms{500};
+	std::uint32_t publish_delay_ms{};
+	bool commit{true};
+
+	if (info.Length() > 0 && !info[0].IsUndefined()) {
+		if (!info[0].IsObject()) {
+			throw Napi::TypeError::New(env, "expected writer options object");
+		}
+		auto options = info[0].As<Napi::Object>();
+		if (options.Has("holdMs")) {
+			auto value = options.Get("holdMs");
+			if (!value.IsNumber()) {
+				throw Napi::TypeError::New(env, "holdMs must be a number");
+			}
+			hold_ms = value.As<Napi::Number>().Uint32Value();
+			if (hold_ms == 0 || hold_ms > 10'000) {
+				throw Napi::RangeError::New(
+					env, "holdMs must be in range 1..10000");
+			}
+		}
+		if (options.Has("publishDelayMs")) {
+			auto value = options.Get("publishDelayMs");
+			if (!value.IsNumber()) {
+				throw Napi::TypeError::New(
+					env, "publishDelayMs must be a number");
+			}
+			publish_delay_ms = value.As<Napi::Number>().Uint32Value();
+			if (publish_delay_ms > 10'000) {
+				throw Napi::RangeError::New(
+					env, "publishDelayMs must be in range 0..10000");
+			}
+		}
+		if (options.Has("commit")) {
+			auto value = options.Get("commit");
+			if (!value.IsBoolean()) {
+				throw Napi::TypeError::New(env, "commit must be a boolean");
+			}
+			commit = value.As<Napi::Boolean>().Value();
+		}
+	}
+
+	// MDBXMOU-0005-WRITER-ORACLE: lock only setup; the native writer must run
+	// independently or the test hook would create the deadlock it detects.
+	lock_guard lock{*this};
+	check();
+	if (!debug_writer_starting()) {
+		throw Napi::Error::New(env, "debug writer is already active");
+	}
+
+	std::unique_ptr<debug_writer> worker;
+	try {
+		worker = std::make_unique<debug_writer>(env,
+			*this,
+			info.This().As<Napi::Object>(),
+			hold_ms,
+			publish_delay_ms,
+			commit);
+	} catch (...) {
+		debug_writer_reset();
+		throw;
+	}
+	++(*this);
+	try {
+		worker->Queue();
+	} catch (...) {
+		--(*this);
+		debug_writer_reset();
+		throw;
+	}
+	auto promise = worker->get_promise();
+	worker.release();
+	return promise;
+}
+
+Napi::Value envmou::debug_writer_state(const Napi::CallbackInfo& info)
+{
+	auto env = info.Env();
+	const auto phase = debug_writer_phase_.load(std::memory_order_acquire);
+	const auto observed_phase =
+		debug_writer_observed_phase_.load(std::memory_order_acquire);
+	const auto begin_rc =
+		debug_writer_begin_rc_.load(std::memory_order_relaxed);
+	const auto finish_rc =
+		debug_writer_finish_rc_.load(std::memory_order_relaxed);
+	auto result = Napi::Object::New(env);
+
+	const auto phase_name = [](debug_writer_phase value) noexcept {
+		switch (value) {
+		case debug_writer_phase::starting: return "starting";
+		case debug_writer_phase::ready: return "ready";
+		case debug_writer_phase::finishing: return "finishing";
+		case debug_writer_phase::finished: return "finished";
+		case debug_writer_phase::idle: return "idle";
+		}
+		return "unknown";
+	};
+	result.Set("phase", phase_name(phase));
+	result.Set("observedPhase", phase_name(observed_phase));
+	result.Set("ready",
+		phase == debug_writer_phase::ready ||
+			phase == debug_writer_phase::finishing ||
+			phase == debug_writer_phase::finished);
+	result.Set("finished", phase == debug_writer_phase::finished);
+	result.Set("beginCode", begin_rc);
+	result.Set("finishCode", finish_rc);
+	return result;
+}
+
+bool envmou::debug_writer_starting() noexcept
+{
+	auto phase = debug_writer_phase_.load(std::memory_order_acquire);
+	while (phase == debug_writer_phase::idle ||
+		phase == debug_writer_phase::finished) {
+		if (debug_writer_phase_.compare_exchange_weak(phase,
+				debug_writer_phase::starting,
+				std::memory_order_acq_rel,
+				std::memory_order_acquire)) {
+			debug_writer_begin_rc_.store(
+				MDBX_RESULT_TRUE, std::memory_order_relaxed);
+			debug_writer_finish_rc_.store(
+				MDBX_RESULT_TRUE, std::memory_order_relaxed);
+			debug_writer_observed_phase_.store(
+				debug_writer_phase::idle, std::memory_order_relaxed);
+			return true;
+		}
+	}
+	return false;
+}
+
+void envmou::debug_writer_ready(int rc) noexcept
+{
+	debug_writer_begin_rc_.store(rc, std::memory_order_relaxed);
+	debug_writer_phase_.store(
+		debug_writer_phase::ready, std::memory_order_release);
+}
+
+void envmou::debug_writer_finished(int rc) noexcept
+{
+	debug_writer_finish_rc_.store(rc, std::memory_order_relaxed);
+	debug_writer_phase_.store(
+		debug_writer_phase::finished, std::memory_order_release);
+}
+
+void envmou::debug_writer_finishing() noexcept
+{
+	debug_writer_phase_.store(
+		debug_writer_phase::finishing, std::memory_order_release);
+}
+
+void envmou::debug_writer_observe_env_call() noexcept
+{
+	const auto phase = debug_writer_phase_.load(std::memory_order_acquire);
+	debug_writer_observed_phase_.store(phase, std::memory_order_release);
+}
+
+void envmou::debug_writer_reset() noexcept
+{
+	debug_writer_phase_.store(
+		debug_writer_phase::idle, std::memory_order_release);
+}
+#endif
 
 } // namespace mdbxmou

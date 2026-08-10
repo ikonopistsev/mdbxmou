@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2026-08-10
+
+### Fixed
+
+- **ID:** `MDBXMOU-0005-LIBMDBX-0143`
+  **Summary:** Bundled libmdbx was updated to the stable v0.14.3 release.
+  **Long description:** The binding now requires and packages official
+  libmdbx v0.14.3. Removed C++ cursor methods were migrated to
+  `scan_until()` and `scan_until_from()` without changing JavaScript traversal
+  semantics. Build metadata is read from the bundled upstream `VERSION.json`;
+  a package missing that file now fails closed instead of generating stale
+  v0.13.7 metadata.
+- **ID:** `MDBXMOU-0005-COPY-PAYLOAD`
+  **Summary:** Non-compacting database copies preserve their payload again.
+  **Long description:** The libmdbx v0.14.3 copy fix restores payload data in
+  `copyTo()` and `copyToSync()` when called with `copyFlag.defaults`. Regression
+  coverage compares exact record counts and digests for the main and a named
+  database after synchronous and asynchronous copies.
+- **ID:** `MDBXMOU-0005-WRITER-ORACLE`
+  **Summary:** Cross-thread write-lock regressions use a deterministic test
+  barrier.
+  **Long description:** A test-only native writer reports exact transaction
+  state without retaining the JavaScript wrapper mutex while it owns the
+  native write transaction. Environment calls capture that state at the native
+  return boundary, so scheduler timing cannot produce a false lock result. The
+  hook is absent from release builds and does not change the public API.
+
 ## [0.5.1] - 2026-08-10
 
 ### Fixed
