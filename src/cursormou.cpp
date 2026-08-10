@@ -8,9 +8,7 @@ namespace mdbxmou {
 static_assert(Napi::details::HasExtendedFinalizer<cursormou>::value,
 	"cursormou must use the extended N-API finalizer");
 
-Napi::FunctionReference cursormou::ctor{};
-
-void cursormou::init(const char* class_name, Napi::Env env)
+Napi::Function cursormou::init(const char* class_name, Napi::Env env)
 {
 	auto func = DefineClass(env,
 		class_name,
@@ -33,8 +31,7 @@ void cursormou::init(const char* class_name, Napi::Env env)
 			InstanceMethod("close", &cursormou::close),
 		});
 
-	ctor = Napi::Persistent(func);
-	ctor.SuppressDestruct();
+	return func;
 }
 
 txnmou* cursormou::get_transaction(napi_env env) const noexcept

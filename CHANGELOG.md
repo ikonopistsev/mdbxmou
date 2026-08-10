@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-08-10
+
+### Fixed
+
+- **ID:** `MDBXMOU-0004-WORKER-STATE`
+  **Summary:** Native constructor state is isolated per Node.js environment.
+  **Long description:** Process-static wrapper constructor references were
+  replaced by state owned through `Napi::Env::SetInstanceData()`. The main
+  thread and multiple Workers can now load the addon independently without
+  replacing another isolate's references. A bounded regression suite covers
+  natural and forced Worker teardown, parallel initialization, the root async
+  export, and `mdbxmou/async`. Wrappers and borrowed buffers remain
+  isolate-local, and each isolate uses a separate database path.
+
 ## [0.5.0] - 2026-08-08
 
 ### Added
