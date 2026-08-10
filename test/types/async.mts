@@ -20,6 +20,8 @@ await dbi.put(1n, "one");
 await dbi.put(2n, Buffer.from("two"));
 // @ts-expect-error value must be Buffer|string
 await dbi.put(3n, 123);
+// @ts-expect-error commitAndStartRead is sync-only in this release
+w.commitAndStartRead();
 await w.commit();
 
 const r = await env1.startRead();
@@ -30,4 +32,3 @@ await r.commit();
 
 await env1.close();
 await env1.terminate();
-

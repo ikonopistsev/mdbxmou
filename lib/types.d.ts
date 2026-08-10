@@ -295,6 +295,18 @@ export interface MDBX_Dbi<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDB
 
 export interface MDBX_Txn {
   commit(): void;
+  /**
+   * Commit an active write transaction and keep this wrapper active over the
+   * exact post-commit read snapshot.
+   *
+   * Complete the resulting read transaction before starting another write
+   * transaction on the same thread.
+   *
+   * If this method throws and `isActive()` is false, the write may already be
+   * committed even though the read transaction could not be created. Verify
+   * the result with a fresh read before retrying the write.
+   */
+  commitAndStartRead(): void;
   abort(): void;
 
   openMap(keyMode: number | bigint): MDBX_Dbi;

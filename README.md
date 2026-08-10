@@ -304,6 +304,27 @@ const dbi = txn.openMap({
 txn.commit();
 ```
 
+**commitAndStartRead()**
+```javascript
+const txn = env.startWrite();
+const dbi = txn.createMap("orders");
+dbi.put(txn, "order-1", "open");
+
+txn.commitAndStartRead();
+const committed = dbi.get(txn, "order-1");
+txn.abort();
+```
+
+`commitAndStartRead()` keeps the same transaction wrapper active over the exact
+post-commit read snapshot. It is synchronous, accepts only an active write
+transaction with no open cursors, and is not available in `mdbxmou/async`.
+Complete the resulting read transaction with `commit()` or `abort()` before
+starting another write transaction on the same thread.
+
+An exception does not always mean rollback. The write can be committed before
+libmdbx fails to create the read transaction. If the wrapper is inactive after
+an exception, verify the result with a fresh read before retrying the write.
+
 **abort()**
 ```javascript
 txn.abort();

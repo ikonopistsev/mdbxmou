@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3] - 2026-08-10
+
+### Added
+
+- **ID:** `MDBXMOU-0006-COMMIT-READ`
+  **Summary:** Write transactions can become their exact post-commit read
+  snapshot.
+  **Long description:** `MDBX_Txn.commitAndStartRead()` now wraps
+  `mdbx_txn_commit_embark_read()` and keeps the same JavaScript transaction
+  object active as a read transaction selected before the write lock is
+  released. The binding preserves native handle ownership on pre-commit errors
+  and becomes inactive when libmdbx consumed the handle. In the latter case an
+  exception may follow a successful commit, so callers must verify state with
+  a fresh read before retrying the write.
+
 ## [0.5.2] - 2026-08-10
 
 ### Fixed
