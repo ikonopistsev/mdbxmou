@@ -13,6 +13,16 @@ class txnmou;
 
 class envmou final : public Napi::ObjectWrap<envmou>
 {
+#if defined(MDBXMOU_TESTING)
+	enum class debug_writer_phase : unsigned {
+		idle,
+		starting,
+		ready,
+		finishing,
+		finished,
+	};
+#endif
+
 	static mdbx::env::geometry parse_geometry(const Napi::Value& obj);
 	static env_arg0 parse(const Napi::Value& obj);
 
@@ -31,6 +41,15 @@ class envmou final : public Napi::ObjectWrap<envmou>
 	std::size_t trx_count_{};
 	env_arg0 arg0_{};
 	std::mutex lock_{};
+
+#if defined(MDBXMOU_TESTING)
+	std::atomic<debug_writer_phase> debug_writer_phase_{
+		debug_writer_phase::idle};
+	std::atomic<debug_writer_phase> debug_writer_observed_phase_{
+		debug_writer_phase::idle};
+	std::atomic<int> debug_writer_begin_rc_{MDBX_RESULT_TRUE};
+	std::atomic<int> debug_writer_finish_rc_{MDBX_RESULT_TRUE};
+#endif
 
 	bool is_open() const
 	{
@@ -93,6 +112,17 @@ public:
 
 	Napi::Value set_option(const Napi::CallbackInfo&);
 	Napi::Value sync_ex(const Napi::CallbackInfo&);
+
+#if defined(MDBXMOU_TESTING)
+	Napi::Value debug_start_writer(const Napi::CallbackInfo&);
+	Napi::Value debug_writer_state(const Napi::CallbackInfo&);
+	bool debug_writer_starting() noexcept;
+	void debug_writer_ready(int rc) noexcept;
+	void debug_writer_finishing() noexcept;
+	void debug_writer_finished(int rc) noexcept;
+	void debug_writer_observe_env_call() noexcept;
+	void debug_writer_reset() noexcept;
+#endif
 
 	// Методы для создания транзакций
 	Napi::Value start_read(const Napi::CallbackInfo& info)

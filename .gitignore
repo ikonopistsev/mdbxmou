@@ -5,3 +5,4 @@
 /tools/clang-format.mjs
 /build/
 /node_modules/
+/e[0-9]*/
