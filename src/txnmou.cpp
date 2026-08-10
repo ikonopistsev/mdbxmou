@@ -64,6 +64,8 @@ Napi::Function txnmou::init(const char* class_name, Napi::Env env)
 		class_name,
 		{
 			InstanceMethod("commit", &txnmou::commit),
+			InstanceMethod(
+				"commitAndStartRead", &txnmou::commit_and_start_read),
 			InstanceMethod("abort", &txnmou::abort),
 			InstanceMethod("openMap", &txnmou::open_map),
 			InstanceMethod("createMap", &txnmou::create_map),
@@ -108,6 +110,54 @@ Napi::Value txnmou::commit(const Napi::CallbackInfo& info)
 	}
 
 	return env.Undefined();
+}
+
+Napi::Value txnmou::commit_and_start_read(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+
+	if (!is_active()) {
+		throw Napi::Error::New(env, "txn already completed");
+	}
+	if (is_readonly()) {
+		throw Napi::TypeError::New(env, "write transaction required");
+	}
+	if (cursor_count_ > 0) {
+		std::string message{"txn commitAndStartRead: "};
+		message += std::to_string(cursor_count_);
+		message += " cursor(s) still open";
+		throw Napi::Error::New(env, message);
+	}
+
+	detach_issued_or_throw(env);
+	auto* owner = get_environment(env);
+	if (!owner) {
+		throw Napi::Error::New(env, "txn environment owner unavailable");
+	}
+
+	// MDBXMOU-0006-COMMIT-READ: libmdbx may replace or clear this handle.
+	auto* native_txn = txn_.release();
+	const auto rc = mdbx_txn_commit_embark_read(&native_txn, nullptr);
+	if (native_txn) {
+		txn_.reset(native_txn);
+	}
+
+	if (rc == MDBX_SUCCESS && native_txn) {
+		mode_ = {txn_mode::ro};
+		return env.Undefined();
+	}
+
+	if (!native_txn) {
+		release_environment(owner);
+	}
+	if (rc == MDBX_SUCCESS) {
+		throw Napi::Error::New(
+			env, "txn commitAndStartRead: native returned no read transaction");
+	}
+
+	std::string message{"txn commitAndStartRead: "};
+	message += mdbx_strerror(rc);
+	throw Napi::Error::New(env, message);
 }
 
 Napi::Value txnmou::abort(const Napi::CallbackInfo& info)

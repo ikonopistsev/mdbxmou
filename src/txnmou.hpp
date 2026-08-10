@@ -120,6 +120,7 @@ public:
 	static Napi::Function init(const char* class_name, Napi::Env env);
 
 	Napi::Value commit(const Napi::CallbackInfo&);
+	Napi::Value commit_and_start_read(const Napi::CallbackInfo&);
 	Napi::Value abort(const Napi::CallbackInfo&);
 
 	Napi::Value open_map(const Napi::CallbackInfo& info)
