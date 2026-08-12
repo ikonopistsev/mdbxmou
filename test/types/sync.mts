@@ -19,6 +19,8 @@ dbi.put(w, 3, { bad: true });
 const dup = w.createMap("dup", MDBX_Param.keyMode.ordinal, MDBX_Param.valueMode.multiOrdinal);
 dup.put(w, 1, 10);
 dup.put(w, 1, 20n);
+const checkpointed: boolean = w.checkpoint();
+void checkpointed;
 w.commitAndStartRead();
 w.abort();
 

@@ -22,6 +22,8 @@ await dbi.put(2n, Buffer.from("two"));
 await dbi.put(3n, 123);
 // @ts-expect-error commitAndStartRead is sync-only in this release
 w.commitAndStartRead();
+// @ts-expect-error checkpoint is sync-only in this release
+w.checkpoint();
 await w.commit();
 
 const r = await env1.startRead();

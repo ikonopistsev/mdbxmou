@@ -70,6 +70,7 @@
     "test:worker-isolates": "node ./test/worker-isolates.js --run-suite",
     "test:libmdbx-0143": "node ./test/libmdbx-0143.js --run-suite",
     "test:commit-and-start-read": "node ./test/commit-and-start-read.js",
+    "test:checkpoint": "node ./test/checkpoint.js --run-suite",
     "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
@@ -77,7 +78,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "engines": {
     "node": ">=22.9.0"
   },

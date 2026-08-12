@@ -307,6 +307,15 @@ export interface MDBX_Txn {
    * the result with a fresh read before retrying the write.
    */
   commitAndStartRead(): void;
+  /**
+   * Commit the current write batch and immediately continue the same wrapper
+   * as a write transaction without releasing the writer lock.
+   *
+   * Returns false when the transaction has no changes. Finish the continuation
+   * transaction promptly because it blocks every other writer. Every call
+   * invalidates borrowed views, including a no-op call that returns false.
+   */
+  checkpoint(): boolean;
   abort(): void;
 
   openMap(keyMode: number | bigint): MDBX_Dbi;

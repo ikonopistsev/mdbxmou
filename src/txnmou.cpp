@@ -66,6 +66,7 @@ Napi::Function txnmou::init(const char* class_name, Napi::Env env)
 			InstanceMethod("commit", &txnmou::commit),
 			InstanceMethod(
 				"commitAndStartRead", &txnmou::commit_and_start_read),
+			InstanceMethod("checkpoint", &txnmou::checkpoint),
 			InstanceMethod("abort", &txnmou::abort),
 			InstanceMethod("openMap", &txnmou::open_map),
 			InstanceMethod("createMap", &txnmou::create_map),
@@ -77,6 +78,8 @@ Napi::Function txnmou::init(const char* class_name, Napi::Env env)
 			InstanceMethod("_debugPruneViews", &txnmou::debug_prune_views),
 			InstanceMethod(
 				"_debugFailNextDetach", &txnmou::debug_fail_next_detach),
+			InstanceMethod("_debugFinishBeforeCheckpoint",
+				&txnmou::debug_finish_before_checkpoint),
 #endif
 		});
 
@@ -158,6 +161,61 @@ Napi::Value txnmou::commit_and_start_read(const Napi::CallbackInfo& info)
 	std::string message{"txn commitAndStartRead: "};
 	message += mdbx_strerror(rc);
 	throw Napi::Error::New(env, message);
+}
+
+Napi::Value txnmou::checkpoint(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+
+	if (!is_active()) {
+		throw Napi::Error::New(env, "txn already completed");
+	}
+	if (is_readonly()) {
+		throw Napi::TypeError::New(env, "write transaction required");
+	}
+	if (cursor_count_ > 0) {
+		std::string message{"txn checkpoint: "};
+		message += std::to_string(cursor_count_);
+		message += " cursor(s) still open";
+		throw Napi::Error::New(env, message);
+	}
+
+	detach_issued_or_throw(env);
+	auto* owner = get_environment(env);
+	if (!owner) {
+		throw Napi::Error::New(env, "txn environment owner unavailable");
+	}
+
+	int rc{MDBX_SUCCESS};
+#if defined(MDBXMOU_TESTING)
+	if (debug_finish_before_checkpoint_) {
+		debug_finish_before_checkpoint_ = false;
+		const auto abort_rc = mdbx_txn_abort(txn_.get());
+		rc = abort_rc == MDBX_SUCCESS ? MDBX_EIO : abort_rc;
+	} else
+#endif
+	{
+		rc = mdbx_txn_checkpoint(txn_.get(), MDBX_TXN_NOWEAKING, nullptr);
+	}
+	if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE) {
+		const auto flags = mdbx_txn_flags(txn_.get());
+		if (flags == MDBX_TXN_INVALID) {
+			Napi::Error::Fatal("mdbxmou::txnmou::checkpoint",
+				"active transaction became invalid after mdbx_txn_checkpoint");
+		}
+		if ((flags & MDBX_TXN_FINISHED) != 0) {
+			// MDBXMOU-0007-CHECKPOINT: the basal handle remains owned by MDBX after
+			// a terminal checkpoint error and must not be aborted a second time.
+			(void)txn_.release();
+			release_environment(owner);
+		}
+
+		std::string message{"txn checkpoint: "};
+		message += mdbx_strerror(rc);
+		throw Napi::Error::New(env, message);
+	}
+
+	return Napi::Boolean::New(env, rc == MDBX_SUCCESS);
 }
 
 Napi::Value txnmou::abort(const Napi::CallbackInfo& info)
@@ -829,6 +887,20 @@ Napi::Value txnmou::debug_fail_next_detach(const Napi::CallbackInfo& info)
 	} else {
 		throw Napi::TypeError::New(env, "debugFailNextDetach: unknown fault");
 	}
+	return env.Undefined();
+}
+
+Napi::Value txnmou::debug_finish_before_checkpoint(
+	const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+	if (!is_active()) {
+		throw Napi::Error::New(env, "txn already completed");
+	}
+	if (is_readonly()) {
+		throw Napi::TypeError::New(env, "write transaction required");
+	}
+	debug_finish_before_checkpoint_ = true;
 	return env.Undefined();
 }
 #endif

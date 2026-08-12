@@ -325,6 +325,30 @@ An exception does not always mean rollback. The write can be committed before
 libmdbx fails to create the read transaction. If the wrapper is inactive after
 an exception, verify the result with a fresh read before retrying the write.
 
+**checkpoint() -> boolean**
+```javascript
+const txn = env.startWrite();
+const dbi = txn.createMap("orders");
+dbi.put(txn, "order-1", "open");
+
+const committed = txn.checkpoint();
+// Readers can now see order-1, while txn remains an active write transaction.
+txn.abort();
+```
+
+`checkpoint()` commits a dirty write batch and immediately continues the same
+wrapper as a write transaction without releasing the writer lock. It returns
+`true` after a commit and `false` when there were no changes. The method is
+synchronous, requires an active top-level write transaction with no open
+cursors, and is not available in `mdbxmou/async`.
+
+Like `commit()` and `abort()`, every call invalidates borrowed views, including
+a no-op call that returns `false`.
+
+Complete the continuation transaction promptly with `commit()` or `abort()`.
+Until then every other writer is blocked, although new read transactions can
+see the checkpointed data.
+
 **abort()**
 ```javascript
 txn.abort();
