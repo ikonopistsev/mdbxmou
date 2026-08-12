@@ -215,7 +215,8 @@ Napi::Value txnmou::checkpoint(const Napi::CallbackInfo& info)
 		throw Napi::Error::New(env, message);
 	}
 
-	return Napi::Boolean::New(env, rc == MDBX_SUCCESS);
+	// MDBXMOU-0007-CHECKPOINT: preserve the native mdbx++ boolean contract.
+	return Napi::Boolean::New(env, rc == MDBX_RESULT_TRUE);
 }
 
 Napi::Value txnmou::abort(const Napi::CallbackInfo& info)

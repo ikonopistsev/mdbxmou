@@ -311,9 +311,10 @@ export interface MDBX_Txn {
    * Commit the current write batch and immediately continue the same wrapper
    * as a write transaction without releasing the writer lock.
    *
-   * Returns false when the transaction has no changes. Finish the continuation
+   * Matches mdbx++ boolean semantics: returns false after committing changes
+   * and true when the transaction has no changes. Finish the continuation
    * transaction promptly because it blocks every other writer. Every call
-   * invalidates borrowed views, including a no-op call that returns false.
+   * invalidates borrowed views, including a no-op call that returns true.
    */
   checkpoint(): boolean;
   abort(): void;

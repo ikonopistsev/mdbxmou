@@ -10,9 +10,10 @@ All notable changes to this project will be documented in this file.
   **Summary:** Write transactions can publish a batch without releasing the
   writer lock.
   **Long description:** `MDBX_Txn.checkpoint()` now wraps
-  `mdbx_txn_checkpoint(MDBX_TXN_NOWEAKING)`. A dirty checkpoint returns `true`
-  and keeps the same wrapper active as the continuation write transaction; an
-  empty checkpoint returns `false`. Terminal native failures release wrapper
+  `mdbx_txn_checkpoint(MDBX_TXN_NOWEAKING)`. Matching `mdbx++`, a dirty
+  checkpoint returns `false` and keeps the same wrapper active as the
+  continuation write transaction; an empty checkpoint returns `true`
+  (`MDBX_RESULT_TRUE`). Terminal native failures release wrapper
   ownership without aborting the environment-owned basal handle a second
   time. Callers must finish the continuation promptly because it blocks all
   other writers while readers can already observe checkpointed data.

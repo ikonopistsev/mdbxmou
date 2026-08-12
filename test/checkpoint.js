@@ -296,7 +296,7 @@ async function testFourReaders(kind) {
             const key = value;
             const expected = String(value);
             dbi.put(writer, key, expected);
-            assert.equal(writer.checkpoint(), true);
+            assert.equal(writer.checkpoint(), false);
             assert.equal(writer.isActive(), true);
 
             const valuesPromise = readFromAll(readers, value, key);
@@ -309,7 +309,7 @@ async function testFourReaders(kind) {
 
         const snapshotKey = 100;
         dbi.put(writer, snapshotKey, "before");
-        assert.equal(writer.checkpoint(), true);
+        assert.equal(writer.checkpoint(), false);
         const held = await requestReader(
             readers[0],
             100,
@@ -319,7 +319,7 @@ async function testFourReaders(kind) {
         assert.equal(held.value, "before");
 
         dbi.put(writer, snapshotKey, "after");
-        assert.equal(writer.checkpoint(), true);
+        assert.equal(writer.checkpoint(), false);
         const fresh = await requestReader(
             readers[1],
             101,
@@ -341,10 +341,10 @@ async function testFourReaders(kind) {
             "release held checkpoint snapshot",
         );
 
-        assert.equal(writer.checkpoint(), false);
+        assert.equal(writer.checkpoint(), true);
         assert.equal(writer.isActive(), true);
         dbi.put(writer, 101, "after-no-op");
-        assert.equal(writer.checkpoint(), true);
+        assert.equal(writer.checkpoint(), false);
         const afterNoop = await requestReader(
             readers[2],
             104,
@@ -402,7 +402,7 @@ async function testWriterLockRetention() {
 
         writer = env.startWrite();
         dbi.put(writer, 1, "checkpointed");
-        assert.equal(writer.checkpoint(), true);
+        assert.equal(writer.checkpoint(), false);
 
         const attempting = waitForMessage(
             competitor,
@@ -535,7 +535,7 @@ function testLifecycleLoop() {
         for (let value = 0; value < lifecycleIterations; value += 1) {
             const txn = env.startWrite();
             dbi.put(txn, value, String(value));
-            assert.equal(txn.checkpoint(), true);
+            assert.equal(txn.checkpoint(), false);
             txn.abort();
         }
     } finally {
@@ -562,8 +562,8 @@ function testCheckpointGuards() {
         assert.equal(txn.isActive(), true);
         cursor.close();
 
-        assert.equal(txn.checkpoint(), true);
         assert.equal(txn.checkpoint(), false);
+        assert.equal(txn.checkpoint(), true);
         txn.abort();
         txn = undefined;
 
