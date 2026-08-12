@@ -58,6 +58,7 @@ private:
 	};
 
 	detach_fault next_detach_fault_{};
+	bool debug_finish_before_checkpoint_{};
 	std::size_t prune_runs_{};
 	std::size_t pruned_refs_{};
 	std::size_t detach_calls_{};
@@ -87,6 +88,7 @@ private:
 	Napi::Value debug_view_stats(const Napi::CallbackInfo& info);
 	Napi::Value debug_prune_views(const Napi::CallbackInfo& info);
 	Napi::Value debug_fail_next_detach(const Napi::CallbackInfo& info);
+	Napi::Value debug_finish_before_checkpoint(const Napi::CallbackInfo& info);
 #endif
 
 	Napi::Value get_dbi(const char* name,
@@ -121,6 +123,7 @@ public:
 
 	Napi::Value commit(const Napi::CallbackInfo&);
 	Napi::Value commit_and_start_read(const Napi::CallbackInfo&);
+	Napi::Value checkpoint(const Napi::CallbackInfo&);
 	Napi::Value abort(const Napi::CallbackInfo&);
 
 	Napi::Value open_map(const Napi::CallbackInfo& info)
