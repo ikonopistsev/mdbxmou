@@ -26,6 +26,9 @@ using namespace Napi;
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) 
 {
+    (void)mdbx_setup_debug(
+        MDBX_LOG_WARN, MDBX_DBG_DONTCHANGE, MDBX_LOGGER_DONTCHANGE);
+
 #define MDBXMOU_DECLARE_FLAG_NAME(obj, name, value) \
     obj.Set(name, Napi::Number::New(env, value))
 
