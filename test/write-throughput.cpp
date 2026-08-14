@@ -74,13 +74,11 @@ void write_batch(mdbx::txn& transaction,
 	}
 }
 
-interval_result write_until(mdbx::env_managed& environment,
+interval_result write_until_commit(mdbx::env_managed& environment,
 	mdbx::map_handle database,
 	std::uint64_t first_value,
 	double run_seconds,
-	write_mode mode,
-	std::size_t batch_size,
-	mdbx::txn_managed* checkpoint_transaction)
+	std::size_t batch_size)
 {
 	const auto started = clock_type::now();
 	const auto deadline = started + std::chrono::duration<double>(run_seconds);
@@ -88,19 +86,31 @@ interval_result write_until(mdbx::env_managed& environment,
 	std::uint64_t transactions = 0;
 
 	do {
-		if (mode == write_mode::commit) {
-			auto transaction = environment.start_write();
-			write_batch(transaction, database, value, batch_size);
-			transaction.commit();
-		} else {
-			if (!checkpoint_transaction) {
-				throw std::logic_error("checkpoint transaction is missing");
-			}
-			write_batch(*checkpoint_transaction, database, value, batch_size);
-			if (checkpoint_transaction->checkpoint()) {
-				throw std::runtime_error("dirty checkpoint returned no-op");
-			}
-		}
+		auto transaction = environment.start_write();
+		write_batch(transaction, database, value, batch_size);
+		transaction.commit();
+		++transactions;
+	} while (clock_type::now() < deadline);
+
+	const double elapsed =
+		std::chrono::duration<double>(clock_type::now() - started).count();
+	return {elapsed, value, value - first_value, transactions};
+}
+
+interval_result write_until_checkpoint(mdbx::map_handle database,
+	mdbx::txn_managed& transaction,
+	std::uint64_t first_value,
+	double run_seconds,
+	std::size_t batch_size)
+{
+	const auto started = clock_type::now();
+	const auto deadline = started + std::chrono::duration<double>(run_seconds);
+	std::uint64_t value = first_value;
+	std::uint64_t transactions = 0;
+
+	do {
+		write_batch(transaction, database, value, batch_size);
+		transaction.checkpoint();
 		++transactions;
 	} while (clock_type::now() < deadline);
 
@@ -177,29 +187,28 @@ benchmark_result run_mode(const std::filesystem::path& root,
 			"numbers", mdbx::key_mode::ordinal, mdbx::value_mode::single);
 		setup_transaction.commit();
 
-		mdbx::txn_managed checkpoint_transaction;
-		mdbx::txn_managed* checkpoint_pointer = nullptr;
-		if (mode == write_mode::checkpoint) {
-			checkpoint_transaction = environment.start_write();
-			checkpoint_pointer = &checkpoint_transaction;
-		}
-
-		const auto warmup = write_until(environment,
-			database,
-			0,
-			warmup_seconds,
-			mode,
-			batch_size,
-			checkpoint_pointer);
-		const auto measured = write_until(environment,
-			database,
-			warmup.next_value,
-			duration_seconds,
-			mode,
-			batch_size,
-			checkpoint_pointer);
-
-		if (checkpoint_pointer) {
+		interval_result warmup;
+		interval_result measured;
+		if (mode == write_mode::commit) {
+			warmup = write_until_commit(
+				environment, database, 0, warmup_seconds, batch_size);
+			measured = write_until_commit(environment,
+				database,
+				warmup.next_value,
+				duration_seconds,
+				batch_size);
+		} else {
+			auto checkpoint_transaction = environment.start_write();
+			warmup = write_until_checkpoint(database,
+				checkpoint_transaction,
+				0,
+				warmup_seconds,
+				batch_size);
+			measured = write_until_checkpoint(database,
+				checkpoint_transaction,
+				warmup.next_value,
+				duration_seconds,
+				batch_size);
 			checkpoint_transaction.abort();
 		}
 

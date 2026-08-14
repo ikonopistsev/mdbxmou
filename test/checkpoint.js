@@ -100,6 +100,10 @@ function delay(milliseconds) {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function monotonicMilliseconds() {
+    return Number(process.hrtime.bigint()) / 1_000_000;
+}
+
 function withTimeout(promise, label) {
     let timer;
     const timeout = new Promise((_, reject) => {
@@ -369,6 +373,165 @@ async function testFourReaders(kind) {
     } finally {
         if (writer?.isActive()) {
             writer.abort();
+        }
+        if (readers.length > 0) {
+            await terminateReaderPool(readers).catch(() => {});
+        }
+        env.closeSync();
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+}
+
+async function testTwoTransactionalWritersFourReaders(kind) {
+    const { root, dbPath } = createTemporaryDatabase(
+        `transactions-${kind}-two-writers-four-readers`,
+    );
+    const env = openEnvironment(dbPath);
+    let readers = [];
+    let firstWriter;
+    let secondWriter;
+    let firstWriterExit;
+    let secondWriterExit;
+
+    try {
+        const setup = env.startWrite();
+        setup.createMap("values", MDBX_Param.keyMode.ordinal);
+        setup.commit();
+
+        readers = await startReaderPool(dbPath, kind);
+        firstWriter = fork(__filename, ["--transactional-writer", dbPath], {
+            stdio: ["ignore", "inherit", "inherit", "ipc"],
+        });
+        secondWriter = fork(__filename, ["--transactional-writer", dbPath], {
+            stdio: ["ignore", "inherit", "inherit", "ipc"],
+        });
+        firstWriterExit = watchExit(firstWriter);
+        secondWriterExit = watchExit(secondWriter);
+
+        const writerReady = await Promise.all([
+            waitForMessage(
+                firstWriter,
+                (message) => message.type === "ready",
+                `${kind} first transactional writer ready`,
+            ),
+            waitForMessage(
+                secondWriter,
+                (message) => message.type === "ready",
+                `${kind} second transactional writer ready`,
+            ),
+        ]);
+        assert.equal(new Set(writerReady.map((message) => message.pid)).size, 2);
+        assert.equal(
+            writerReady.some((message) => message.pid === process.pid),
+            false,
+        );
+
+        const firstAcquired = waitForMessage(
+            firstWriter,
+            (message) => message.type === "acquired",
+            `${kind} first transactional writer acquired`,
+        );
+        firstWriter.send({
+            type: "begin",
+            key: 200,
+            value: "first-writer",
+            hold: true,
+        });
+        await firstAcquired;
+
+        const secondAttempting = waitForMessage(
+            secondWriter,
+            (message) => message.type === "attempting",
+            `${kind} second transactional writer attempting`,
+        );
+        const secondAcquired = waitForMessage(
+            secondWriter,
+            (message) => message.type === "acquired",
+            `${kind} second transactional writer acquired`,
+        );
+        const secondCommitted = waitForMessage(
+            secondWriter,
+            (message) => message.type === "committed",
+            `${kind} second transactional writer committed`,
+        );
+        secondWriter.send({
+            type: "begin",
+            key: 201,
+            value: "second-writer",
+            hold: false,
+        });
+        await secondAttempting;
+        const secondAttemptedAt = monotonicMilliseconds();
+
+        const acquiredBeforeFirstCommit = await Promise.race([
+            secondAcquired.then(() => true),
+            delay(250).then(() => false),
+        ]);
+        assert.equal(acquiredBeforeFirstCommit, false);
+
+        const firstCommitted = waitForMessage(
+            firstWriter,
+            (message) => message.type === "committed",
+            `${kind} first transactional writer committed`,
+        ).then((message) => ({ message, receivedAt: monotonicMilliseconds() }));
+        const secondAcquiredTimed = secondAcquired.then((message) => ({
+            message,
+            receivedAt: monotonicMilliseconds(),
+        }));
+        const secondCommittedTimed = secondCommitted.then((message) => ({
+            message,
+            receivedAt: monotonicMilliseconds(),
+        }));
+        const firstCommitRequestedAt = monotonicMilliseconds();
+        firstWriter.send({ type: "commit" });
+        const [firstCommitEvent, secondAcquireEvent, secondCommitEvent] =
+            await Promise.all([
+                firstCommitted,
+                secondAcquiredTimed,
+                secondCommittedTimed,
+            ]);
+
+        const visibilityCheckStartedAt = monotonicMilliseconds();
+        assert.deepEqual(
+            await readFromAll(readers, 200, 200),
+            Array(readerCount).fill("first-writer"),
+        );
+        assert.deepEqual(
+            await readFromAll(readers, 201, 201),
+            Array(readerCount).fill("second-writer"),
+        );
+        const visibilityCheckFinishedAt = monotonicMilliseconds();
+
+        assert.deepEqual(await firstWriterExit, { code: 0, signal: null });
+        firstWriter = undefined;
+        assert.deepEqual(await secondWriterExit, { code: 0, signal: null });
+        secondWriter = undefined;
+
+        await stopReaderPool(readers);
+        readers = [];
+
+        return {
+            kind,
+            writerLockWaitMs:
+                secondAcquireEvent.receivedAt - secondAttemptedAt,
+            handoffAfterCommitRequestMs:
+                secondAcquireEvent.receivedAt - firstCommitRequestedAt,
+            firstCommitAcknowledgedMs:
+                firstCommitEvent.receivedAt - firstCommitRequestedAt,
+            secondCommitAfterAcquireMs:
+                secondCommitEvent.receivedAt - secondAcquireEvent.receivedAt,
+            fourReaderVisibilityCheckMs:
+                visibilityCheckFinishedAt - visibilityCheckStartedAt,
+        };
+    } finally {
+        for (const [writer, exit] of [
+            [firstWriter, firstWriterExit],
+            [secondWriter, secondWriterExit],
+        ]) {
+            if (writer && writer.exitCode === null) {
+                writer.kill();
+                await exit?.catch(() => {});
+            }
         }
         if (readers.length > 0) {
             await terminateReaderPool(readers).catch(() => {});
@@ -719,9 +882,73 @@ function runWriterProcess(dbPath) {
     process.send({ type: "ready", pid: process.pid });
 }
 
+function runTransactionalWriterProcess(dbPath) {
+    const env = openEnvironment(dbPath);
+    const setup = env.startRead();
+    const dbi = setup.openMap("values", MDBX_Param.keyMode.ordinal);
+    setup.abort();
+    let transaction;
+
+    const close = () => {
+        if (transaction?.isActive()) {
+            transaction.abort();
+        }
+        env.closeSync();
+        process.disconnect();
+    };
+    const fail = (error) => {
+        console.error(error);
+        process.exitCode = 1;
+        close();
+    };
+    const commit = () => {
+        try {
+            transaction.commit();
+            transaction = undefined;
+            process.send({ type: "committed" }, close);
+        } catch (error) {
+            fail(error);
+        }
+    };
+
+    process.once("message", (message) => {
+        if (message.type !== "begin") {
+            fail(new Error(`unexpected writer command: ${message.type}`));
+            return;
+        }
+        process.send({ type: "attempting" }, () => {
+            try {
+                transaction = env.startWrite();
+                dbi.put(transaction, message.key, message.value);
+                process.send({ type: "acquired" }, () => {
+                    if (message.hold) {
+                        process.once("message", (nextMessage) => {
+                            if (nextMessage.type === "commit") {
+                                commit();
+                            } else {
+                                fail(
+                                    new Error(
+                                        `unexpected writer command: ${nextMessage.type}`,
+                                    ),
+                                );
+                            }
+                        });
+                    } else {
+                        commit();
+                    }
+                });
+            } catch (error) {
+                fail(error);
+            }
+        });
+    });
+    process.send({ type: "ready", pid: process.pid });
+}
+
 async function runDefaultTests() {
     loadAddon();
     await testFourReaders("process");
+    await testTwoTransactionalWritersFourReaders("process");
     await testWriterLockRetention();
     testCheckpointGuards();
     testRetainedError();
@@ -738,7 +965,70 @@ async function runWorkerTests() {
     assert.equal(process.env.MDBX_DBG_LEGACY_MULTIOPEN, "1");
     loadAddon();
     await testFourReaders("worker");
+    await testTwoTransactionalWritersFourReaders("worker");
     console.log("checkpoint worker suite ok");
+}
+
+function summarizeValues(values) {
+    const sorted = [...values].sort((left, right) => left - right);
+    const percentile = (fraction) => {
+        const position = (sorted.length - 1) * fraction;
+        const lower = Math.floor(position);
+        const upper = Math.ceil(position);
+        if (lower === upper) return sorted[lower];
+        return (
+            sorted[lower] +
+            (sorted[upper] - sorted[lower]) * (position - lower)
+        );
+    };
+    return {
+        min: sorted[0],
+        median: percentile(0.5),
+        p95: percentile(0.95),
+        max: sorted.at(-1),
+    };
+}
+
+async function runTwoWriterStatistics() {
+    const kind = process.env.CHECKPOINT_READER_KIND ?? "process";
+    assert.ok(["process", "worker"].includes(kind));
+    if (kind === "worker") {
+        assert.equal(process.env.MDBX_DBG_LEGACY_MULTIOPEN, "1");
+    }
+    const repetitions = Number(process.env.CHECKPOINT_STATS_REPETITIONS ?? 20);
+    assert.ok(Number.isSafeInteger(repetitions) && repetitions > 0);
+    loadAddon();
+
+    const samples = [];
+    for (let repetition = 1; repetition <= repetitions; repetition += 1) {
+        const sample = await testTwoTransactionalWritersFourReaders(kind);
+        samples.push(sample);
+        console.log(
+            `two-writer-sample ${JSON.stringify({ repetition, ...sample })}`,
+        );
+    }
+
+    const metricNames = [
+        "writerLockWaitMs",
+        "handoffAfterCommitRequestMs",
+        "firstCommitAcknowledgedMs",
+        "secondCommitAfterAcquireMs",
+        "fourReaderVisibilityCheckMs",
+    ];
+    const metrics = Object.fromEntries(
+        metricNames.map((name) => [
+            name,
+            summarizeValues(samples.map((sample) => sample[name])),
+        ]),
+    );
+    console.log(
+        `two-writer-summary ${JSON.stringify({
+            kind,
+            repetitions,
+            node: process.version,
+            metrics,
+        })}`,
+    );
 }
 
 function runNode(args, environment = {}) {
@@ -827,6 +1117,13 @@ if (!isMainThread && workerData?.role === "checkpoint-reader") {
         console.error(error);
         process.exitCode = 1;
     }
+} else if (process.argv[2] === "--transactional-writer") {
+    try {
+        runTransactionalWriterProcess(process.argv[3]);
+    } catch (error) {
+        console.error(error);
+        process.exitCode = 1;
+    }
 } else if (process.argv[2] === "--run-suite") {
     try {
         runSuite();
@@ -843,6 +1140,11 @@ if (!isMainThread && workerData?.role === "checkpoint-reader") {
     });
 } else if (process.argv[2] === "--test-workers") {
     runWorkerTests().catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+    });
+} else if (process.argv[2] === "--two-writer-statistics") {
+    runTwoWriterStatistics().catch((error) => {
         console.error(error);
         process.exitCode = 1;
     });

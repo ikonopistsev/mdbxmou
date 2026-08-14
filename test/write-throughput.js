@@ -47,36 +47,59 @@ function readBatchSizes() {
     return values;
 }
 
-function writeUntil(
+function writeUntilCommit(
     environment,
     database,
     firstValue,
     runMs,
-    mode,
     batchSize,
-    checkpointTransaction,
 ) {
     const started = performance.now();
     const deadline = started + runMs;
     const encodedValue = Buffer.allocUnsafe(8);
     let value = firstValue;
     let transactions = 0;
-    let writeTransaction = checkpointTransaction;
 
     do {
-        if (mode === "commit") {
-            writeTransaction = environment.startWrite();
-        }
+        const writeTransaction = environment.startWrite();
         for (let offset = 0; offset < batchSize; ++offset) {
             encodedValue.writeDoubleLE(value, 0);
             database.put(writeTransaction, value, encodedValue);
             ++value;
         }
-        if (mode === "commit") {
-            writeTransaction.commit();
-        } else {
-            assert.equal(writeTransaction.checkpoint(), false);
+        writeTransaction.commit();
+        ++transactions;
+    } while (performance.now() < deadline);
+
+    const elapsedMs = performance.now() - started;
+    return {
+        elapsedMs,
+        nextValue: value,
+        writes: value - firstValue,
+        transactions,
+    };
+}
+
+function writeUntilCheckpoint(
+    database,
+    writeTransaction,
+    firstValue,
+    runMs,
+    batchSize,
+) {
+    const started = performance.now();
+    const deadline = started + runMs;
+    const encodedValue = Buffer.allocUnsafe(8);
+    let value = firstValue;
+    let transactions = 0;
+
+    do {
+        for (let offset = 0; offset < batchSize; ++offset) {
+            encodedValue.writeDoubleLE(value, 0);
+            database.put(writeTransaction, value, encodedValue);
+            ++value;
         }
+        writeTransaction.checkpoint();
         ++transactions;
     } while (performance.now() < deadline);
 
@@ -109,6 +132,7 @@ async function writeUntilQuery(
     const deadline = started + runMs;
     let value = firstValue;
     let transactions = 0;
+    let result;
 
     do {
         for (const item of items) {
@@ -116,12 +140,12 @@ async function writeUntilQuery(
             item.value.writeDoubleLE(value, 0);
             ++value;
         }
-        const result = await environment.query(request);
-        assert.equal(result.length, batchSize);
+        result = await environment.query(request);
         ++transactions;
     } while (performance.now() < deadline);
 
     const elapsedMs = performance.now() - started;
+    assert.equal(result.length, batchSize);
     return {
         elapsedMs,
         nextValue: value,
@@ -136,6 +160,7 @@ async function runMode(mode, batchSize) {
     );
     const environment = new MDBX_Env();
     let opened = false;
+    let checkpointTransaction;
 
     try {
         environment.openSync({
@@ -158,45 +183,57 @@ async function runMode(mode, batchSize) {
         const database = setupTransaction.createMap("numbers", keyMode.ordinal);
         setupTransaction.commit();
 
-        const checkpointTransaction =
-            mode === "checkpoint" ? environment.startWrite() : undefined;
-        const warmup =
-            mode === "query"
-                ? await writeUntilQuery(
-                      environment,
-                      database,
-                      0,
-                      warmupMs,
-                      batchSize,
-                  )
-                : writeUntil(
-                      environment,
-                      database,
-                      0,
-                      warmupMs,
-                      mode,
-                      batchSize,
-                      checkpointTransaction,
-                  );
-        const measured =
-            mode === "query"
-                ? await writeUntilQuery(
-                      environment,
-                      database,
-                      warmup.nextValue,
-                      durationMs,
-                      batchSize,
-                  )
-                : writeUntil(
-                      environment,
-                      database,
-                      warmup.nextValue,
-                      durationMs,
-                      mode,
-                      batchSize,
-                      checkpointTransaction,
-                  );
-        checkpointTransaction?.abort();
+        let warmup;
+        let measured;
+        if (mode === "commit") {
+            warmup = writeUntilCommit(
+                environment,
+                database,
+                0,
+                warmupMs,
+                batchSize,
+            );
+            measured = writeUntilCommit(
+                environment,
+                database,
+                warmup.nextValue,
+                durationMs,
+                batchSize,
+            );
+        } else if (mode === "checkpoint") {
+            checkpointTransaction = environment.startWrite();
+            warmup = writeUntilCheckpoint(
+                database,
+                checkpointTransaction,
+                0,
+                warmupMs,
+                batchSize,
+            );
+            measured = writeUntilCheckpoint(
+                database,
+                checkpointTransaction,
+                warmup.nextValue,
+                durationMs,
+                batchSize,
+            );
+            checkpointTransaction.abort();
+            checkpointTransaction = undefined;
+        } else {
+            warmup = await writeUntilQuery(
+                environment,
+                database,
+                0,
+                warmupMs,
+                batchSize,
+            );
+            measured = await writeUntilQuery(
+                environment,
+                database,
+                warmup.nextValue,
+                durationMs,
+                batchSize,
+            );
+        }
 
         const readTransaction = environment.startRead();
         const entries = database.stat(readTransaction).entries;
@@ -220,6 +257,9 @@ async function runMode(mode, batchSize) {
                 measured.transactions / (measured.elapsedMs / 1_000),
         };
     } finally {
+        if (checkpointTransaction?.isActive()) {
+            checkpointTransaction.abort();
+        }
         if (opened) environment.closeSync();
         fs.rmSync(dbPath, { recursive: true, force: true });
     }
