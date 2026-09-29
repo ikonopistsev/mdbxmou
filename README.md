@@ -2,6 +2,9 @@
 
 Node.js binding for [libmdbx](https://github.com/Mithril-mine/libmdbx) — a fast, lightweight, embedded key-value database.
 
+Bundles [libmdbx v0.14.4 "Skynet Eve"](https://github.com/Mithril-mine/libmdbx/releases/tag/v0.14.4).
+Source builds require libmdbx 0.14.4 or newer.
+
 ## Features
 
 - **Synchronous API** — Direct MDBX operations in main thread
@@ -191,8 +194,19 @@ env.setOption(MDBX_Param.envOption.syncPeriod, 0.2); // 200 ms
 
 **syncEx(force, nonblock) → number**
 ```javascript
-env.syncEx(true, false);
+const result = env.syncEx(true, false); // 0 or -1; both mean success
 ```
+
+Returns the native result: `0` (`MDBX_SUCCESS`) for a successful call, or
+`-1` (`MDBX_RESULT_TRUE`) when there is nothing to sync. Real errors still
+throw, including a read-only environment or `MDBX_BUSY` when `nonblock=true`
+cannot acquire the writer lock. Both arguments must be booleans; an unopened
+or closed environment throws a JavaScript error.
+
+Use `syncEx(true, false)` to force and wait for synchronization of committed
+data. With `force=false`, libmdbx follows the environment's sync policy and
+autosync thresholds (`syncBytes` / `syncPeriod`). A successful return in this
+mode, including `0`, does not guarantee that all pending data was flushed.
 
 **startWrite() → Transaction**
 ```javascript

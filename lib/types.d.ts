@@ -395,6 +395,14 @@ export declare class MDBX_Env {
   keys(request: MDBXKeysRequest | MDBXKeysRequest[], txnMode?: number): Promise<MDBXKeysResult>;
   /** syncPeriod expects seconds and may be fractional; other options use integer values. */
   setOption(option: number, value: number | bigint): void;
+  /**
+   * Returns 0 (MDBX_SUCCESS) or -1 (MDBX_RESULT_TRUE, nothing to sync).
+   * Both are successful results; real errors still throw, including MDBX_BUSY
+   * when nonblock=true cannot acquire the writer lock, and read-only or closed environments.
+   * Use (true, false) to force and wait for synchronization of committed data.
+   * With force=false, the environment's sync policy and autosync thresholds apply;
+   * a successful return, including 0, does not guarantee that all pending data was flushed.
+   */
   syncEx(force: boolean, nonblock: boolean): number;
 }
 

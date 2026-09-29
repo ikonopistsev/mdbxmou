@@ -585,13 +585,16 @@ Napi::Value envmou::sync_ex(const Napi::CallbackInfo &info)
 
     lock_guard lock(*this);
 
-    check();
+    if (!is_open())
+    {
+        throw Napi::Error::New(env, "closed");
+    }
 
     auto rc = mdbx_env_sync_ex(*this, force, nonblock);
 #if defined(MDBXMOU_TESTING)
     debug_writer_observe_env_call();
 #endif
-    if (rc != MDBX_SUCCESS)
+    if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE)
     {
         throw Napi::Error::New(env, mdbx_strerror(rc));
     }

@@ -72,6 +72,7 @@
     "test:commit-and-start-read": "node ./test/commit-and-start-read.js",
     "test:checkpoint": "node ./test/checkpoint.js --run-suite",
     "test:log-level": "node ./test/log-level.js",
+    "test:sync-ex": "node ./test/sync-ex.js",
     "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
@@ -79,7 +80,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "engines": {
     "node": ">=22.9.0"
   },

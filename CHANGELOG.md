@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.6] - 2026-09-29
+
+### Fixed
+
+- `MDBX_Env.syncEx()` now returns `-1` (`MDBX_RESULT_TRUE`) without throwing
+  when libmdbx has nothing to sync. The numeric `0` / `-1` results are preserved;
+  real synchronization errors still throw. Documented that `force=false` follows
+  autosync policy and does not guarantee a full flush even when it returns `0`.
+- Calling `syncEx()` before opening or after closing an environment now throws
+  a JavaScript error instead of terminating the process with an uncaught C++ exception.
+
+### Changed
+
+- Updated bundled libmdbx to [v0.14.4 "Skynet Eve"](https://github.com/Mithril-mine/libmdbx/releases/tag/v0.14.4).
+  Source builds now require libmdbx 0.14.4 or newer.
+- Updated the submodule URL to the current `Mithril-mine/libmdbx` repository.
+
 ## [0.5.4] - 2026-08-12
 
 ### Added
