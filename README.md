@@ -237,6 +237,12 @@ const result = await env.query([
 
 `query()` uses the passed `dbi` and inherits key/value settings from it. `queryMode` selects the operation (`get`, `del`, or base write mode), and optional `putFlag` adds write-only MDBX flags. In `query()` only `noOverwrite`, `noDupData`, `current`, `append`, and `appendDup` are supported.
 
+Buffer keys are copied while `query()` parses the request, before native work
+is queued. This applies to write, get and del requests, and to the `from`
+Buffer in `env.keys()`. Changing or releasing the original Buffer after the
+call does not change the key used by the worker; Buffer slices copy only
+their visible bytes.
+
 ### Transaction
 
 #### Methods

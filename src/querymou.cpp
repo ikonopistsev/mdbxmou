@@ -21,6 +21,9 @@ void async_key::parse(const async_common& common, const Napi::Value& item)
     keymou key{};
     if (mdbx::is_ordinal(common.key_mod)) {
         key = keymou::from(item, item.Env(), id_buf);
+    } else if (item.IsBuffer()) {
+        // Async query/keys must own the bytes before the worker is queued.
+        key = keymou{item.As<Napi::Buffer<char>>(), key_buf};
     } else {
         key = keymou::from(item, item.Env(), key_buf);
     }

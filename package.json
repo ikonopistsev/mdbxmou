@@ -73,6 +73,7 @@
     "test:checkpoint": "node ./test/checkpoint.js --run-suite",
     "test:log-level": "node ./test/log-level.js",
     "test:sync-ex": "node ./test/sync-ex.js",
+    "test:query-buffer-keys": "node --expose-gc ./test/query-buffer-keys.js",
     "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
     "build": "node build.js",
     "build-dev": "node build-dev.js",
