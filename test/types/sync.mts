@@ -77,11 +77,21 @@ function queryResultTypes(env: MDBX_Env, dbi: MDBX_Dbi, flag: boolean,
   // @ts-expect-error a dynamic boolean may suppress the write response
   const wrongDynamic: Promise<MDBXQueryResultItem[]> = env.query({ ...base, result: flag });
   const genericRow: Promise<MDBXQueryRowResult> = env.query(request);
+  // @ts-expect-error a general request can suppress its result
+  const wrongGenericRow: Promise<MDBXQueryResultItem[]> = env.query(request);
   const legacyArray: Promise<MDBXQueryResultItem[] | MDBXQueryResultItem[][]> = env.query([base, base]);
   const oneRowArray: Promise<MDBXQueryResultItem[] | MDBXQueryResultItem[][]> = env.query([base]);
+  // @ts-expect-error even a one-row array can return its items directly
+  const wrongOneRowArray: Promise<MDBXQueryResultItem[][]> = env.query([base]);
+  // @ts-expect-error a general echo array can return nested arrays
+  const wrongLegacyArray: Promise<MDBXQueryResultItem[]> = env.query([base, base]);
   const mixed: Promise<MDBXQueryResult> = env.query([{ ...base, result: false }, base]);
   const genericArray: Promise<MDBXQueryResult> = env.query([request]);
+  // @ts-expect-error generic array rows can have undefined results
+  const wrongGenericArray: Promise<MDBXQueryResultItem[] | MDBXQueryResultItem[][]> = env.query([request]);
   const unionResult: Promise<MDBXQueryResult> = env.query(union);
+  // @ts-expect-error the union fallback must include suppressed rows
+  const wrongUnion: Promise<MDBXQueryResultItem[] | MDBXQueryResultItem[][]> = env.query(union);
   // @ts-expect-error mixed batches can contain undefined or return a single row directly
   const wrongMixed: Promise<MDBXQueryResultItem[][]> = env.query([{ ...base, result: false }, base]);
   // @ts-expect-error result is a boolean, not a numeric switch
@@ -90,6 +100,7 @@ function queryResultTypes(env: MDBX_Env, dbi: MDBX_Dbi, flag: boolean,
   env.keys({ dbi, result: false });
   void [noItems, wrongItems, echoed, defaultEcho, undefinedEcho, wrongUndefined,
     dynamic, wrongDynamic, genericRow, legacyArray, oneRowArray, mixed,
-    genericArray, unionResult, wrongMixed];
+    genericArray, unionResult, wrongMixed, wrongGenericRow, wrongOneRowArray,
+    wrongLegacyArray, wrongGenericArray, wrongUnion];
 }
 void queryResultTypes;

@@ -11,6 +11,7 @@ const { MDBX_Env, MDBX_Param: P } = require("../lib/nativemou.js");
 const warmupPairs = 10;
 const measuredPairs = 100;
 const itemsPerMap = 3000;
+assert.equal(typeof global.gc, "function", "run this benchmark with --expose-gc");
 const databaseParent = process.env.MDBXMOU_BENCHMARK_DIR || os.tmpdir();
 const root = fs.mkdtempSync(path.join(databaseParent, "mdbxmou-query-result-bench-"));
 let measurement;
@@ -118,6 +119,15 @@ function median(values) {
     return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+function distribution(values) {
+    const sorted = [...values].sort((a, b) => a - b);
+    return {
+        mean: sorted.reduce((sum, value) => sum + value, 0) / sorted.length,
+        p90: sorted[Math.ceil(sorted.length * 0.90) - 1],
+        p99: sorted[Math.ceil(sorted.length * 0.99) - 1],
+    };
+}
+
 (async () => {
     const contexts = [];
     try {
@@ -132,6 +142,9 @@ function median(values) {
             for (const index of order) {
                 const sample = await measure(contexts[index], index === 0);
                 if (pair >= warmupPairs) contexts[index].samples.push(sample);
+                // measure() has returned and dropped its query Promise/echo;
+                // collect verification garbage outside the timed regions.
+                global.gc();
             }
         }
         hook.disable();
@@ -140,6 +153,8 @@ function median(values) {
             samples: context.samples.length,
             medianMs: Object.fromEntries(["preparationMs", "completionMs", "totalMs"].map((key) =>
                 [key, median(context.samples.map((sample) => sample[key]))])),
+            distributionMs: Object.fromEntries(["preparationMs", "completionMs", "totalMs"].map((key) =>
+                [key, distribution(context.samples.map((sample) => sample[key]))])),
             resourceTypes: [...new Set(context.samples.map((sample) => sample.resourceType))],
             rawSamples: context.samples,
         }));
@@ -160,6 +175,7 @@ function median(values) {
                 completion: "async_hooks before/after native worker callback, including C++ Destroy, excluding Promise continuations",
                 overhead: "identical async_hooks instrumentation on both variants",
                 verification: "every committed key and value checked outside timed regions",
+                garbageCollection: "forced GC after measure() returns, outside timed regions, on both variants",
             },
             results,
         }, null, 2));

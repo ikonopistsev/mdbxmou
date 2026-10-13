@@ -159,9 +159,9 @@ test("invalid result types throw TypeError synchronously and leave no work", asy
             flagError(() => env.query({ dbi, mode: P.queryMode.upsert, result, item: [{ key: first, value }] }),
                 "query result must be a boolean");
         }
-        assert.deepEqual(contents(env, dbi), []);
-        assert.equal(await env.query({ dbi, mode: P.queryMode.upsert, result: false, item: [{ key: first, value }] }), undefined);
-        env.closeSync();
+        assert.equal(await env.query({ dbi, mode: P.queryMode.upsert, result: false, item: [{ key: second, value }] }), undefined);
+        assert.deepEqual(contents(env, dbi), [{ key: second, value }]);
+        await env.close();
     });
 });
 
@@ -188,8 +188,10 @@ test("invalid late row prevents all writes and permits closing", async () => {
             { dbi, mode: P.queryMode.upsert, result: false, item: [{ key: first, value }] },
             { dbi, mode: P.queryMode.upsert, result: null, item: [] },
         ]), "query result must be a boolean");
-        assert.deepEqual(contents(env, dbi), []);
-        env.closeSync();
+        assert.equal(await env.query({ dbi, mode: P.queryMode.upsert, result: false,
+            item: [{ key: second, value }] }), undefined);
+        assert.deepEqual(contents(env, dbi), [{ key: second, value }]);
+        await env.close();
     });
 });
 
@@ -200,16 +202,23 @@ test("inherited flags are parsed and throwing getters preserve exception identit
             dbi, mode: P.queryMode.upsert, item: [{ key: first, value }],
         });
         assert.equal(await env.query(request), undefined);
-        flagError(() => env.query(Object.assign(Object.create({ result: true }), {
-            dbi, mode: P.queryMode.get, item: [{ key: first }],
-        })), "query result requires write queryMode");
+        for (const mode of [P.queryMode.get, P.queryMode.del]) {
+            for (const result of [false, true]) {
+                flagError(() => env.query(Object.assign(Object.create({ result }), {
+                    dbi, mode, item: [{ key: first }],
+                })), "query result requires write queryMode");
+            }
+        }
         for (const error of [new Error("getter"), { reason: "getter" }]) {
             const throwing = { dbi, mode: P.queryMode.upsert, item: [{ key: second, value }],
                 get result() { throw error; } };
             assert.throws(() => env.query(throwing), (caught) => caught === error);
         }
         assert.deepEqual(contents(env, dbi), [{ key: first, value }]);
-        env.closeSync();
+        assert.equal(await env.query({ dbi, mode: P.queryMode.upsert, result: false,
+            item: [{ key: first, value: Buffer.from("after-getter") }] }), undefined);
+        assert.deepEqual(contents(env, dbi), [{ key: first, value: Buffer.from("after-getter") }]);
+        await env.close();
     });
 });
 
@@ -226,6 +235,11 @@ for (const result of [false, true]) {
                 }));
                 assert.deepEqual(contents(env, dbi), [{ key: second, value }]);
             }
+            await assert.rejects(env.query([
+                { dbi, mode: P.queryMode.upsert, result, item: [{ key: first, value }] },
+                { dbi, mode: P.queryMode.insertUnique, result, item: [{ key: second, value }] },
+            ]));
+            assert.deepEqual(contents(env, dbi), [{ key: second, value }]);
         });
     });
 }
