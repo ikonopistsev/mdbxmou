@@ -61,6 +61,20 @@ void query_line::parse(txn_mode txn, const Napi::Object& arg0)
                 "query putFlag requires write queryMode");
         }
     }
+    if (arg0.Has("result")) {
+        auto result = arg0.Get("result");
+        if (!result.IsUndefined()) {
+            if (!result.IsBoolean()) {
+                throw Napi::TypeError::New(arg0.Env(),
+                    "query result must be a boolean");
+            }
+            if (!mode.is_write()) {
+                throw Napi::TypeError::New(arg0.Env(),
+                    "query result requires write queryMode");
+            }
+            return_result = result.As<Napi::Boolean>().Value();
+        }
+    }
     auto items_array = arg0.Get("item").As<Napi::Array>();
     auto item_len = items_array.Length();
     if (item_len > 0) {

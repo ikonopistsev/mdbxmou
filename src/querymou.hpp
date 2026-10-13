@@ -53,12 +53,16 @@ struct async_keyval
     }
 };
 
+// The following migration release will change only this write default.
+inline constexpr bool kWriteResultDefault = true;
+
 struct query_line 
     : async_common
 {
     base_flag value_flag{};
     query_mode mode{};
     put_flag put_flags{};
+    bool return_result{kWriteResultDefault};
     // буффер для запроса / ответа
     std::vector<async_keyval> item{};
     void parse(txn_mode txn, const Napi::Object& arg0);

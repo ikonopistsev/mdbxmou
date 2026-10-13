@@ -487,6 +487,8 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
         worker->Queue();
 
         return promise;
+    } catch (const Napi::Error&) {
+        throw;
     } catch (const std::exception& e) {
         throw Napi::Error::New(env, e.what());
     } catch (...) {

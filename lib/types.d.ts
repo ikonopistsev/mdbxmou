@@ -353,6 +353,13 @@ export interface MDBXQueryRequest {
   mode?: number;
   queryMode?: number;
   putFlag?: number;
+  /**
+   * Write queries only: false skips returning the written key/value items.
+   * Omitted/undefined defaults to true in the first release with this flag;
+   * the next planned minor release defaults writes to false. Explicit true
+   * always returns items. Get/del and keys keep their current results.
+   */
+  result?: boolean;
   item: MDBXQueryItem[];
 }
 
@@ -362,7 +369,9 @@ export interface MDBXQueryResultItem {
   found?: boolean;
 }
 
-export type MDBXQueryResult = MDBXQueryResultItem[] | MDBXQueryResultItem[][];
+export type MDBXQueryRowResult = MDBXQueryResultItem[] | undefined;
+/** Single-row input returns a row directly; multiple rows retain undefined slots. */
+export type MDBXQueryResult = MDBXQueryRowResult | MDBXQueryRowResult[];
 
 export interface MDBXKeysRequestObject {
   dbi: MDBX_Dbi;
@@ -391,6 +400,18 @@ export declare class MDBX_Env {
   startRead(): MDBX_Txn;
   startWrite(): MDBX_Txn;
 
+  /**
+   * Commits the entire batch before resolving. Write rows with result:false
+   * return undefined without copying their input items back to JavaScript.
+   * An array of one request also returns the row directly; mixed batches keep
+   * an own undefined slot for every suppressed write row. Validation throws
+   * synchronously, and native transaction failures reject the Promise.
+   */
+  query(request: MDBXQueryRequest & { result: false }, txnMode?: number): Promise<undefined>;
+  query(request: MDBXQueryRequest & { result?: true }, txnMode?: number): Promise<MDBXQueryResultItem[]>;
+  query(request: MDBXQueryRequest, txnMode?: number): Promise<MDBXQueryRowResult>;
+  query(request: (MDBXQueryRequest & { result?: true })[], txnMode?: number): Promise<MDBXQueryResultItem[] | MDBXQueryResultItem[][]>;
+  query(request: MDBXQueryRequest[], txnMode?: number): Promise<MDBXQueryResult>;
   query(request: MDBXQueryRequest | MDBXQueryRequest[], txnMode?: number): Promise<MDBXQueryResult>;
   keys(request: MDBXKeysRequest | MDBXKeysRequest[], txnMode?: number): Promise<MDBXKeysResult>;
   /** syncPeriod expects seconds and may be fractional; other options use integer values. */

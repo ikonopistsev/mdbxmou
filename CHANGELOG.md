@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- Add `result: false` to write rows in `env.query()` to skip constructing and
+  returning their key/value items. A single row resolves to `undefined` after
+  commit; multiple rows preserve their positions as own `undefined` slots.
+  Get/del results and `env.keys()` remain unchanged.
+- Write rows still return items by default in the first release with this
+  flag. The next planned minor release will disable this echo by default for
+  object writes, single-row arrays and write positions in mixed batches.
+  Explicit `result: true` enables item results in either release. No runtime
+  migration warnings are emitted.
+- Preserve original N-API exceptions from query parsing, including TypeError
+  for invalid flags/putFlag and the identity of exceptions thrown by getters.
+  Native transaction errors keep their previous ordinary Error behavior.
+- Extend the general TypeScript query result types to include undefined.
+  Literal echo requests and arrays retain their previous result shapes in
+  this release; generic requests and dynamic flags may require narrowing.
+
 ## [0.5.6] - 2026-09-29
 
 ### Fixed

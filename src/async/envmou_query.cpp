@@ -73,16 +73,18 @@ void async_query::OnOK()
     if (single_) {
         if (query_.size() == 1) {
             const auto& row = query_[0];
-            deferred_.Resolve(write_row(env, row));
+            deferred_.Resolve(row.mode.is_write() && !row.return_result
+                ? env.Undefined() : write_row(env, row));
             return;
         }
     }
 
     Napi::Array result = Napi::Array::New(env, query_.size());
     for (std::size_t i = 0; i < query_.size(); ++i) {
-        Napi::Object js_row = Napi::Object::New(env);
         const auto& row = query_[i];
-        result.Set(static_cast<uint32_t>(i), write_row(env, row));
+        result.Set(static_cast<uint32_t>(i),
+            row.mode.is_write() && !row.return_result
+                ? env.Undefined() : write_row(env, row));
     }
 
     deferred_.Resolve(result);

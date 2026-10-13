@@ -45,6 +45,7 @@
     "GETVIEW.md",
     "PERFORMANCE.md",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "dependencies": {
@@ -74,6 +75,8 @@
     "test:log-level": "node ./test/log-level.js",
     "test:sync-ex": "node ./test/sync-ex.js",
     "test:query-buffer-keys": "node --expose-gc ./test/query-buffer-keys.js",
+    "test:query-result": "node --expose-gc ./test/query-result.js",
+    "benchmark:query-result": "node ./test/query-result-benchmark.cjs",
     "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
     "build": "node build.js",
     "build-dev": "node build-dev.js",

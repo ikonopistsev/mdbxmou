@@ -218,7 +218,7 @@ const txn = env.startWrite();
 const txn = env.startRead();
 ```
 
-**query(requests) → Promise<Array>** (Async batch operations)
+**query(requests, txnMode?) → Promise<Array | undefined>** (Async batch operations)
 ```javascript
 const result = await env.query([
   {
@@ -242,6 +242,58 @@ is queued. This applies to write, get and del requests, and to the `from`
 Buffer in `env.keys()`. Changing or releasing the original Buffer after the
 call does not change the key used by the worker; Buffer slices copy only
 their visible bytes.
+
+Write requests (`upsert`, `update`, `insertUnique`) accept `result: false` to
+skip returning copies of the input key/value items:
+
+```javascript
+await env.query({
+  dbi,
+  mode: MDBX_Param.queryMode.upsert,
+  result: false,
+  item: [
+    { key: "key1", value: Buffer.from("value1") },
+    { key: "key2", value: Buffer.from("value2") },
+  ],
+}); // resolves to undefined after the entire transaction commits
+```
+
+Without `result`, with `result: undefined`, or with `result: true`, writes
+still return their current item arrays in this first release. The second
+argument remains the numeric `txnMode`. Suppressing the response does not
+change input copying, put flags, transaction order, commit or the environment's
+durability settings. Native write/commit errors still reject the Promise and
+abort the batch. Flag validation throws synchronously before work is queued:
+non-booleans throw `TypeError: query result must be a boolean`; an explicit
+boolean on `get` or `del` throws `TypeError: query result requires write queryMode`.
+Read/get, del/found, and `env.keys()` keep their current results.
+
+```javascript
+const results = await env.query([
+  { dbi, mode: MDBX_Param.queryMode.upsert, result: false, item: batch },
+  { dbi, mode: MDBX_Param.queryMode.get, item: [{ key: "key1" }] },
+  { dbi, mode: MDBX_Param.queryMode.del, item: [{ key: "obsolete" }] },
+]);
+// results[0] === undefined (an own array slot, not a hole)
+// results[1] is the get item array; results[2] is the del/found item array
+```
+
+An object request and an array containing just one request both return that
+row directly. In particular, `query([{ ...writeRequest, result: false }])`
+resolves to `undefined`, while several suppressed requests resolve to
+`[undefined, ...]`. An empty request array still resolves to `[]`.
+
+The next planned minor release after this flag is introduced will default
+write requests to returning `undefined`. Set `result: true` now if the caller
+needs the returned write items; explicit true/false keep their meaning.
+This changes object write responses, single-row array responses, and write
+slots in mixed batches. Reads, deletion results and key lists are unaffected;
+there are no runtime migration warnings in the first release.
+
+TypeScript's general `MDBXQueryResult` now includes `undefined`, including
+suppressed slots. Literal requests without the flag or with `result: true`
+retain their item-array types in this release; requests annotated with a
+general `MDBXQueryRequest` and dynamic booleans require narrowing the result.
 
 ### Transaction
 
