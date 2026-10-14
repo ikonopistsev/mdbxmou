@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [0.5.7] - 2026-10-14
 
 - Permit read/write transactions, query/keys and syncEx during async copyTo.
   Keep close, a second copy and setOption blocked until the relevant work

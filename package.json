@@ -75,7 +75,6 @@
     "test:sync-ex": "node ./test/sync-ex.js",
     "test:query-buffer-keys": "node --expose-gc ./test/query-buffer-keys.js",
     "test:query-result": "node --expose-gc ./test/query-result.js",
-    "benchmark:query-result": "node --expose-gc ./test/query-result-benchmark.cjs",
     "test:copy-to": "node ./test/copy-to.js",
     "test:copy-to:native": "node ./test/copy-to.js --native",
     "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
@@ -86,7 +85,7 @@
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "engines": {
     "node": ">=22.9.0"
   },
