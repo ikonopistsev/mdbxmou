@@ -8,6 +8,8 @@ namespace mdbxmou {
 
 class envmou;
 
+// Test-only: await settlement before terminating the owning isolate.
+// Cancellation and teardown of an active writer are not supported.
 class debug_writer final : public Napi::AsyncWorker
 {
 	Napi::Promise::Deferred deferred_;

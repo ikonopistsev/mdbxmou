@@ -191,8 +191,9 @@ await env.copyTo('./backup-full.mdbx', MDBX_Param.copyFlag.defaults);
 
 The asynchronous copy keeps the environment alive and permits read/write
 transactions, commits, `query()` / `keys()`, and `syncEx()` while it runs.
-`close()` / `closeSync()` reject while a copy, transaction, or query/keys work
-is active. Another `copyTo()` / `copyToSync()` and `setOption()` throw
+`close()` / `closeSync()` throw a synchronous JavaScript error while a copy,
+transaction, or query/keys work is active; `close()` does not return a rejected
+Promise for this conflict. Another `copyTo()` / `copyToSync()` and `setOption()` throw
 `operation in progress` until the asynchronous copy completes. A failed copy
 releases its own reservation and rejects its Promise.
 
@@ -202,7 +203,7 @@ including `MDBX_READERS_FULL` and `MDBX_MAP_FULL`. No throttle mode is enabled
 automatically. `copyToSync(path, flags?)` uses the same default flags and
 blocks the calling JavaScript thread for the native copy.
 
-Async `open()` / `close()` reject concurrent guarded environment calls with
+During async `open()` / `close()`, concurrent guarded environment calls throw
 `operation in progress`; this replaces the former `in progress` text for
 conflicting async open/close/copy calls. `version()` remains available.
 Calling `close()` on an already closed environment still returns `undefined`.

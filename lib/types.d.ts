@@ -389,7 +389,7 @@ export declare class MDBX_Env {
   open(options: MDBXEnvOpenOptions): Promise<void>;
   openSync(options: MDBXEnvOpenOptions): void;
 
-  /** Rejects closing while transactions, query/keys, or an async copy are active. */
+  /** Throws synchronously while transactions, query/keys, or an async copy are active. */
   close(): Promise<void>;
   closeSync(): void;
 

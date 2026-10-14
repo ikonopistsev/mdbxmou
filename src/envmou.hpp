@@ -43,6 +43,9 @@ class envmou final : public Napi::ObjectWrap<envmou>
 	env_arg0 arg0_{};
 	static constexpr std::uint32_t f_busy = 1u << 0;
 	static constexpr std::uint32_t f_copy = 1u << 1;
+	// Flags/count are changed only on the isolate's JS thread. Native work
+	// arguments and results are published by libuv's work queues/mutexes,
+	// not by this mask; Execute must not use it to access mutable JS state.
 	std::atomic<std::uint32_t> state_flags_{0};
 
 #if defined(MDBXMOU_TESTING)

@@ -154,6 +154,7 @@ async function testCase(input, root) {
     const name = "subject";
     if (input.type === "exceptions") {
         const g = graph(root, { unopened: true });
+        assert.equal(typeof g.env.version(), "string");
         assert.throws(() => g.env.copyTo("unused"), /closed/);
         assert.throws(() => g.env.setOption(P.envOption.syncBytes, 1), /closed/);
         assert.throws(() => g.env.syncEx(true, false), /closed/);
@@ -246,6 +247,10 @@ async function testCase(input, root) {
             const committed = g.env.startRead();
             assert.equal(g.dbi.get(committed, Buffer.from("written"))[0], 3);
             committed.abort();
+            // This test-only writer has no cancellation/teardown cleanup;
+            // always settle it before closing or terminating its isolate.
+            if (g.env._debugStartWriter)
+                await g.env._debugStartWriter({ holdMs: 1 });
             await call("keys", g);
             assert.equal(g.dbi.get(before, Buffer.from("key-0"))[0], 1);
             before.abort();
