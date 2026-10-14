@@ -389,18 +389,21 @@ export declare class MDBX_Env {
   open(options: MDBXEnvOpenOptions): Promise<void>;
   openSync(options: MDBXEnvOpenOptions): void;
 
-  /** Throws synchronously while transactions, query/keys, or an async copy are active. */
+  /**
+   * Throws synchronously while transactions, query/keys, or an async copy are active,
+   * or with "operation in progress" during async open/close.
+   */
   close(): Promise<void>;
   closeSync(): void;
 
   /**
    * Copies a native MVCC snapshot; defaults to copyFlag.compact.
    * Transactions, query/keys and syncEx may continue during the async copy.
-   * Close, another copy and setOption are rejected until copy completion.
+   * While copying, close, another copy and setOption throw synchronously.
    * The snapshot starts in native work and may retain old pages/reader slots.
    */
   copyTo(path: string, flags?: number): Promise<void>;
-  /** Synchronous copy; also rejects overlap with an active async copy. */
+  /** Synchronous copy; throws synchronously if an async copy is active. */
   copyToSync(path: string, flags?: number): void;
 
   version(): string;
