@@ -9,6 +9,9 @@
 #if defined(MDBXMOU_TESTING)
 #include "debug_writer.hpp"
 #endif
+#if defined(MDBXMOU_COPY_TESTING)
+#include "copy_test.hpp"
+#endif
 #include <cmath>
 #include <cstdint>
 #include <exception>
@@ -198,31 +201,31 @@ env_arg0 envmou::parse(const Napi::Value& arg0)
 Napi::Value envmou::open(const Napi::CallbackInfo& info)
 {
     auto env = info.Env();
-    auto arg0 = parse(info[0].As<Napi::Object>());
 
     try {
-        // асинхронный вызов разлочится внутри worker'a
-        if (!try_lock()) {
-            throw std::runtime_error("in progress");
+		auto arg0 = parse(info[0].As<Napi::Object>());
+		std::unique_lock<envmou> lock{*this};
+
+		if (is_open()) {
+            throw std::runtime_error("already opened");
         }
 
-        if (is_open()) {
-            throw std::runtime_error("already opened");
-        }          
-
-        auto* worker = new async_open(env, *this, arg0);
-        Napi::Promise promise = worker->GetPromise();
-        worker->Queue();
-        return promise;
-    } catch (const std::exception& e) {
-        unlock();
-        throw Napi::Error::New(env, e.what());
-    } catch (...) {
-        unlock();
-        throw;
-    }
-
-    return env.Undefined();
+		auto worker = std::make_unique<async_open>(
+			info.This().As<Napi::Object>(), lock, arg0);
+		auto promise = worker->GetPromise();
+		worker->Queue();
+#if defined(MDBXMOU_COPY_TESTING)
+		auto* queued = worker.release();
+		copy_test_after_queue(env, *queued);
+#else
+		worker.release();
+#endif
+		return promise;
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, e.what());
+	}
 }
 
 Napi::Value envmou::open_sync(const Napi::CallbackInfo& info)
@@ -306,12 +309,9 @@ Napi::Value envmou::close(const Napi::CallbackInfo& info)
 {
     auto env = info.Env();
     try {
-        // асинхронный вызов разлочится внутри worker'a
-        if (!try_lock()) {
-            throw std::runtime_error("in progress");
-        }
+		std::unique_lock<envmou> lock{*this};
 
-        if (!is_open()) {
+		if (!is_open()) {
             return env.Undefined();
         }
 
@@ -319,19 +319,22 @@ Napi::Value envmou::close(const Napi::CallbackInfo& info)
             throw std::runtime_error("active transactions");
         }
 
-        auto* worker = new async_close(env, *this);
-        Napi::Promise promise = worker->GetPromise();
-        worker->Queue();
-        return promise;
-    } catch (const std::exception& e) {
-        unlock();
-        throw Napi::Error::New(env, e.what());
-    } catch (...) {
-        unlock();
-        throw;
-    }
-
-    return env.Undefined();
+		auto worker =
+			std::make_unique<async_close>(info.This().As<Napi::Object>(), lock);
+		auto promise = worker->GetPromise();
+		worker->Queue();
+#if defined(MDBXMOU_COPY_TESTING)
+		auto* queued = worker.release();
+		copy_test_after_queue(env, *queued);
+#else
+		worker.release();
+#endif
+		return promise;
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, e.what());
+	}
 }
 
 Napi::Value envmou::close_sync(const Napi::CallbackInfo& info)
@@ -368,16 +371,22 @@ Napi::Value envmou::copy_to_sync(const Napi::CallbackInfo& info)
 
         check();
 
-        auto rc = mdbx_env_copy(*this, dest_path.c_str(), flags);
+		if (is_copying()) {
+			throw std::runtime_error("operation in progress");
+		}
+
+		auto rc = mdbx_env_copy(*this, dest_path.c_str(), flags);
         if (rc != MDBX_SUCCESS) {
             throw Napi::Error::New(env, mdbx_strerror(rc));
         }
 
-    } catch (const std::exception& e) {
-        throw Napi::Error::New(env, e.what());
-    }
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, e.what());
+	}
 
-    return env.Undefined();
+	return env.Undefined();
 }
 
 Napi::Value envmou::copy_to(const Napi::CallbackInfo& info) 
@@ -396,21 +405,28 @@ Napi::Value envmou::copy_to(const Napi::CallbackInfo& info)
     try {
         auto dest = info[0].As<Napi::String>().Utf8Value();
 
-        if (!try_lock()) {
-            throw std::runtime_error("in progress");
-        }
+		lock_guard setup{*this};
+		check();
+		if (is_copying()) {
+			throw std::runtime_error("operation in progress");
+		}
 
-        check();
-
-        auto* worker = new mdbxmou::async_copy(env, *this, std::move(dest), flags);
-        Napi::Promise promise = worker->GetPromise();
-        worker->Queue();
-        return promise;
-    } catch (const std::exception& e) {
-        throw Napi::Error::New(env, e.what());
-    }
-
-    return env.Undefined();
+		auto worker = std::make_unique<async_copy>(
+			info.This().As<Napi::Object>(), *this, std::move(dest), flags);
+		auto promise = worker->GetPromise();
+		worker->Queue();
+#if defined(MDBXMOU_COPY_TESTING)
+		auto* queued = worker.release();
+		copy_test_after_queue(env, *queued);
+#else
+		worker.release();
+#endif
+		return promise;
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, e.what());
+	}
 }
 
 Napi::Value envmou::get_version(const Napi::CallbackInfo& info) 
@@ -478,21 +494,30 @@ Napi::Value envmou::query(const Napi::CallbackInfo& info)
 
         auto arg0 = info[0];
         query_request query = parse_query(mode, arg0);
-        auto* worker = new async_query(env, *this, mode, 
-            std::move(query), arg0.IsObject());
-        auto promise = worker->GetPromise();
-        
-        // Увеличиваем счетчик ДО Queue() — worker гарантированно вызовет --env_
-        ++(*this);
+		auto worker =
+			std::make_unique<async_query>(info.This().As<Napi::Object>(),
+				*this,
+				mode,
+				std::move(query),
+				arg0.IsObject());
+		auto promise = worker->GetPromise();
         worker->Queue();
+#if defined(MDBXMOU_COPY_TESTING)
+		auto* queued = worker.release();
+		copy_test_after_queue(env, *queued);
+#else
+		worker.release();
+#endif
 
-        return promise;
-    } catch (const std::exception& e) {
-        throw Napi::Error::New(env, e.what());
-    } catch (...) {
-        throw Napi::Error::New(env, "envmou::query");
-    }
-    return env.Undefined();
+		return promise;
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, e.what());
+	} catch (...) {
+		throw Napi::Error::New(env, "envmou::query");
+	}
+	return env.Undefined();
 }
 
 Napi::Value envmou::keys(const Napi::CallbackInfo& info)
@@ -519,165 +544,187 @@ Napi::Value envmou::keys(const Napi::CallbackInfo& info)
         auto arg0 = info[0];
         keys_request query = parse_keys(arg0);
 
-        auto* worker = new async_keys(env, *this, mode, 
-            std::move(query), arg0.IsObject());
-        auto promise = worker->GetPromise();
-        
-        // Увеличиваем счетчик ДО Queue() — worker гарантированно вызовет --env_
-        ++(*this);
+		auto worker =
+			std::make_unique<async_keys>(info.This().As<Napi::Object>(),
+				*this,
+				mode,
+				std::move(query),
+				arg0.IsObject());
+		auto promise = worker->GetPromise();
         worker->Queue();
+#if defined(MDBXMOU_COPY_TESTING)
+		auto* queued = worker.release();
+		copy_test_after_queue(env, *queued);
+#else
+		worker.release();
+#endif
 
-        return promise;
-    } catch (const std::exception& e) {
-        throw Napi::Error::New(env, e.what());
-    } catch (...) {
-        throw Napi::Error::New(env, "envmou::keys");
-    }
-    return env.Undefined();
+		return promise;
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, e.what());
+	} catch (...) {
+		throw Napi::Error::New(env, "envmou::keys");
+	}
+	return env.Undefined();
 }
 
 Napi::Value envmou::set_option(const Napi::CallbackInfo &info)
 {
     Napi::Env env = info.Env();
 
-    if (info.Length() < 2)
-    {
-        throw Napi::TypeError::New(env,
-            "expected: option and value");
-    }
-    
-    auto opt = evn_option::parse(info[0]);
+	try {
+		if (info.Length() < 2) {
+			throw Napi::TypeError::New(env, "expected: option and value");
+		}
 
-    lock_guard lock(*this);
+		auto opt = evn_option::parse(info[0]);
 
-    check();
+		lock_guard lock(*this);
 
-    uint64_t val = 0;
-    if (static_cast<MDBX_option>(opt) == MDBX_opt_sync_period)
-        val = parse_sync_period(env, info[1]);
-    else
-        val = parse_option_value(env, info[1]);
+		check();
+		if (is_copying()) {
+			throw std::runtime_error("operation in progress");
+		}
 
-    auto rc = mdbx_env_set_option(*this, opt, val);
+		uint64_t val = 0;
+		if (static_cast<MDBX_option>(opt) == MDBX_opt_sync_period)
+			val = parse_sync_period(env, info[1]);
+		else
+			val = parse_option_value(env, info[1]);
+
+		auto rc = mdbx_env_set_option(*this, opt, val);
 #if defined(MDBXMOU_TESTING)
-    debug_writer_observe_env_call();
+		debug_writer_observe_env_call();
 #endif
-    if (rc != MDBX_SUCCESS)
-    {
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
+		if (rc != MDBX_SUCCESS) {
+			throw Napi::Error::New(env, mdbx_strerror(rc));
+		}
 
-    return env.Undefined();
+		return env.Undefined();
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& error) {
+		throw Napi::Error::New(env, error.what());
+	}
 }
 
 Napi::Value envmou::sync_ex(const Napi::CallbackInfo &info)
 {
     Napi::Env env = info.Env();
 
-    if (info.Length() < 2)
-    {
-        throw Napi::TypeError::New(env,
-            "expected: force and nonblock");
-    }
+	try {
+		if (info.Length() < 2) {
+			throw Napi::TypeError::New(env, "expected: force and nonblock");
+		}
 
-    auto force = info[0].As<Napi::Boolean>().Value();
-    auto nonblock = info[1].As<Napi::Boolean>().Value();
+		auto force = info[0].As<Napi::Boolean>().Value();
+		auto nonblock = info[1].As<Napi::Boolean>().Value();
 
-    lock_guard lock(*this);
+		lock_guard lock(*this);
 
-    if (!is_open())
-    {
-        throw Napi::Error::New(env, "closed");
-    }
+		check();
 
-    auto rc = mdbx_env_sync_ex(*this, force, nonblock);
+		auto rc = mdbx_env_sync_ex(*this, force, nonblock);
 #if defined(MDBXMOU_TESTING)
-    debug_writer_observe_env_call();
+		debug_writer_observe_env_call();
 #endif
-    if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE)
-    {
-        throw Napi::Error::New(env, mdbx_strerror(rc));
-    }
+		if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE) {
+			throw Napi::Error::New(env, mdbx_strerror(rc));
+		}
 
-    return Napi::Number::New(env, rc);
+		return Napi::Number::New(env, rc);
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& error) {
+		throw Napi::Error::New(env, error.what());
+	}
 }
 
 #if defined(MDBXMOU_TESTING)
 Napi::Value envmou::debug_start_writer(const Napi::CallbackInfo& info)
 {
 	auto env = info.Env();
-	std::uint32_t hold_ms{500};
-	std::uint32_t publish_delay_ms{};
-	bool commit{true};
+	try {
+		std::uint32_t hold_ms{500};
+		std::uint32_t publish_delay_ms{};
+		bool commit{true};
 
-	if (info.Length() > 0 && !info[0].IsUndefined()) {
-		if (!info[0].IsObject()) {
-			throw Napi::TypeError::New(env, "expected writer options object");
-		}
-		auto options = info[0].As<Napi::Object>();
-		if (options.Has("holdMs")) {
-			auto value = options.Get("holdMs");
-			if (!value.IsNumber()) {
-				throw Napi::TypeError::New(env, "holdMs must be a number");
-			}
-			hold_ms = value.As<Napi::Number>().Uint32Value();
-			if (hold_ms == 0 || hold_ms > 10'000) {
-				throw Napi::RangeError::New(
-					env, "holdMs must be in range 1..10000");
-			}
-		}
-		if (options.Has("publishDelayMs")) {
-			auto value = options.Get("publishDelayMs");
-			if (!value.IsNumber()) {
+		if (info.Length() > 0 && !info[0].IsUndefined()) {
+			if (!info[0].IsObject()) {
 				throw Napi::TypeError::New(
-					env, "publishDelayMs must be a number");
+					env, "expected writer options object");
 			}
-			publish_delay_ms = value.As<Napi::Number>().Uint32Value();
-			if (publish_delay_ms > 10'000) {
-				throw Napi::RangeError::New(
-					env, "publishDelayMs must be in range 0..10000");
+			auto options = info[0].As<Napi::Object>();
+			if (options.Has("holdMs")) {
+				auto value = options.Get("holdMs");
+				if (!value.IsNumber()) {
+					throw Napi::TypeError::New(env, "holdMs must be a number");
+				}
+				hold_ms = value.As<Napi::Number>().Uint32Value();
+				if (hold_ms == 0 || hold_ms > 10'000) {
+					throw Napi::RangeError::New(
+						env, "holdMs must be in range 1..10000");
+				}
+			}
+			if (options.Has("publishDelayMs")) {
+				auto value = options.Get("publishDelayMs");
+				if (!value.IsNumber()) {
+					throw Napi::TypeError::New(
+						env, "publishDelayMs must be a number");
+				}
+				publish_delay_ms = value.As<Napi::Number>().Uint32Value();
+				if (publish_delay_ms > 10'000) {
+					throw Napi::RangeError::New(
+						env, "publishDelayMs must be in range 0..10000");
+				}
+			}
+			if (options.Has("commit")) {
+				auto value = options.Get("commit");
+				if (!value.IsBoolean()) {
+					throw Napi::TypeError::New(env, "commit must be a boolean");
+				}
+				commit = value.As<Napi::Boolean>().Value();
 			}
 		}
-		if (options.Has("commit")) {
-			auto value = options.Get("commit");
-			if (!value.IsBoolean()) {
-				throw Napi::TypeError::New(env, "commit must be a boolean");
-			}
-			commit = value.As<Napi::Boolean>().Value();
+
+		// MDBXMOU-0005-WRITER-ORACLE: lock only setup; the native writer must run
+		// independently or the test hook would create the deadlock it detects.
+		lock_guard lock{*this};
+		check();
+		if (!debug_writer_starting()) {
+			throw Napi::Error::New(env, "debug writer is already active");
 		}
-	}
 
-	// MDBXMOU-0005-WRITER-ORACLE: lock only setup; the native writer must run
-	// independently or the test hook would create the deadlock it detects.
-	lock_guard lock{*this};
-	check();
-	if (!debug_writer_starting()) {
-		throw Napi::Error::New(env, "debug writer is already active");
-	}
-
-	std::unique_ptr<debug_writer> worker;
-	try {
-		worker = std::make_unique<debug_writer>(env,
-			*this,
-			info.This().As<Napi::Object>(),
-			hold_ms,
-			publish_delay_ms,
-			commit);
-	} catch (...) {
-		debug_writer_reset();
+		std::unique_ptr<debug_writer> worker;
+		try {
+			worker = std::make_unique<debug_writer>(env,
+				*this,
+				info.This().As<Napi::Object>(),
+				hold_ms,
+				publish_delay_ms,
+				commit);
+		} catch (...) {
+			debug_writer_reset();
+			throw;
+		}
+		++(*this);
+		try {
+			worker->Queue();
+		} catch (...) {
+			--(*this);
+			debug_writer_reset();
+			throw;
+		}
+		auto promise = worker->get_promise();
+		worker.release();
+		return promise;
+	} catch (const Napi::Error&) {
 		throw;
+	} catch (const std::exception& error) {
+		throw Napi::Error::New(env, error.what());
 	}
-	++(*this);
-	try {
-		worker->Queue();
-	} catch (...) {
-		--(*this);
-		debug_writer_reset();
-		throw;
-	}
-	auto promise = worker->get_promise();
-	worker.release();
-	return promise;
 }
 
 Napi::Value envmou::debug_writer_state(const Napi::CallbackInfo& info)

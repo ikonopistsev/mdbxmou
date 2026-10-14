@@ -4,6 +4,7 @@
 #include <cassert>
 #include <memory>
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 
 namespace mdbxmou {
@@ -37,10 +38,12 @@ class envmou final : public Napi::ObjectWrap<envmou>
 	};
 
 	std::unique_ptr<MDBX_env, free_env> env_{};
-	// счетчик транзакицй, не требующий атомарности
+	// JS-thread count of active transactions and reserved async work, including copy.
 	std::size_t trx_count_{};
 	env_arg0 arg0_{};
-	std::mutex lock_{};
+	static constexpr std::uint32_t f_busy = 1u << 0;
+	static constexpr std::uint32_t f_copy = 1u << 1;
+	std::atomic<std::uint32_t> state_flags_{0};
 
 #if defined(MDBXMOU_TESTING)
 	std::atomic<debug_writer_phase> debug_writer_phase_{
@@ -135,26 +138,55 @@ public:
 	}
 
 	using lock_guard = std::lock_guard<envmou>;
-	//  для защиты асинхронных операций
+	// Exclusive setup and async open/close. Copy holds its own independent bit.
 	void lock()
 	{
-		auto rc = lock_.try_lock();
-		if (!rc) {
+		if (!try_lock()) {
 			throw std::runtime_error("operation in progress");
 		}
 	}
-	void unlock()
+	void unlock() noexcept
 	{
-		lock_.unlock();
+		[[maybe_unused]] const auto previous =
+			state_flags_.fetch_and(~f_busy, std::memory_order_release);
+		assert(previous & f_busy);
 	}
-	bool try_lock()
+	bool try_lock() noexcept
 	{
-		bool locked = lock_.try_lock();
-		return locked;
+		const auto previous =
+			state_flags_.fetch_or(f_busy, std::memory_order_acquire);
+		return (previous & f_busy) == 0;
+	}
+
+	bool is_copying() const noexcept
+	{
+		return (state_flags_.load(std::memory_order_acquire) & f_copy) != 0;
+	}
+
+	void begin_copy()
+	{
+		assert(state_flags_.load(std::memory_order_relaxed) & f_busy);
+		const auto previous =
+			state_flags_.fetch_or(f_copy, std::memory_order_acq_rel);
+		if (previous & f_copy) {
+			throw std::runtime_error("operation in progress");
+		}
+		++(*this);
+	}
+
+	void end_copy() noexcept
+	{
+		assert(is_copying());
+		--(*this);
+		[[maybe_unused]] const auto previous =
+			state_flags_.fetch_and(~f_copy, std::memory_order_release);
+		assert(previous & f_copy);
 	}
 
 	void do_close()
 	{
+		// Async close owns f_busy and was queued only with a zero count. There
+		// are no live transactions/completions to mutate this count off-thread.
 		if (trx_count_ > 0) {
 			throw std::runtime_error("transaction in progress");
 		}

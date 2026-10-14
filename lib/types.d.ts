@@ -380,10 +380,18 @@ export declare class MDBX_Env {
   open(options: MDBXEnvOpenOptions): Promise<void>;
   openSync(options: MDBXEnvOpenOptions): void;
 
+  /** Rejects closing while transactions, query/keys, or an async copy are active. */
   close(): Promise<void>;
   closeSync(): void;
 
+  /**
+   * Copies a native MVCC snapshot; defaults to copyFlag.compact.
+   * Transactions, query/keys and syncEx may continue during the async copy.
+   * Close, another copy and setOption are rejected until copy completion.
+   * The snapshot starts in native work and may retain old pages/reader slots.
+   */
   copyTo(path: string, flags?: number): Promise<void>;
+  /** Synchronous copy; also rejects overlap with an active async copy. */
   copyToSync(path: string, flags?: number): void;
 
   version(): string;
@@ -393,7 +401,10 @@ export declare class MDBX_Env {
 
   query(request: MDBXQueryRequest | MDBXQueryRequest[], txnMode?: number): Promise<MDBXQueryResult>;
   keys(request: MDBXKeysRequest | MDBXKeysRequest[], txnMode?: number): Promise<MDBXKeysResult>;
-  /** syncPeriod expects seconds and may be fractional; other options use integer values. */
+  /**
+   * syncPeriod expects seconds and may be fractional; other options use integer values.
+   * Throws while an async copy or open/close is in progress, or the environment is closed.
+   */
   setOption(option: number, value: number | bigint): void;
   /**
    * Returns 0 (MDBX_SUCCESS) or -1 (MDBX_RESULT_TRUE, nothing to sync).
@@ -402,6 +413,7 @@ export declare class MDBX_Env {
    * Use (true, false) to force and wait for synchronization of committed data.
    * With force=false, the environment's sync policy and autosync thresholds apply;
    * a successful return, including 0, does not guarantee that all pending data was flushed.
+   * Allowed during async copying; rejected while async open/close is in progress.
    */
   syncEx(force: boolean, nonblock: boolean): number;
 }

@@ -183,6 +183,30 @@ env.openSync({
 env.closeSync();
 ```
 
+**copyTo(path, flags?) → Promise<void>**
+```javascript
+await env.copyTo('./backup.mdbx'); // compact by default
+await env.copyTo('./backup-full.mdbx', MDBX_Param.copyFlag.defaults);
+```
+
+The asynchronous copy keeps the environment alive and permits read/write
+transactions, commits, `query()` / `keys()`, and `syncEx()` while it runs.
+`close()` / `closeSync()` reject while a copy, transaction, or query/keys work
+is active. Another `copyTo()` / `copyToSync()` and `setOption()` throw
+`operation in progress` until the asynchronous copy completes. A failed copy
+releases its own reservation and rejects its Promise.
+
+The MVCC snapshot starts inside native work. Its reader slot and retained
+old pages can increase database size or cause native reader/space errors,
+including `MDBX_READERS_FULL` and `MDBX_MAP_FULL`. No throttle mode is enabled
+automatically. `copyToSync(path, flags?)` uses the same default flags and
+blocks the calling JavaScript thread for the native copy.
+
+Async `open()` / `close()` reject concurrent guarded environment calls with
+`operation in progress`; this replaces the former `in progress` text for
+conflicting async open/close/copy calls. `version()` remains available.
+Calling `close()` on an already closed environment still returns `undefined`.
+
 **setOption(option, value)**
 ```javascript
 env.setOption(MDBX_Param.envOption.syncBytes, 4 * 1024 * 1024);
@@ -191,6 +215,7 @@ env.setOption(MDBX_Param.envOption.syncPeriod, 0.2); // 200 ms
 
 > **Note**: `syncPeriod` is passed in **seconds** and may be fractional. Other options are passed as non-negative integer values.
 > **Note**: `maxDb` and `maxReaders` are pre-open options. Set them through `open/openSync` (`maxDbi`, `maxReaders`) instead of `setOption()`.
+> **Note**: `setOption()` throws a JavaScript error on a closed environment or during asynchronous copying/opening/closing.
 
 **syncEx(force, nonblock) → number**
 ```javascript

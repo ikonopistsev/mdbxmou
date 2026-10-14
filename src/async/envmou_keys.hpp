@@ -6,48 +6,48 @@ namespace mdbxmou {
 
 class envmou;
 
-class async_keys
-    : public Napi::AsyncWorker 
+class async_keys final : public Napi::AsyncWorker
 {
-    Napi::Promise::Deferred deferred_;
-    envmou& env_;
-    txn_mode txn_mode_{};
-    // действия для выполнения
-    keys_request query_{};
-    // упрощенный режим 1 массив
-    bool single_{false};
+	Napi::Promise::Deferred deferred_;
+	envmou* env_{};
+	txn_mode txn_mode_{};
+	// действия для выполнения
+	keys_request query_{};
+	// упрощенный режим 1 массив
+	bool single_{false};
+
+	void finish() noexcept;
 
 public:
-    async_keys(Napi::Env env, envmou& e, 
-        txn_mode txn_mode, keys_request query, bool single = false)
-        : Napi::AsyncWorker{env}
-        , deferred_{Napi::Promise::Deferred::New(env)}
-        , env_{e}
-        , txn_mode_{txn_mode}
-        , query_{std::move(query)}
-        , single_{single}
-    {   }
+	async_keys(const Napi::Object& receiver,
+		envmou& owner,
+		txn_mode txn_mode,
+		keys_request query,
+		bool single = false);
+	~async_keys() override;
 
-    void Execute() override;
+	void OnWorkComplete(Napi::Env env, napi_status status) override;
 
-    void OnOK() override;
+	void Execute() override;
 
-    void OnError(const Napi::Error& e) override;
+	void OnOK() override;
 
-    Napi::Promise GetPromise() const { 
-        return deferred_.Promise(); 
-    }
+	void OnError(const Napi::Error& e) override;
 
-    txnmou_managed start_transaction();
+	Napi::Promise GetPromise() const
+	{
+		return deferred_.Promise();
+	}
 
-    void do_keys(txnmou_managed& txn, 
-        mdbx::map_handle dbi, keys_line& arg0);
+	txnmou_managed start_transaction();
 
-    void do_keys_batch(txnmou_managed& txn, 
-        mdbx::map_handle dbi, keys_line& arg0);
+	void do_keys(txnmou_managed& txn, mdbx::map_handle dbi, keys_line& arg0);
 
-    void do_keys_from(txnmou_managed& txn, 
-        mdbx::map_handle dbi, keys_line& arg0);
+	void do_keys_batch(
+		txnmou_managed& txn, mdbx::map_handle dbi, keys_line& arg0);
+
+	void do_keys_from(
+		txnmou_managed& txn, mdbx::map_handle dbi, keys_line& arg0);
 };
 
-} // namespace mdbxmou
+}  // namespace mdbxmou
