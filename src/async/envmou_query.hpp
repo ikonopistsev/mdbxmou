@@ -6,48 +6,47 @@ namespace mdbxmou {
 
 class envmou;
 
-class async_query
-    : public Napi::AsyncWorker 
+class async_query final : public Napi::AsyncWorker
 {
-    Napi::Promise::Deferred deferred_;
-    envmou& env_;
-    txn_mode txn_mode_{};
-    // действия для выполнения
-    query_request query_{};
-    // упрощенный режим 1 массив
-    bool single_{false};
+	Napi::Promise::Deferred deferred_;
+	envmou* env_{};
+	txn_mode txn_mode_{};
+	// действия для выполнения
+	query_request query_{};
+	// упрощенный режим 1 массив
+	bool single_{false};
 
-    public:
-    async_query(Napi::Env env, envmou& e, 
-        txn_mode txn_mode, query_request query, bool single = false)
-        : Napi::AsyncWorker{env}
-        , deferred_{Napi::Promise::Deferred::New(env)}
-        , env_{e}
-        , txn_mode_{txn_mode}
-        , query_{std::move(query)}
-        , single_{single}
-    {   }
+	void finish() noexcept;
 
-    void Execute() override;
+public:
+	async_query(const Napi::Object& receiver,
+		envmou& owner,
+		txn_mode txn_mode,
+		query_request query,
+		bool single = false);
+	~async_query() override;
 
-    void OnOK() override;
+	void OnWorkComplete(Napi::Env env, napi_status status) override;
 
-    void OnError(const Napi::Error& e) override;
+	void Execute() override;
 
-    Napi::Promise GetPromise() const { 
-        return deferred_.Promise(); 
-    }
+	void OnOK() override;
 
-    txnmou_managed start_transaction();
+	void OnError(const Napi::Error& e) override;
 
-    void do_del(txnmou_managed& txn, 
-        mdbx::map_handle dbi, query_line& arg0);    
+	Napi::Promise GetPromise() const
+	{
+		return deferred_.Promise();
+	}
 
-    void do_get(const txnmou_managed& txn, 
-        mdbx::map_handle dbi, query_line& arg0);    
+	txnmou_managed start_transaction();
 
-    void do_put(txnmou_managed& txn, 
-        mdbx::map_handle dbi, query_line& arg0);   
+	void do_del(txnmou_managed& txn, mdbx::map_handle dbi, query_line& arg0);
+
+	void do_get(
+		const txnmou_managed& txn, mdbx::map_handle dbi, query_line& arg0);
+
+	void do_put(txnmou_managed& txn, mdbx::map_handle dbi, query_line& arg0);
 };
 
-} // namespace mdbxmou
+}  // namespace mdbxmou

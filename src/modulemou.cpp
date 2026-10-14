@@ -2,6 +2,9 @@
 #include "envmou.hpp"
 #include "cursormou.hpp"
 #include <memory>
+#if defined(MDBXMOU_COPY_TESTING)
+#include "copy_test.hpp"
+#endif
 
 namespace {
 
@@ -188,6 +191,10 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
 #if defined(MDBXMOU_TESTING)
 	exports.Set(
 		"_debugAddonState", Napi::Function::New(env, debug_addon_state));
+#endif
+
+#if defined(MDBXMOU_COPY_TESTING)
+	mdbxmou::init_copy_test(env, exports);
 #endif
 
 	return exports;

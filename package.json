@@ -49,7 +49,7 @@
   ],
   "dependencies": {
     "cmake-js": "^8.0.0",
-    "node-addon-api": "^8.5.0"
+    "node-addon-api": "8.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -76,8 +76,11 @@
     "test:query-buffer-keys": "node --expose-gc ./test/query-buffer-keys.js",
     "test:query-result": "node --expose-gc ./test/query-result.js",
     "benchmark:query-result": "node --expose-gc ./test/query-result-benchmark.cjs",
+    "test:copy-to": "node ./test/copy-to.js",
+    "test:copy-to:native": "node ./test/copy-to.js --native",
     "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
     "build": "node build.js",
+    "build:copy-tests": "node build.js --copy-testing",
     "build-dev": "node build-dev.js",
     "install": "node build.js"
   },

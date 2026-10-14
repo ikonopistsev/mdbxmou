@@ -12,9 +12,11 @@ function exec(cmd) {
     }
 }
 
-const testingFlag = process.argv.includes('--testing')
+const copyTesting = process.argv.includes('--copy-testing');
+const testingFlag = process.argv.includes('--testing') || copyTesting
     ? ' --CDMDBXMOU_TESTING=ON'
     : '';
+const copyTestingFlag = copyTesting ? ' --CDMDBXMOU_COPY_TESTING=ON' : '';
 
 const versionFile = 'deps/libmdbx/VERSION.json';
 if (!fs.existsSync(versionFile)) {
@@ -25,4 +27,4 @@ if (!fs.existsSync(versionFile)) {
     process.exit(1);
 }
 
-exec("npx cmake-js rebuild --config Release --CDMDBX_TXN_CHECKOWNER=OFF --CDMDBX_BUILD_CXX=ON --CDMDBX_ENABLE_TESTS=OFF --CDMDBX_BUILD_SHARED_LIBRARY=OFF --CDMDBX_BUILD_TOOLS=OFF --CDMDBX_INSTALL_STATIC=ON" + testingFlag);
+exec("npx cmake-js rebuild --config Release --CDMDBX_TXN_CHECKOWNER=OFF --CDMDBX_BUILD_CXX=ON --CDMDBX_ENABLE_TESTS=OFF --CDMDBX_BUILD_SHARED_LIBRARY=OFF --CDMDBX_BUILD_TOOLS=OFF --CDMDBX_INSTALL_STATIC=ON" + testingFlag + copyTestingFlag);

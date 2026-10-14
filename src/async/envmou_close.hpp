@@ -2,31 +2,33 @@
 
 #include <napi.h>
 #include <mdbx.h++>
+#include <mutex>
 
 namespace mdbxmou {
 
 class envmou;
 
-class async_close final
-    : public Napi::AsyncWorker 
+class async_close final : public Napi::AsyncWorker
 {
-    Napi::Promise::Deferred deferred_;
-    envmou& that_;
+	Napi::Promise::Deferred deferred_;
+	envmou* that_{};
+
+	void finish() noexcept;
 
 public:
-    async_close(Napi::Env env, envmou& t)
-        : Napi::AsyncWorker(env)
-        , deferred_(Napi::Promise::Deferred::New(env))
-        , that_(t)
-    {   }
+	async_close(const Napi::Object& receiver, std::unique_lock<envmou>& lock);
+	~async_close() override;
 
-    void Execute() override;    
-    void OnOK() override;
-    void OnError(const Napi::Error& e) override;
+	void OnWorkComplete(Napi::Env env, napi_status status) override;
 
-    Napi::Promise GetPromise() const { 
-        return deferred_.Promise(); 
-    }   
+	void Execute() override;
+	void OnOK() override;
+	void OnError(const Napi::Error& e) override;
+
+	Napi::Promise GetPromise() const
+	{
+		return deferred_.Promise();
+	}
 };
 
-} // namespace mdbxmou
+}  // namespace mdbxmou

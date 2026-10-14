@@ -5,6 +5,7 @@ project(mdbxmou)
 add_definitions(-DNAPI_CPP_EXCEPTIONS)
 
 option(MDBXMOU_TESTING "Enable internal native test hooks" OFF)
+option(MDBXMOU_COPY_TESTING "Enable Linux copy fault/I/O test harness" OFF)
 
 set(MDBXMOU_MIN_LIBMDBX_VERSION "0.14.4")
 set(MDBXMOU_LIBMDBX_VERSION_FILE
@@ -62,6 +63,21 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE NAPI_VERSION=8)
 if(MDBXMOU_TESTING)
   target_compile_definitions(${PROJECT_NAME} PRIVATE MDBXMOU_TESTING=1)
   target_sources(${PROJECT_NAME} PRIVATE "src/debug_writer.cpp")
+endif()
+if(MDBXMOU_COPY_TESTING)
+  if(NOT MDBXMOU_TESTING OR NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "MDBXMOU_COPY_TESTING requires Linux and MDBXMOU_TESTING")
+  endif()
+  target_compile_definitions(${PROJECT_NAME} PRIVATE MDBXMOU_COPY_TESTING=1)
+  target_sources(${PROJECT_NAME} PRIVATE "test/native/copy_test.cpp")
+  target_include_directories(${PROJECT_NAME} PRIVATE "test/native")
+  # Test-only wrappers: no libmdbx sources or production worker fields change.
+  foreach(symbol napi_create_async_work napi_delete_async_work
+      napi_queue_async_work napi_create_promise napi_create_reference
+      napi_resolve_deferred napi_reject_deferred napi_throw write copy_file_range)
+    set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS
+        " -Wl,--wrap=${symbol}")
+  endforeach()
 endif()
 
 # Gives our library file a .node extension without any "lib" prefix

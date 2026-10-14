@@ -6,33 +6,34 @@ namespace mdbxmou {
 
 class envmou;
 
-class async_copy 
-    : public Napi::AsyncWorker 
+class async_copy final : public Napi::AsyncWorker
 {
-    Napi::Promise::Deferred deferred_;
-    envmou& that_;
-    std::string dest_{};
-    MDBX_copy_flags_t flags_{MDBX_CP_DEFAULTS};
+	Napi::Promise::Deferred deferred_;
+	envmou* that_{};
+	std::string dest_{};
+	MDBX_copy_flags_t flags_{MDBX_CP_DEFAULTS};
+
+	void finish() noexcept;
 
 public:
-    async_copy(Napi::Env env, envmou& t, 
-        std::string dest, MDBX_copy_flags_t flags)
-        : Napi::AsyncWorker(env)
-        , deferred_(Napi::Promise::Deferred::New(env))
-        , that_(t)
-        , dest_(std::move(dest))
-        , flags_(flags) 
-    {   }
+	async_copy(const Napi::Object& receiver,
+		envmou& owner,
+		std::string dest,
+		MDBX_copy_flags_t flags);
+	~async_copy() override;
 
-    void Execute() override;
+	void OnWorkComplete(Napi::Env env, napi_status status) override;
 
-    void OnOK() override;
+	void Execute() override;
 
-    void OnError(const Napi::Error& e) override;
+	void OnOK() override;
 
-    Napi::Promise GetPromise() const { 
-        return deferred_.Promise(); 
-    }
+	void OnError(const Napi::Error& e) override;
+
+	Napi::Promise GetPromise() const
+	{
+		return deferred_.Promise();
+	}
 };
 
-} // namespace mdbxmou
+}  // namespace mdbxmou
