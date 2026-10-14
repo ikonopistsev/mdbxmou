@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Permit read/write transactions, query/keys and syncEx during async copyTo.
+  Keep close, a second copy and setOption blocked until the relevant work
+  finishes. Replace the environment mutex with independent atomic busy/copy
+  bits and retain the receiver until async worker cleanup.
+- Preserve worker reservations on failed/reentrant calls and release each
+  reservation once on completion, queue failure, cancellation or teardown.
+  Convert syncEx/setOption lifecycle errors to JavaScript exceptions and pin
+  node-addon-api to the reviewed 8.5.0 completion implementation.
+- Copy Buffer keys into async query/keys request storage before queueing,
+  preserving binary keys and Buffer slices if the caller mutates or releases
+  the original input.
 - Add `result: false` to write rows in `env.query()` to skip constructing and
   returning their key/value items. A single row resolves to `undefined` after
   commit; multiple rows preserve their positions as own `undefined` slots.

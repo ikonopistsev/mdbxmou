@@ -55,6 +55,13 @@ function call(kind, g, flags = P.copyFlag.compact, dest) {
     return g.env.keys(g.dbi, P.txnMode.ro);
 }
 
+function suppressedWrite(g) {
+    return g.env.query({
+        dbi: g.dbi, mode: P.queryMode.upsert, result: false,
+        item: [{ key: Buffer.from("written"), value: Buffer.alloc(32, 3) }],
+    });
+}
+
 function busyCalls(g) {
     return [
         () => g.env.open(g.options), () => g.env.openSync(g.options),
@@ -234,6 +241,11 @@ async function testCase(input, root) {
             const qRead = await call("query", g);
             assert.equal(qRead[0].value[0], 2);
             await g.env.query({ dbi: g.dbi, mode: P.queryMode.upsert, item: [{ key: "extra", value: Buffer.alloc(32, 2) }] });
+            assert.equal(await suppressedWrite(g), undefined);
+            assert.equal(g.dbi.get(transitioned, Buffer.from("written")), undefined);
+            const committed = g.env.startRead();
+            assert.equal(g.dbi.get(committed, Buffer.from("written"))[0], 3);
+            committed.abort();
             await call("keys", g);
             assert.equal(g.dbi.get(before, Buffer.from("key-0"))[0], 1);
             before.abort();
@@ -247,7 +259,7 @@ async function testCase(input, root) {
             const copy = call("copy", g);
             const read = g.env.startRead();
             hooks.arm("query", { gate: true });
-            const query = call("query", g);
+            const query = input.suppressedWrite ? suppressedWrite(g) : call("query", g);
             hooks.arm("keys", { gate: true });
             const keys = call("keys", g);
             await waitFor(() => ["copy", "query", "keys"].every((id) => hooks.state(id).entered), "three work gates");
@@ -256,7 +268,13 @@ async function testCase(input, root) {
             assert.throws(() => g.env.closeSync(), /transaction in progress/);
             read.abort();
             hooks.release("query");
-            await query;
+            const result = await query;
+            if (input.suppressedWrite) {
+                assert.equal(result, undefined);
+                const committed = g.env.startRead();
+                assert.equal(g.dbi.get(committed, Buffer.from("written"))[0], 3);
+                committed.abort();
+            }
             assert.throws(() => g.env.closeSync(), /transaction in progress/);
             hooks.release("keys");
             await keys;
@@ -271,7 +289,9 @@ async function testCase(input, root) {
             } });
             hook.enable();
             let promise;
-            try { promise = call(input.op, g); } finally { hook.disable(); }
+            try {
+                promise = input.suppressedWrite ? suppressedWrite(g) : call(input.op, g);
+            } finally { hook.disable(); }
             await promise;
             assert.equal(init, 1);
             checkReusable(g, input.op, true);
@@ -292,19 +312,19 @@ async function testCase(input, root) {
     }
 }
 
-function startGc(root, op, afterCopy) {
+function startGc(root, op, afterCopy, writeWithoutResult) {
     const g = graph(root, { unopened: op === "open" });
     const weak = new WeakRef(g.env);
     let copy;
     if (afterCopy) copy = call("copy", g);
     hooks.arm("gc", { gate: true });
-    const promise = call(op, g);
+    const promise = writeWithoutResult ? suppressedWrite(g) : call(op, g);
     return { weak, promise, copy };
 }
 
 async function gcCase(input, root) {
     assert.equal(typeof global.gc, "function");
-    const handle = startGc(root, input.op, input.afterCopy);
+    const handle = startGc(root, input.op, input.afterCopy, input.suppressedWrite);
     if (handle.copy) await handle.copy;
     await waitFor(() => hooks.state("gc").entered, "GC gate");
     for (let index = 0; index < 8; ++index) {
@@ -334,7 +354,8 @@ async function victim() {
         options.portable = input.flags === P.copyFlag.defaults;
     }
     hooks.arm("victim", options);
-    call(input.op, g, input.flags, dest).catch(() => {});
+    const promise = input.suppressedWrite ? suppressedWrite(g) : call(input.op, g, input.flags, dest);
+    promise.catch(() => {});
     parentPort.postMessage("queued");
     parentPort.close();
 }
@@ -400,6 +421,13 @@ if (!isMainThread) {
             }
         }
         cases.push({ type: "counter" });
+        cases.push({ type: "counter", suppressedWrite: true });
+        cases.push({ type: "reentrant", op: "query", suppressedWrite: true });
+        for (const afterCopy of [false, true])
+            cases.push({ type: "gc", op: "query", suppressedWrite: true, afterCopy });
+        for (const error of [false, true])
+            for (const stage of ["queued", "running"])
+                cases.push({ type: "worker", op: "query", suppressedWrite: true, error, stage });
         for (const op of ["query", "keys"]) cases.push({ type: "gc", op, afterCopy: true });
         for (const flags of [P.copyFlag.defaults, P.copyFlag.compact]) {
             for (const nosync of [false, true]) cases.push({ type: "io", flags, nosync });
