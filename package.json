@@ -75,6 +75,7 @@
     "test:sync-ex": "node ./test/sync-ex.js",
     "test:query-buffer-keys": "node --expose-gc ./test/query-buffer-keys.js",
     "test:query-result": "node --expose-gc ./test/query-result.js",
+    "test:query-stack": "node --expose-gc ./test/query-stack.js",
     "test:copy-to": "node ./test/copy-to.js",
     "test:copy-to:native": "node ./test/copy-to.js --native",
     "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",

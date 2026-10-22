@@ -269,8 +269,7 @@ Buffer in `env.keys()`. Changing or releasing the original Buffer after the
 call does not change the key used by the worker; Buffer slices copy only
 their visible bytes.
 
-Write requests (`upsert`, `update`, `insertUnique`) accept `result: false` to
-skip returning copies of the input key/value items:
+All query requests accept `result: false` to skip returning their item arrays:
 
 ```javascript
 await env.query({
@@ -290,9 +289,9 @@ argument remains the numeric `txnMode`. Suppressing the response does not
 change input copying, put flags, transaction order, commit or the environment's
 durability settings. Native write/commit errors still reject the Promise and
 abort the batch. Flag validation throws synchronously before work is queued:
-non-booleans throw `TypeError: query result must be a boolean`; an explicit
-boolean on `get` or `del` throws `TypeError: query result requires write queryMode`.
-Read/get, del/found, and `env.keys()` keep their current results.
+non-booleans throw `TypeError: query result must be a boolean`.
+Get and del return their existing item arrays unless explicitly suppressed;
+their defaults are independent of the planned write default. `env.keys()` is unchanged.
 
 ```javascript
 const results = await env.query([
@@ -320,6 +319,49 @@ TypeScript's general `MDBXQueryResult` now includes `undefined`, including
 suppressed slots. Literal requests without the flag or with `result: true`
 retain their item-array types in this release; requests annotated with a
 general `MDBXQueryRequest` and dynamic booleans require narrowing the result.
+
+#### Передача промежуточных результатов внутри query
+
+`push: true` у get сохраняет прочитанные bytes каждого item в локальном стеке
+одного query. `{pop: true}` в key/value следующей операции потребляет вершину,
+`{peek: 0}` читает её без удаления (`peek: 1` — предыдущий элемент).
+
+```javascript
+await env.query([
+  { dbi: source, mode: MDBX_Param.queryMode.get, push: true, result: false,
+    item: [{ key: Buffer.from("source-key") }] },
+  { dbi: target, mode: MDBX_Param.queryMode.upsert, result: false,
+    item: [{ key: Buffer.from("target-key"), value: { pop: true } }] },
+]);
+```
+
+Чтение и запись выполняются в одной native транзакции. Bytes копируются до
+следующего изменения таблицы и сохраняются до завершения query; pop не разрушает
+возвращаемый результат producer. Порядок для каждого item: key, value, операция,
+push. Несколько items складываются последовательно, в порядке LIFO.
+`result: false` подавляет только JS-ответ, не исполнение и не push.
+Если результат get подавлен и ни один последующий operand его не использует, bytes
+не копируются. Для используемого результата создаётся одна owning копия до следующей
+mutation, а pop/peek и native put используют её напрямую. Общая write txn не гарантирует
+стабильность указателя MDBX после update; borrowed pointer через изменения не сохраняется.
+
+Пустое найденное значение передаётся корректно. Прямое использование отсутствующего
+значения отклоняет Promise с `query operand missing` и откатывает весь batch.
+Публичное представление пустого значения в get/write echo остаётся `null`.
+Для ordinal DBI reference сохраняет исходные 4 или 8 bytes в native byte order;
+иная длина даёт `query operand width` до commit. Echo использует настройки target
+DBI, но строковое преобразование ответа не меняет записанные bytes.
+
+Push разрешён только для get. Ошибки структуры operand, нецелый/отрицательный peek
+и недостаток элементов стека дают синхронный TypeError до постановки в очередь.
+Неиспользованные элементы допустимы; между query стек не сохраняется.
+Get по DUPSORT выбирает первый duplicate, как и раньше. Здесь нет exact-pair
+lookup, conditional skip, сборки записей или автоматического журналирования.
+`value` является входным operand только для write; get/del игнорируют это поле,
+как и раньше. В частности, value у del не задаёт exact-pair удаление DUPSORT.
+Ordinal echo новых references выдаёт unsigned Number либо BigInt по flags target.
+Number может округлять большие целые; для точности используйте BigInt. Legacy conversion
+literal/get результатов не меняется (его Number-путь интерпретирует int64 со знаком).
 
 ### Transaction
 

@@ -165,13 +165,14 @@ test("invalid result types throw TypeError synchronously and leave no work", asy
     });
 });
 
-test("get/default-get/alias-get/del reject both booleans with deterministic error order", async () => {
+test("get/default-get/alias-get/del accept result suppression and preserve validation order", async () => {
     await withEnvironment(async (env) => {
         const dbi = seed(env, [{ key: first, value }]);
         for (const mode of [{}, { mode: P.queryMode.get }, { queryMode: P.queryMode.get }, { mode: P.queryMode.del }]) {
             for (const result of [false, true]) {
-                flagError(() => env.query({ dbi, ...mode, result, item: [{ key: first }] }),
-                    "query result requires write queryMode");
+                const output = await env.query({ dbi, ...mode, result, item: [{ key: second }] });
+                assert.deepEqual(output, result ? [{ key: second,
+                    ...(mode.mode === P.queryMode.del ? { found: false } : { value: null }) }] : undefined);
             }
         }
         flagError(() => env.query({ dbi, result: 0, item: [] }), "query result must be a boolean");
@@ -204,9 +205,11 @@ test("inherited flags are parsed and throwing getters preserve exception identit
         assert.equal(await env.query(request), undefined);
         for (const mode of [P.queryMode.get, P.queryMode.del]) {
             for (const result of [false, true]) {
-                flagError(() => env.query(Object.assign(Object.create({ result }), {
-                    dbi, mode, item: [{ key: first }],
-                })), "query result requires write queryMode");
+                const output = await env.query(Object.assign(Object.create({ result }), {
+                    dbi, mode, item: [{ key: second }],
+                }));
+                assert.deepEqual(output, result ? [{ key: second,
+                    ...(mode === P.queryMode.del ? { found: false } : { value: null }) }] : undefined);
             }
         }
         for (const error of [new Error("getter"), { reason: "getter" }]) {

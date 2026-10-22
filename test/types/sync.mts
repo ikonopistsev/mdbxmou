@@ -104,3 +104,19 @@ function queryResultTypes(env: MDBX_Env, dbi: MDBX_Dbi, flag: boolean,
     wrongLegacyArray, wrongGenericArray, wrongUnion];
 }
 void queryResultTypes;
+
+function queryStackTypes(env: MDBX_Env, dbi: MDBX_Dbi) {
+  const result: Promise<MDBXQueryResult> = env.query([
+    { dbi, push: true, result: false, item: [{ key: Buffer.from("key") }] },
+    { dbi, mode: MDBX_Param.queryMode.upsert, item: [{ key: { peek: 0 }, value: { pop: true } }] },
+  ]);
+  const suppressed: Promise<undefined> = env.query({ dbi, result: false, item: [{ key: { pop: true } }] });
+  // @ts-expect-error operands select one operation
+  env.query({ dbi, item: [{ key: { pop: true, peek: 0 } }] });
+  // @ts-expect-error pop must be true
+  env.query({ dbi, item: [{ key: { pop: false } }] });
+  // @ts-expect-error push is a boolean
+  env.query({ dbi, push: 1, item: [] });
+  void [result, suppressed];
+}
+void queryStackTypes;

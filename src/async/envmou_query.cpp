@@ -1,12 +1,66 @@
 #include "envmou_query.hpp"
 #include "convmou.hpp"
 #include "envmou.hpp"
+#include <cstring>
 #include <utility>
 #if defined(MDBXMOU_COPY_TESTING)
 #include "copy_test.hpp"
 #endif
 
 namespace mdbxmou {
+
+static const buffer_type& source_bytes(
+	const query_request& query, const query_reference& source)
+{
+	const auto& result = query[source.row].item[source.item];
+	if (!result.found) {
+		throw std::runtime_error("query operand missing");
+	}
+	return result.val_buf;
+}
+
+static std::uint64_t ordinal_bytes(const buffer_type& bytes)
+{
+	if (bytes.size() == sizeof(std::uint32_t)) {
+		std::uint32_t value;
+		std::memcpy(&value, bytes.data(), sizeof(value));
+		return value;
+	}
+	if (bytes.size() == sizeof(std::uint64_t)) {
+		std::uint64_t value;
+		std::memcpy(&value, bytes.data(), sizeof(value));
+		return value;
+	}
+	throw std::runtime_error("query operand width must be 4 or 8 bytes");
+}
+
+static keymou resolve_key(
+	const query_request& query, const query_line& row, async_keyval& item)
+{
+	if (item.key_source.active()) {
+		const auto& bytes = source_bytes(query, item.key_source);
+		if (mdbx::is_ordinal(row.key_mod)) {
+			item.id_buf = ordinal_bytes(bytes);
+		}
+		return keymou{bytes};
+	}
+	return mdbx::is_ordinal(row.key_mod) ? keymou{item.id_buf}
+										 : keymou{item.key_buf};
+}
+
+static valuemou resolve_value(
+	const query_request& query, const query_line& row, async_keyval& item)
+{
+	if (item.value_source.active()) {
+		const auto& bytes = source_bytes(query, item.value_source);
+		if (is_ordinal(row.val_mod)) {
+			item.val_num = ordinal_bytes(bytes);
+		}
+		return valuemou{bytes};
+	}
+	return is_ordinal(row.val_mod) ? valuemou{item.val_num}
+								   : valuemou{item.val_buf};
+}
 
 async_query::async_query(const Napi::Object& receiver,
 	envmou& owner,
@@ -77,7 +131,16 @@ void async_query::Execute()
 	}
 }
 
-static Napi::Value write_row(Napi::Env env, const query_line& row)
+static Napi::Value reference_ordinal(
+	Napi::Env env, std::uint64_t value, base_flag flags)
+{
+	return (flags & base_flag::bigint)
+		? Napi::Value{Napi::BigInt::New(env, value)}
+		: Napi::Value{Napi::Number::New(env, static_cast<double>(value))};
+}
+
+static Napi::Value write_row(
+	Napi::Env env, const query_request& query, const query_line& row)
 {
 	auto& param = row.item;
 	auto mode = row.mode;
@@ -87,14 +150,24 @@ static Napi::Value write_row(Napi::Env env, const query_line& row)
 		const auto& item = param[j];
 		Napi::Object js_item = Napi::Object::New(env);
 		auto key = mdbx::is_ordinal(row.key_mod) ? keymou{item.id_buf}
-												 : keymou{item.key_buf};
-		js_item.Set("key", conv.convert_key(env, key));
+			: item.key_source.active()
+			? keymou{source_bytes(query, item.key_source)}
+			: keymou{item.key_buf};
+		js_item.Set("key",
+			item.key_source.active() && mdbx::is_ordinal(row.key_mod)
+				? reference_ordinal(env, item.id_buf, row.key_flag)
+				: conv.convert_key(env, key));
 
 		if (mode.is_get() || mode.is_write()) {
-			auto& val_buf = item.val_buf;
-			if (is_ordinal(row.val_mod) && mode.is_write() && val_buf.empty()) {
-				js_item.Set(
-					"value", conv.convert_value(env, valuemou{item.val_num}));
+			const auto& val_buf = mode.is_write() && item.value_source.active()
+				? source_bytes(query, item.value_source)
+				: item.val_buf;
+			if (is_ordinal(row.val_mod) &&
+				(mode.is_write() || !val_buf.empty())) {
+				js_item.Set("value",
+					mode.is_write() && item.value_source.active()
+						? reference_ordinal(env, item.val_num, row.value_flag)
+						: conv.convert_value(env, valuemou{item.val_num}));
 			} else if (val_buf.empty()) {
 				js_item.Set("value", env.Null());
 			} else {
@@ -121,8 +194,8 @@ void async_query::OnOK()
 	if (single_) {
 		if (query_.size() == 1) {
 			const auto& row = query_[0];
-			deferred_.Resolve(row.mode.is_write() && !row.return_result
-				? env.Undefined() : write_row(env, row));
+			deferred_.Resolve(!row.return_result ? env.Undefined()
+												 : write_row(env, query_, row));
 			return;
 		}
 	}
@@ -131,8 +204,7 @@ void async_query::OnOK()
 	for (std::size_t i = 0; i < query_.size(); ++i) {
 		const auto& row = query_[i];
 		result.Set(static_cast<uint32_t>(i),
-			row.mode.is_write() && !row.return_result
-				? env.Undefined() : write_row(env, row));
+			!row.return_result ? env.Undefined() : write_row(env, query_, row));
 	}
 
 	deferred_.Resolve(result);
@@ -156,10 +228,8 @@ txnmou_managed async_query::start_transaction()
 void async_query::do_del(
 	txnmou_managed& txn, mdbx::map_handle dbi, query_line& arg0)
 {
-	auto key_mode = arg0.key_mod;
 	for (auto& q : arg0.item) {
-		auto key =
-			mdbx::is_ordinal(key_mode) ? keymou{q.id_buf} : keymou{q.key_buf};
+		auto key = resolve_key(query_, arg0, q);
 		q.found = txn.erase(dbi, key);
 	}
 }
@@ -167,13 +237,26 @@ void async_query::do_del(
 void async_query::do_get(
 	const txnmou_managed& txn, mdbx::map_handle dbi, query_line& arg0)
 {
-	auto key_mode = arg0.key_mod;
 	for (auto& q : arg0.item) {
-		auto key =
-			mdbx::is_ordinal(key_mode) ? keymou{q.id_buf} : keymou{q.key_buf};
-		mdbx::slice abs;
-		valuemou val{txn.get(dbi, key, abs)};
-		q.set(val);
+		auto key = resolve_key(query_, arg0, q);
+		valuemou value;
+		const auto rc = ::mdbx_get(txn, dbi, &key, &value);
+		q.found = rc != MDBX_NOTFOUND;
+		if (!q.found) {
+			q.val_buf.clear();
+			continue;
+		}
+		mdbx::error::success_or_throw(rc);
+		// No retained bytes for a suppressed read which no later operand uses.
+		// A retained image must own its bytes before any subsequent MDBX update.
+		if (!arg0.return_result && !q.referenced) {
+			continue;
+		}
+		q.set(value);
+		// Validate numerical output while abort is still possible, before commit.
+		if (is_ordinal(arg0.val_mod) && !q.val_buf.empty()) {
+			q.val_num = ordinal_bytes(q.val_buf);
+		}
 	}
 }
 
@@ -183,12 +266,9 @@ void async_query::do_put(
 	auto flags = static_cast<MDBX_put_flags_t>(
 		arg0.mode.write_flags() | arg0.put_flags.val);
 	// очищаем put флаги
-	auto key_mode = arg0.key_mod;
 	for (auto& q : arg0.item) {
-		auto key =
-			mdbx::is_ordinal(key_mode) ? keymou{q.id_buf} : keymou{q.key_buf};
-		valuemou val = is_ordinal(arg0.val_mod) ? valuemou{q.val_num}
-												: valuemou{q.val_buf};
+		auto key = resolve_key(query_, arg0, q);
+		auto val = resolve_value(query_, arg0, q);
 		mdbx::error::success_or_throw(txn.put(dbi, key, &val, flags));
 	}
 }

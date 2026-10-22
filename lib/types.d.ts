@@ -343,9 +343,14 @@ export interface MDBX_Txn {
   getChildrenCount?: () => number;
 }
 
+/** A reference to an earlier owning get result in this query's LIFO stack. */
+export type MDBXQueryOperand =
+  | { pop: true; peek?: never }
+  | { peek: number; pop?: never };
+
 export interface MDBXQueryItem {
-  key: MDBXKey;
-  value?: MDBXValue;
+  key: MDBXKey | MDBXQueryOperand;
+  value?: MDBXValue | MDBXQueryOperand;
 }
 
 export interface MDBXQueryRequest {
@@ -354,12 +359,14 @@ export interface MDBXQueryRequest {
   queryMode?: number;
   putFlag?: number;
   /**
-   * Write queries only: false skips returning the written key/value items.
+   * False skips returning this row without skipping its operations or push.
    * Omitted/undefined defaults to true in the first release with this flag;
    * the next planned minor release defaults writes to false. Explicit true
-   * always returns items. Get/del and keys keep their current results.
+   * always returns items. Get/del default to true independently of writes.
    */
   result?: boolean;
+  /** Push each get item's owning byte result. Only get rows may push. */
+  push?: boolean;
   item: MDBXQueryItem[];
 }
 
@@ -412,10 +419,10 @@ export declare class MDBX_Env {
   startWrite(): MDBX_Txn;
 
   /**
-   * Commits the entire batch before resolving. Write rows with result:false
+   * Commits the entire batch before resolving. Rows with result:false
    * return undefined without copying their input items back to JavaScript.
    * An array of one request also returns the row directly; mixed batches keep
-   * an own undefined slot for every suppressed write row. Validation throws
+   * an own undefined slot for every suppressed row. Validation throws
    * synchronously, and native transaction failures reject the Promise.
    */
   query(request: MDBXQueryRequest & { result: false }, txnMode?: number): Promise<undefined>;
