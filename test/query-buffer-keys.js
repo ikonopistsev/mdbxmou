@@ -264,3 +264,48 @@ test("invalid key types still fail during parsing and the environment stays usab
             [{ key: first, value: a1 }]);
     });
 });
+
+
+for (const kind of ["binary", "string", "number", "bigint"]) {
+    test(`keys empty ranges return [] for ${kind} keys`, async () => {
+        await withEnvironment(async env => {
+            const ordinal = kind === "number" || kind === "bigint";
+            const key = n => kind === "binary" ? Buffer.from([n]) : kind === "string" ? String(n)
+                : kind === "bigint" ? BigInt(n) : n;
+            const options = name => ({ name, ...(ordinal ? { keyMode: keyMode.ordinal,
+                ...(kind === "bigint" ? { keyFlag: MDBX_Param.keyFlag.bigint } : {}) } : {}) });
+            const empty = seed(env, [], options("empty")), full = seed(env, [[key(2), a1], [key(4), a2]], options("full"));
+            assert.deepEqual(await env.keys(empty), []);
+            for (const mode of [cursorMode.keyEqual, cursorMode.keyGreaterOrEqual, cursorMode.keyGreaterThan,
+                cursorMode.keyLesserOrEqual, cursorMode.keyLesserThan])
+                assert.deepEqual(await env.keys({ dbi: empty, from: key(3), cursorMode: mode }), []);
+            for (const [mode, from] of [[cursorMode.keyEqual, 3], [cursorMode.keyGreaterOrEqual, 5],
+                [cursorMode.keyGreaterThan, 4], [cursorMode.keyLesserOrEqual, 1], [cursorMode.keyLesserThan, 2]])
+                assert.deepEqual(await env.keys({ dbi: full, from: key(from), cursorMode: mode }), []);
+            const convert = n => ordinal ? key(n) : Buffer.isBuffer(key(n)) ? key(n) : Buffer.from(key(n));
+            assert.deepEqual(await env.keys({ dbi: full, from: key(2), limit: 1 }), [convert(2)]);
+            assert.deepEqual(await env.keys({ dbi: full, from: key(4), cursorMode: cursorMode.keyLesserOrEqual }), [convert(4), convert(2)]);
+            assert.deepEqual(await env.keys([
+                { dbi: empty, from: key(3) },
+                { dbi: full, from: key(2), cursorMode: cursorMode.keyGreaterOrEqual, limit: 1 },
+                { dbi: full, from: key(3), cursorMode: cursorMode.keyEqual },
+                { dbi: full, from: key(4), cursorMode: cursorMode.keyEqual },
+            ]), [[], [convert(2)], [], [convert(4)]]);
+        });
+    });
+}
+
+test("keys empty scan handling does not mask native operation errors or closed environment", async () => {
+    await withEnvironment(async env => {
+        const dbi = seed(env, [[first, a1]]);
+        // FIRST is valid as a cursor operation but invalid as scan_from's start operation.
+        await assert.rejects(env.keys({ dbi, from: first, cursorMode: cursorMode.first }));
+        await assert.rejects(env.keys([
+            { dbi, from: binary("ff"), cursorMode: cursorMode.keyGreaterOrEqual },
+            { dbi, from: first, cursorMode: cursorMode.first },
+        ]));
+        assert.deepEqual(await env.keys({ dbi, from: first }), [first]);
+        const closed = new MDBX_Env();
+        assert.throws(() => closed.keys({ dbi, from: first }));
+    });
+});

@@ -23,7 +23,7 @@ private:
 	std::uint64_t val_num_{};
 
 	// Внутренний хелпер для навигации
-	Napi::Value move(const Napi::Env& env, MDBX_cursor_op op);
+	Napi::Value move(const Napi::Env& env, MDBX_cursor_op op, bool raw = false);
 
 	// Хелпер для поиска
 	Napi::Value seek_impl(const Napi::CallbackInfo& info, MDBX_cursor_op op);
@@ -35,10 +35,7 @@ private:
 public:
 	static Napi::Function init(const char* class_name, Napi::Env env);
 
-	cursormou(const Napi::CallbackInfo& info)
-		: Napi::ObjectWrap<cursormou>(info)
-	{
-	}
+	cursormou(const Napi::CallbackInfo& info);
 
 	~cursormou() noexcept override;
 
@@ -56,6 +53,7 @@ public:
 
 	// Текущая позиция
 	Napi::Value current(const Napi::CallbackInfo&);
+	Napi::Value current_raw(const Napi::CallbackInfo&);
 
 	// Статус курсора
 	Napi::Value eof(const Napi::CallbackInfo&);
@@ -67,6 +65,8 @@ public:
 	// Модификация
 	Napi::Value put(const Napi::CallbackInfo&);
 	Napi::Value del(const Napi::CallbackInfo&);
+	Napi::Value delete_range(const Napi::CallbackInfo&);
+	Napi::Value delete_bunch(const Napi::CallbackInfo&);
 
 	// Итерация
 	Napi::Value for_each(const Napi::CallbackInfo&);

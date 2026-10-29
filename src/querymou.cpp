@@ -101,8 +101,107 @@ void async_keyval::parse(const query_line& common, const Napi::Object& item)
 	}
 }
 
+void query_line::parse_bulk(txn_mode txn, const Napi::Object& obj)
+{
+	if (txn.val & txn_mode::ro)
+		throw std::runtime_error("rw query in read-only transaction");
+	async_common::parse(obj, "query bulk");
+	bulk = std::make_unique<query_bulk>();
+	auto& b = *bulk;
+	const auto action = obj.Get("action");
+	if (action.IsString() && action.As<Napi::String>().Utf8Value() == "range") {
+		b.range = true;
+	} else if (action.IsNumber()) {
+		const auto n = action.As<Napi::Number>().DoubleValue();
+		if (!std::isfinite(n) || std::trunc(n) != n ||
+			n < MDBX_DELETE_CURRENT_VALUE || n > MDBX_DELETE_WHOLE)
+			throw std::runtime_error("query bulk invalid action");
+		b.action = static_cast<MDBX_bunch_action_t>(n);
+	} else {
+		throw std::runtime_error("query bulk invalid action");
+	}
+	const auto names = obj.GetPropertyNames();
+	for (std::uint32_t i = 0; i < names.Length(); ++i) {
+		const auto name = names.Get(i).ToString().Utf8Value();
+		const bool common = name == "op" || name == "dbi" || name == "action" ||
+			name == "result" || name == "push" || name == "when";
+		const bool specific = b.range
+			? name == "from" || name == "to" || name == "includeFrom" ||
+				name == "includeTo"
+			: b.action != MDBX_DELETE_WHOLE && name == "key";
+		if (!common && !specific)
+			throw std::runtime_error("query bulk unknown property");
+	}
+	auto flag = [&](const char* name, bool& target) {
+		if (!obj.Has(name)) return;
+		const auto value = obj.Get(name);
+		if (!value.IsBoolean())
+			throw std::runtime_error("query bulk flag must be boolean");
+		target = value.As<Napi::Boolean>().Value();
+	};
+	flag("result", return_result);
+	flag("includeFrom", b.include_from);
+	flag("includeTo", b.include_to);
+	auto input = [&](const char* name, async_keyval& target, bool optional) {
+		if (!obj.Has(name)) {
+			if (optional) return false;
+			throw std::runtime_error("query bulk requires key");
+		}
+		const auto value = obj.Get(name);
+		if (optional && value.IsNull()) return false;
+		if (value.IsUndefined() || value.IsNull())
+			throw std::runtime_error("query bulk invalid key or bound");
+		auto wrapped = Napi::Object::New(obj.Env());
+		wrapped.Set("key", value);
+		target.parse(*this, wrapped);
+		return true;
+	};
+	if (b.range) {
+		b.has_from = input("from", b.from, true);
+		b.has_to = input("to", b.to, true);
+	} else if (b.action != MDBX_DELETE_WHOLE) {
+		b.has_from = input("key", b.from, false);
+	}
+	if (obj.Has("push")) {
+		const auto value = obj.Get("push");
+		if (!value.IsArray())
+			throw std::runtime_error("query bulk push must be a field array");
+		const auto list = value.As<Napi::Array>();
+		const char* fields[] = {
+			"count", "firstKey", "firstValue", "lastKey", "lastValue"};
+		for (std::uint32_t i = 0; i < list.Length(); ++i) {
+			const auto value = list.Get(i);
+			if (!value.IsString())
+				throw std::runtime_error("query bulk unknown output field");
+			const auto name = value.As<Napi::String>().Utf8Value();
+			std::size_t field = 0;
+			while (field < query_bulk::fields && name != fields[field])
+				++field;
+			if (field == query_bulk::fields)
+				throw std::runtime_error("query bulk unknown output field");
+			b.outputs.push_back(field);
+		}
+	}
+	item.resize(query_bulk::fields);
+}
+
 void query_line::parse(txn_mode txn, const Napi::Object& arg0)
 {
+	if (arg0.Has("when") && !arg0.Get("when").IsUndefined())
+		throw std::runtime_error("query when is not supported");
+	const bool has_op = arg0.Has("op");
+	std::string name;
+	if (has_op) {
+		const auto value = arg0.Get("op");
+		if (!value.IsString())
+			throw std::runtime_error("query op must be a string");
+		name = value.As<Napi::String>().Utf8Value();
+		if (name == "bulk") {
+			parse_bulk(txn, arg0);
+			return;
+		}
+	}
+	if (has_op) throw std::runtime_error("unsupported query operation");
 	//  парсим общие параметры
 	auto dbi = async_common::parse(arg0, "query");
 	value_flag = dbi->get_value_flag();
@@ -176,6 +275,14 @@ static void bind_query_references(query_request& query, Napi::Env env)
 	};
 	for (std::size_t r = 0; r < query.size(); ++r) {
 		auto& row = query[r];
+		if (row.bulk) {
+			for (auto* operand : {&row.bulk->from, &row.bulk->to}) {
+				bind(operand->key_source);
+			}
+			for (auto field : row.bulk->outputs)
+				stack.emplace_back(r, field);
+			continue;
+		}
 		for (std::size_t i = 0; i < row.item.size(); ++i) {
 			auto& item = row.item[i];
 			bind(item.key_source);

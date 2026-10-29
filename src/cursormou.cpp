@@ -2,8 +2,20 @@
 #include "dbimou.hpp"
 #include "txnmou.hpp"
 #include <cassert>
+#include <cmath>
 
 namespace mdbxmou {
+
+namespace {
+constexpr napi_type_tag cursor_tag{
+	0x9867eb2cd107419aULL, 0xbad3a0c5e32071f6ULL};
+}
+
+cursormou::cursormou(const Napi::CallbackInfo& info)
+	: Napi::ObjectWrap<cursormou>(info)
+{
+	info.This().As<Napi::Object>().TypeTag(&cursor_tag);
+}
 
 static_assert(Napi::details::HasExtendedFinalizer<cursormou>::value,
 	"cursormou must use the extended N-API finalizer");
@@ -20,6 +32,7 @@ Napi::Function cursormou::init(const char* class_name, Napi::Env env)
 			InstanceMethod("seek", &cursormou::seek),
 			InstanceMethod("seekGE", &cursormou::seek_ge),
 			InstanceMethod("current", &cursormou::current),
+			InstanceMethod("current_raw", &cursormou::current_raw),
 			InstanceMethod("eof", &cursormou::eof),
 			InstanceMethod("onFirst", &cursormou::on_first),
 			InstanceMethod("onLast", &cursormou::on_last),
@@ -27,6 +40,8 @@ Napi::Function cursormou::init(const char* class_name, Napi::Env env)
 			InstanceMethod("onLastMultival", &cursormou::on_last_multival),
 			InstanceMethod("put", &cursormou::put),
 			InstanceMethod("del", &cursormou::del),
+			InstanceMethod("deleteRange", &cursormou::delete_range),
+			InstanceMethod("deleteBunch", &cursormou::delete_bunch),
 			InstanceMethod("forEach", &cursormou::for_each),
 			InstanceMethod("close", &cursormou::close),
 		});
@@ -108,7 +123,7 @@ void cursormou::attach(const Napi::Object& txn_object,
 }
 
 // Внутренний хелпер для навигации
-Napi::Value cursormou::move(const Napi::Env& env, MDBX_cursor_op op)
+Napi::Value cursormou::move(const Napi::Env& env, MDBX_cursor_op op, bool raw)
 {
 	if (!cursor_) {
 		throw Napi::Error::New(env, "cursor closed");
@@ -125,6 +140,12 @@ Napi::Value cursormou::move(const Napi::Env& env, MDBX_cursor_op op)
 		throw Napi::Error::New(env, mdbx_strerror(rc));
 	}
 
+	if (raw) {
+		auto result = Napi::Object::New(env);
+		result.Set("key", key.to_buffer(env));
+		result.Set("value", val.to_buffer(env));
+		return result;
+	}
 	return dbi_->get_convmou().make_result(env, key, val);
 }
 
@@ -151,6 +172,11 @@ Napi::Value cursormou::prev(const Napi::CallbackInfo& info)
 Napi::Value cursormou::current(const Napi::CallbackInfo& info)
 {
 	return move(info.Env(), MDBX_GET_CURRENT);
+}
+
+Napi::Value cursormou::current_raw(const Napi::CallbackInfo& info)
+{
+	return move(info.Env(), MDBX_GET_CURRENT, true);
 }
 
 Napi::Value cursormou::eof(const Napi::CallbackInfo& info)
@@ -317,6 +343,53 @@ Napi::Value cursormou::del(const Napi::CallbackInfo& info)
 	}
 
 	return Napi::Boolean::New(env, true);
+}
+
+Napi::Value cursormou::delete_range(const Napi::CallbackInfo& info)
+{
+	const auto env = info.Env();
+	if (!cursor_) throw Napi::Error::New(env, "cursor closed");
+	MDBX_cursor* end = nullptr;
+	if (!info[0].IsUndefined() && !info[0].IsNull()) {
+		if (!info[0].IsObject() ||
+			!info[0].As<Napi::Object>().CheckTypeTag(&cursor_tag)) {
+			throw Napi::TypeError::New(
+				env, "deleteRange: end must be a cursor or null");
+		}
+		end = cursormou::Unwrap(info[0].As<Napi::Object>())->cursor_;
+		if (!end) throw Napi::Error::New(env, "end cursor closed");
+	}
+	if (!info[1].IsUndefined() && !info[1].IsBoolean()) {
+		throw Napi::TypeError::New(
+			env, "deleteRange: includeEnd must be boolean");
+	}
+	const bool include_end =
+		info[1].IsUndefined() || info[1].As<Napi::Boolean>().Value();
+	std::uint64_t affected{};
+	const auto rc =
+		::mdbx_cursor_delete_range(cursor_, end, include_end, &affected);
+	if (rc != MDBX_SUCCESS) throw Napi::Error::New(env, mdbx_strerror(rc));
+	return Napi::BigInt::New(env, affected);
+}
+
+Napi::Value cursormou::delete_bunch(const Napi::CallbackInfo& info)
+{
+	const auto env = info.Env();
+	if (!cursor_) throw Napi::Error::New(env, "cursor closed");
+	if (!info[0].IsNumber()) {
+		throw Napi::TypeError::New(
+			env, "deleteBunch: action must be a bunchAction number");
+	}
+	const auto action = info[0].As<Napi::Number>().DoubleValue();
+	if (!std::isfinite(action) || std::trunc(action) != action ||
+		action < MDBX_DELETE_CURRENT_VALUE || action > MDBX_DELETE_WHOLE) {
+		throw Napi::RangeError::New(env, "deleteBunch: invalid bunchAction");
+	}
+	std::uint64_t affected{};
+	const auto rc = ::mdbx_cursor_bunch_delete(
+		cursor_, static_cast<MDBX_bunch_action_t>(action), &affected);
+	if (rc != MDBX_SUCCESS) throw Napi::Error::New(env, mdbx_strerror(rc));
+	return Napi::BigInt::New(env, affected);
 }
 
 // forEach(callback, backward = false)

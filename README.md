@@ -1,9 +1,37 @@
 # mdbxmou
 
+Типы native API доступны отдельным type-only export: `import type { MDBX_Txn, MDBX_Native }
+from "mdbxmou/types"`. Runtime entrypoint для него не создаётся; исполняемый native API
+остаётся в `mdbxmou` и `mdbxmou/nativemou`. Это позволяет зависимым пакетам реэкспортировать
+declarations без обращения к внутренним файлам драйвера.
+
 Node.js binding for [libmdbx](https://github.com/Mithril-mine/libmdbx) — a fast, lightweight, embedded key-value database.
 
 Bundles [libmdbx v0.14.4 "Skynet Eve"](https://github.com/Mithril-mine/libmdbx/releases/tag/v0.14.4).
 Source builds require libmdbx 0.14.4 or newer.
+
+### Подключение к родительской CMake-сборке
+
+`MDBXMOU_MDBX_TARGET` выбирает CMake target libmdbx для линковки. По умолчанию это
+`mdbx-static`: обычная standalone-сборка сохраняет статическую библиотеку.
+Родитель может заранее создать совместимый target и передать его имя:
+
+```cmake
+set(MDBX_BUILD_SHARED_LIBRARY ON CACHE BOOL "Build shared libmdbx" FORCE)
+add_subdirectory(mdbxmou/deps/libmdbx engine)
+set(MDBXMOU_MDBX_TARGET mdbx CACHE STRING "libmdbx target" FORCE)
+add_subdirectory(mdbxmou driver)
+```
+
+Если выбранный target уже существует, драйвер использует его без повторного добавления
+libmdbx. Иначе добавляется bundled libmdbx; неизвестное имя target вызывает ошибку
+configure, без перехода на другой target. Проверка bundled `VERSION.json` сохраняется.
+Родитель отвечает за совместимость библиотеки с headers, includes/usage requirements,
+compiler flags, output paths и загрузку shared library (например, относительный RPATH).
+Проверка bundled версии не проверяет ABI внешнего target. Node headers и `CMAKE_JS_LIB`
+передаются как при обычной CMake.js-сборке; `node-addon-api` должен разрешаться из корня
+родительского проекта. Параметр сам по себе не меняет JS loader и не устанавливает
+библиотеку системно.
 
 ## Features
 
@@ -320,6 +348,48 @@ suppressed slots. Literal requests without the flag or with `result: true`
 retain their item-array types in this release; requests annotated with a
 general `MDBXQueryRequest` and dynamic booleans require narrowing the result.
 
+#### Bulk-удаление через query
+
+Обычная сборка поддерживает задание `op: "bulk"` для unique-таблиц. Оно вызывает
+native range/bunch delete внутри общей worker-транзакции batch:
+
+```js
+const result = await env.query({
+  op: "bulk", dbi, action: "range", from: "a", to: "z", includeTo: false
+}); // {count: bigint, first: {key: Buffer, value: Buffer}|null, last: ...}
+await env.query([
+  {op: "bulk", dbi, action: MDBX_Param.bunchAction.beforeIncluding,
+   key: "m", push: ["count"], result: false},
+  {dbi: stats, mode: MDBX_Param.queryMode.upsert,
+   item: [{key: "removed", value: {pop: true}}], result: false}
+]);
+```
+
+- Optional поля bulk следует опускать; present `undefined` запрещён.
+  Это более строгий контракт нового job, чем у legacy `result/push`.
+- Range использует comparator DBI. Отсутствующий/null bound открыт; присутствующий
+  `undefined` — ошибка. `includeFrom`/`includeTo` по умолчанию true; для открытого
+  bound флаг ничего не исключает. Обратный/пустой диапазон даёт count=0.
+- Bunch принимает все `bunchAction`. `whole` не принимает key; остальные требуют
+  точный key, ненайденная запись даёт count=0. На unique multival-including/all
+  удаляют текущую запись, multival-excluding ничего не удаляют. DUPSORT job пока
+  отклоняется; синхронный cursor API сохраняет нативные возможности.
+- Результат содержит **raw owning Buffer**, независимо от настроек вывода DBI.
+  При count=0 обе границы null. `result:false` подавляет только Promise-результат;
+  default следует общей политике write results (сейчас true).
+- `push` выбирает `count`, `firstKey`, `firstValue`, `lastKey`, `lastValue` в заданном
+  порядке; последнее поле на вершине. Повторение имён допустимо. Count в стеке —
+  8-byte uint64 **BE**, без преобразования к native-endian ordinal key. Boundaries
+  при count=0 имеют missing slots; получение missing operand откатывает весь batch.
+- Inputs связываются в порядке `from → to` либо `key`, затем outputs.
+  `pop/peek` передают bytes предшествующих операций.
+- Один job и массив из одного job возвращают объект непосредственно; смешанный batch
+  сохраняет отдельный результат каждой строки, включая undefined для suppressed.
+- Копируются только endpoint fields, нужные Promise или последующим consumers.
+  Строки диапазона не перечисляются. Ошибка следующего задания отменяет и bulk.
+- У main нативная семантика каталога MDBX: bulk по main может удалить записи каталога
+  именованных таблиц. Для прикладных данных предпочтительны именованные таблицы.
+
 #### Передача промежуточных результатов внутри query
 
 `push: true` у get сохраняет прочитанные bytes каждого item в локальном стеке
@@ -356,7 +426,7 @@ Push разрешён только для get. Ошибки структуры o
 и недостаток элементов стека дают синхронный TypeError до постановки в очередь.
 Неиспользованные элементы допустимы; между query стек не сохраняется.
 Get по DUPSORT выбирает первый duplicate, как и раньше. Здесь нет exact-pair
-lookup, conditional skip, сборки записей или автоматического журналирования.
+lookup или условного исполнения.
 `value` является входным operand только для write; get/del игнорируют это поле,
 как и раньше. В частности, value у del не задаёт exact-pair удаление DUPSORT.
 Ordinal echo новых references выдаёт unsigned Number либо BigInt по flags target.
@@ -766,6 +836,12 @@ const item = cursor.prev();
 ```javascript
 const item = cursor.current();
 ```
+
+`current_raw()` возвращает независимые Buffer-копии ключа и значения
+без string/Number-преобразования, сохраняя позицию курсора. Результат можно хранить
+после записи, удаления или завершения транзакции. `current()` использует прежние
+настройки DBI. Для обоих методов NOTFOUND даёт `undefined`, ENODATA/closed остаются ошибками.
+
 
 #### Search Methods
 
@@ -1307,6 +1383,12 @@ async function keysExample() {
 keysExample().catch(console.error);
 ```
 
+`env.keys()` возвращает `[]`, если таблица пуста или выбранный диапазон/точный ключ
+не содержит совпадений. Это относится и к запросам с `from`. В пакетном запросе
+такая строка даёт `[]`, остальные строки продолжают выполняться. Ранее запрос с `from`
+в этом случае отклонялся с `MDBX_NOTFOUND`; обработчики этого отказа следует заменить
+проверкой пустого массива. Остальные ошибки MDBX по-прежнему отклоняют Promise.
+
 ## Error Handling
 
 ```javascript
@@ -1483,3 +1565,38 @@ Apache License 2.0
 
 **Documentation generated by GitHub Copilot (Claude 3.5 Sonnet) on August 27, 2025**  
 **Reviewed and approved by the library author**
+
+### Массовое удаление через курсор
+
+Работает внутри существующей write-транзакции; сам метод её не фиксирует.
+
+```js
+const begin = txn.openCursor(dbi);
+const end = txn.openCursor(dbi);
+try {
+    if (begin.seekGE("a") && end.seek("z")) {
+        const removed = begin.deleteRange(end, true); // bigint; обе границы включены
+    }
+} finally {
+    begin.close();
+    end.close();
+}
+```
+
+`deleteRange(end?, includeEnd = true)` удаляет от текущей позиции включительно.
+Курсоры должны быть позиционированы в одной таблице и одной write-транзакции.
+`end = null` или пропущенный аргумент означает последний элемент; `false` исключает
+этот последний элемент тоже. Совпавшие позиции с `false` дают `0n`; обратный диапазон
+и непозиционированные курсоры дают native error. Для удаления префикса можно
+позиционировать начальный курсор через `first()` либо использовать bunch.
+
+`deleteBunch(MDBX_Param.bunchAction.beforeIncluding)` удаляет префикс до текущей
+позиции включительно. Доступны все native actions:
+`currentValue`, `currentMultivalBeforeExcluding`, `currentMultivalBeforeIncluding`,
+`currentMultivalAfterIncluding`, `currentMultivalAfterExcluding`, `currentMultivalAll`,
+`beforeExcluding`, `beforeIncluding`, `afterIncluding`, `afterExcluding`, `whole`.
+Оба метода возвращают точное количество удалённых элементов как `bigint`.
+В DUPSORT позиция включает значение: multival-действия ограничены текущим ключом.
+Семантика, ошибки и изменение позиций курсоров после удаления наследуются от libmdbx;
+перед следующим независимым действием позиционируйте курсор заново.
+Удаление из main может затронуть каталог именованных таблиц, как и прямой native вызов.

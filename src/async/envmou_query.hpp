@@ -41,6 +41,8 @@ public:
 
 	txnmou_managed start_transaction();
 
+	void do_bulk(txnmou_managed& txn, query_line& row);
+
 	void do_del(txnmou_managed& txn, mdbx::map_handle dbi, query_line& arg0);
 
 	void do_get(

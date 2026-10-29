@@ -2,6 +2,7 @@
 
 #include "valuemou.hpp"
 #include <mdbx.h++>
+#include <memory>
 
 namespace mdbxmou {
 
@@ -71,7 +72,26 @@ struct async_keyval : async_key {
 // The following migration release will change only this write default.
 inline constexpr bool kWriteResultDefault = true;
 
+// Bulk outputs reuse ordinary owning item slots; selection affects stack order only.
+struct query_bulk {
+	enum field : std::size_t {
+		count,
+		first_key,
+		first_value,
+		last_key,
+		last_value,
+		fields
+	};
+	bool range{false}, has_from{false}, has_to{false};
+	bool include_from{true}, include_to{true};
+	MDBX_bunch_action_t action{MDBX_DELETE_CURRENT_VALUE};
+	async_keyval from, to;
+	std::vector<std::size_t> outputs;
+	std::uint64_t affected{};
+};
+
 struct query_line : async_common {
+	std::unique_ptr<query_bulk> bulk;
 	base_flag value_flag{};
 	query_mode mode{};
 	put_flag put_flags{};
@@ -80,6 +100,7 @@ struct query_line : async_common {
 	// буффер для запроса / ответа
 	std::vector<async_keyval> item{};
 	void parse(txn_mode txn, const Napi::Object& arg0);
+	void parse_bulk(txn_mode txn, const Napi::Object& arg0);
 };
 
 using query_request = std::vector<query_line>;

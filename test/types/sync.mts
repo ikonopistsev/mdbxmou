@@ -1,12 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import type { MDBX_Native } from "mdbxmou/types";
 
 import native, {
-  MDBX_Env, MDBX_Param, type MDBXCursorMode, type MDBX_Dbi,
+  MDBX_Env, MDBX_Param, type MDBXCursorMode, type MDBX_Dbi, type MDBX_Cursor,
   type MDBXQueryRequest, type MDBXQueryResultItem,
   type MDBXQueryRowResult, type MDBXQueryResult,
 } from "mdbxmou";
+const nativeTypes: MDBX_Native = native;
+void nativeTypes;
 
 const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), "mdbxmou-ts-"));
 const dbPath = path.join(tmp, "e4");
@@ -120,3 +123,51 @@ function queryStackTypes(env: MDBX_Env, dbi: MDBX_Dbi) {
   void [result, suppressed];
 }
 void queryStackTypes;
+
+function rawCurrentTypes(cursor: MDBX_Cursor<string, string>) {
+  const row = cursor.current_raw();
+  const key: Buffer | undefined = row?.key;
+  const value: Buffer | undefined = row?.value;
+  const typed: string | undefined = cursor.current()?.value;
+  // @ts-expect-error raw getter always returns bytes
+  const wrong: string | undefined = row?.key;
+  // @ts-expect-error current no longer accepts an options object
+  cursor.current({ raw: true });
+  // @ts-expect-error raw getter takes no options
+  cursor.current_raw({ raw: false });
+  void [key, value, typed, wrong];
+}
+void rawCurrentTypes;
+
+function bulkTypes(cursor: ReturnType<ReturnType<typeof env.startWrite>["openCursor"]>) {
+  const count: bigint = cursor.deleteRange(null, false);
+  const count2: bigint = cursor.deleteRange(cursor);
+  const count3: bigint = cursor.deleteBunch(MDBX_Param.bunchAction.beforeIncluding);
+  // @ts-expect-error count is not a JS Number
+  const wrong: number = cursor.deleteBunch(MDBX_Param.bunchAction.whole);
+  // @ts-expect-error inclusion flag must be boolean
+  cursor.deleteRange(cursor, 1);
+  void [count, count2, count3, wrong];
+}
+void bulkTypes;
+
+async function queryBulkTypes(env: InstanceType<typeof MDBX_Env>, dbi: ReturnType<ReturnType<typeof env.startWrite>["createMap"]>) {
+  const result = await env.query({op: "bulk", dbi, action: "range", from: null, to: "z", push: ["count", "firstKey"]});
+  const count: bigint = result.count;
+  const key: Buffer | undefined = result.first?.key;
+  const suppressed: undefined = await env.query({op: "bulk", dbi, action: MDBX_Param.bunchAction.whole, result: false});
+  void env.query({op: "bulk", dbi, action: "range", from: {pop: true}, to: {peek: 0}});
+  void env.query({op: "bulk", dbi, action: MDBX_Param.bunchAction.beforeIncluding, key: {pop: true}});
+  // @ts-expect-error helpers are not part of the query API
+  env.query({op: "compute", value: Buffer.alloc(0), push: true, result: false});
+  // @ts-expect-error conditions are not part of the query API
+  env.query({dbi, when: 1n, item: []});
+  // @ts-expect-error byte expressions are not query operands
+  env.query({dbi, item: [{key: "k", value: {parts: [Buffer.alloc(0)]}}]});
+  // @ts-expect-error unknown bulk output name
+  env.query({op: "bulk", dbi, action: "range", push: ["oops"]});
+  // @ts-expect-error bulk uses named outputs, not boolean push
+  env.query({op: "bulk", dbi, action: "range", push: true});
+  void [count, key, suppressed];
+}
+void queryBulkTypes;

@@ -40,7 +40,13 @@ if (MSVC)
   add_compile_options(/Zc:__cplusplus)
 endif()
 
-add_subdirectory("deps/libmdbx")
+set(MDBXMOU_MDBX_TARGET "mdbx-static" CACHE STRING "libmdbx CMake target used by mdbxmou")
+if(NOT TARGET "${MDBXMOU_MDBX_TARGET}")
+  add_subdirectory("deps/libmdbx")
+endif()
+if(NOT TARGET "${MDBXMOU_MDBX_TARGET}")
+  message(FATAL_ERROR "Unknown libmdbx target: ${MDBXMOU_MDBX_TARGET}")
+endif()
 
 add_library(${PROJECT_NAME} SHARED
     "src/addon_state.cpp"
@@ -60,6 +66,7 @@ add_library(${PROJECT_NAME} SHARED
     "src/dbi.cpp")
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE NAPI_VERSION=8)
+
 if(MDBXMOU_TESTING)
   target_compile_definitions(${PROJECT_NAME} PRIVATE MDBXMOU_TESTING=1)
   target_sources(${PROJECT_NAME} PRIVATE "src/debug_writer.cpp")
@@ -93,7 +100,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_JS_INC})
 
 # Essential library files to link to a node addon
 # You should add this line in every CMake.js based project
-target_link_libraries(${PROJECT_NAME} ${CMAKE_JS_LIB} mdbx-static)
+target_link_libraries(${PROJECT_NAME} ${CMAKE_JS_LIB} ${MDBXMOU_MDBX_TARGET})
 
 if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++latest")

@@ -164,6 +164,8 @@ export interface MDBX_Cursor<K extends MDBXKey = MDBXKey, V extends MDBXValue = 
   prev(): MDBXCursorResult<K, V> | undefined;
   /** Get current record without moving cursor. */
   current(): MDBXCursorResult<K, V> | undefined;
+  /** Owning byte copies of the current key/value, bypassing DBI output conversion. */
+  current_raw(): MDBXCursorResult<Buffer, Buffer> | undefined;
   
   /**
    * Seek to exact key match.
@@ -193,6 +195,15 @@ export interface MDBX_Cursor<K extends MDBXKey = MDBXKey, V extends MDBXValue = 
    * @returns true if deleted, false if not found
    */
   del(flags?: number): boolean;
+
+  /** Delete from this position through end (inclusive by default).
+   * Missing/null end means the last record; includeEnd=false excludes it.
+   * Both cursors must be positioned in the same table and write transaction.
+   * Returns exact affected count; cursor positions after deletion follow MDBX.
+   */
+  deleteRange(end?: MDBX_Cursor | null, includeEnd?: boolean): bigint;
+  /** Delete the selected native bunch; action is MDBX_Param.bunchAction.*. */
+  deleteBunch(action: number): bigint;
   
   /**
    * Iterate over all records.
@@ -348,6 +359,35 @@ export type MDBXQueryOperand =
   | { pop: true; peek?: never }
   | { peek: number; pop?: never };
 
+export type MDBXQueryBulkField = "count" | "firstKey" | "firstValue" | "lastKey" | "lastValue";
+/** Generic unique-table bulk deletion in the batch transaction, available in ordinary builds.
+ * Missing/null range bounds are open. Present undefined is invalid. Inclusion defaults true
+ * and has no effect on an open bound. Reversed/empty ranges affect zero records.
+ * Omit optional fields instead of supplying undefined; bulk validates strictly.
+ */
+export type MDBXQueryBulk = {
+  op: "bulk";
+  dbi: MDBX_Dbi;
+  result?: boolean;
+  /** Push fields in order (last is top). Repeated fields are allowed.
+   * count is 8-byte uint64 BE, not native-endian ordinal bytes. No implicit cast.
+   * Zero count has missing boundary slots; missing input operands abort the batch.
+   */
+  push?: MDBXQueryBulkField[];
+} & (
+  | { action: "range"; from?: MDBXKey | MDBXQueryOperand | null; to?: MDBXKey | MDBXQueryOperand | null;
+      includeFrom?: boolean; includeTo?: boolean; key?: never }
+  | { action: number; key?: MDBXKey | MDBXQueryOperand; from?: never; to?: never;
+      includeFrom?: never; includeTo?: never }
+);
+/** Raw owning copies, independent of DBI string/ordinal output conversion. */
+export interface MDBXQueryBulkResult {
+  count: bigint;
+  first: { key: Buffer; value: Buffer } | null;
+  last: { key: Buffer; value: Buffer } | null;
+}
+export type MDBXQueryRow = MDBXQueryRequest | MDBXQueryBulk;
+
 export interface MDBXQueryItem {
   key: MDBXKey | MDBXQueryOperand;
   value?: MDBXValue | MDBXQueryOperand;
@@ -425,12 +465,16 @@ export declare class MDBX_Env {
    * an own undefined slot for every suppressed row. Validation throws
    * synchronously, and native transaction failures reject the Promise.
    */
+  query(request: MDBXQueryBulk & { result: false }, txnMode?: number): Promise<undefined>;
+  query(request: MDBXQueryBulk & { result?: true }, txnMode?: number): Promise<MDBXQueryBulkResult>;
+  query(request: MDBXQueryBulk, txnMode?: number): Promise<MDBXQueryBulkResult | undefined>;
   query(request: MDBXQueryRequest & { result: false }, txnMode?: number): Promise<undefined>;
   query(request: MDBXQueryRequest & { result?: true }, txnMode?: number): Promise<MDBXQueryResultItem[]>;
   query(request: MDBXQueryRequest, txnMode?: number): Promise<MDBXQueryRowResult>;
   query(request: (MDBXQueryRequest & { result?: true })[], txnMode?: number): Promise<MDBXQueryResultItem[] | MDBXQueryResultItem[][]>;
   query(request: MDBXQueryRequest[], txnMode?: number): Promise<MDBXQueryResult>;
   query(request: MDBXQueryRequest | MDBXQueryRequest[], txnMode?: number): Promise<MDBXQueryResult>;
+  query(request: MDBXQueryRow | MDBXQueryRow[], txnMode?: number): Promise<MDBXQueryRowResult | MDBXQueryBulkResult | (MDBXQueryRowResult | MDBXQueryBulkResult)[]>;
   keys(request: MDBXKeysRequest | MDBXKeysRequest[], txnMode?: number): Promise<MDBXKeysResult>;
   /**
    * syncPeriod expects seconds and may be fractional; other options use integer values.
@@ -548,6 +592,20 @@ export interface MDBX_Param {
     readonly append: number;
     readonly appendDup: number;
     readonly multiple: number;
+  };
+
+  readonly bunchAction: {
+    readonly currentValue: number;
+    readonly currentMultivalBeforeExcluding: number;
+    readonly currentMultivalBeforeIncluding: number;
+    readonly currentMultivalAfterIncluding: number;
+    readonly currentMultivalAfterExcluding: number;
+    readonly currentMultivalAll: number;
+    readonly beforeExcluding: number;
+    readonly beforeIncluding: number;
+    readonly afterIncluding: number;
+    readonly afterExcluding: number;
+    readonly whole: number;
   };
 
   readonly cursorMode: {
