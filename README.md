@@ -855,6 +855,22 @@ if (item) {
 }
 ```
 
+**seekBoth(key, value) → {key, value} | undefined**
+
+Точный поиск пары в DUPSORT-таблице через `MDBX_GET_BOTH`, по правилам сравнения
+таблицы. На успехе устанавливает курсор на найденную пару; результат использует
+настройки DBI, как `seek()`. Аргументы преобразуются так же, как у `cursor.put()`.
+NOTFOUND возвращает `undefined`, остальные native ошибки (включая non-DUPSORT) —
+исключение. После отсутствующей пары прежняя позиция курсора не гарантируется.
+Использует текущую RO/RW-транзакцию, не меняет данные и не коммитит её.
+
+```javascript
+const item = cursor.seekBoth('user:123', 'session:456');
+if (item) {
+  const bytes = cursor.current_raw(); // точные Buffer-копии найденной пары
+}
+```
+
 **seekGE(key) → {key, value} | undefined**
 
 Find first key greater or equal to given key (lower_bound).

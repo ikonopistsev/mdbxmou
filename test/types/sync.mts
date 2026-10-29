@@ -171,3 +171,17 @@ async function queryBulkTypes(env: InstanceType<typeof MDBX_Env>, dbi: ReturnTyp
   void [count, key, suppressed];
 }
 void queryBulkTypes;
+
+function seekBothTypes(cursor: MDBX_Cursor<string, Buffer>) {
+  const row = cursor.seekBoth("key", Buffer.from("value"));
+  const key: string | undefined = row?.key;
+  const value: Buffer | undefined = row?.value;
+  // @ts-expect-error value is required
+  cursor.seekBoth("key");
+  // @ts-expect-error key must match cursor key type
+  cursor.seekBoth(1, "value");
+  // @ts-expect-error object is not a value
+  cursor.seekBoth("key", {});
+  void [key, value];
+}
+void seekBothTypes;

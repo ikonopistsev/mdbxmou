@@ -173,6 +173,14 @@ export interface MDBX_Cursor<K extends MDBXKey = MDBXKey, V extends MDBXValue = 
    * @returns Record if found, undefined otherwise
    */
   seek(key: K): MDBXCursorResult<K, V> | undefined;
+
+  /**
+   * Seek to an exact key/value pair in a DUPSORT table (MDBX_GET_BOTH).
+   * Uses the table comparators and existing put input conversions.
+   * Returns undefined if absent; other native errors throw.
+   * Cursor position after a miss is not guaranteed to be preserved.
+   */
+  seekBoth(key: K, value: MDBXValue): MDBXCursorResult<K, V> | undefined;
   
   /**
    * Seek to key >= given key (lower_bound semantics).

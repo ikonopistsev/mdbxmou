@@ -72,6 +72,7 @@
     "test:types": "node ./test/types/run.mjs",
     "test:query-bulk": "node test/query-bulk.js",
     "test:cursor-delete": "node test/cursor-delete.js",
+    "test:cursor-seek-both": "node ./test/cursor-seek-both.js",
     "test:cursor-raw": "node ./test/cursor-raw.js",
     "test:worker-isolates": "node ./test/worker-isolates.js --run-suite",
     "test:libmdbx-0143": "node ./test/libmdbx-0143.js --run-suite",

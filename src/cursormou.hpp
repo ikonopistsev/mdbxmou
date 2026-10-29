@@ -48,8 +48,9 @@ public:
 	Napi::Value prev(const Napi::CallbackInfo&);
 
 	// Поиск
-	Napi::Value seek(const Napi::CallbackInfo&);     // exact match
-	Napi::Value seek_ge(const Napi::CallbackInfo&);  // >= key (lower_bound)
+	Napi::Value seek(const Napi::CallbackInfo&);       // exact match
+	Napi::Value seek_both(const Napi::CallbackInfo&);  // exact key/value pair
+	Napi::Value seek_ge(const Napi::CallbackInfo&);    // >= key (lower_bound)
 
 	// Текущая позиция
 	Napi::Value current(const Napi::CallbackInfo&);

@@ -30,6 +30,7 @@ Napi::Function cursormou::init(const char* class_name, Napi::Env env)
 			InstanceMethod("next", &cursormou::next),
 			InstanceMethod("prev", &cursormou::prev),
 			InstanceMethod("seek", &cursormou::seek),
+			InstanceMethod("seekBoth", &cursormou::seek_both),
 			InstanceMethod("seekGE", &cursormou::seek_ge),
 			InstanceMethod("current", &cursormou::current),
 			InstanceMethod("current_raw", &cursormou::current_raw),
@@ -249,6 +250,9 @@ Napi::Value cursormou::seek_impl(
 		throw Napi::Error::New(env, "cursor closed");
 	}
 
+	if (op == MDBX_GET_BOTH && info.Length() < 2) {
+		throw Napi::Error::New(env, "key and value required");
+	}
 	if (info.Length() < 1) {
 		throw Napi::Error::New(env, "key required");
 	}
@@ -260,6 +264,13 @@ Napi::Value cursormou::seek_impl(
 		: keymou::from(info[0], env, key_buf_);
 
 	valuemou val{};
+	if (op == MDBX_GET_BOTH) {
+		val = valuemou::from(info[1],
+			env,
+			val_buf_,
+			val_num_,
+			is_ordinal(dbi_->get_value_mode()));
+	}
 	auto rc = mdbx_cursor_get(cursor_, key, val, op);
 	if (MDBX_NOTFOUND == rc) {
 		return env.Undefined();
@@ -280,6 +291,11 @@ Napi::Value cursormou::seek(const Napi::CallbackInfo& info)
 Napi::Value cursormou::seek_ge(const Napi::CallbackInfo& info)
 {
 	return seek_impl(info, MDBX_SET_RANGE);
+}
+
+Napi::Value cursormou::seek_both(const Napi::CallbackInfo& info)
+{
+	return seek_impl(info, MDBX_GET_BOTH);
 }
 
 Napi::Value cursormou::put(const Napi::CallbackInfo& info)
