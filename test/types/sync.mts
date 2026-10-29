@@ -185,3 +185,16 @@ function seekBothTypes(cursor: MDBX_Cursor<string, Buffer>) {
   void [key, value];
 }
 void seekBothTypes;
+
+function dbRawTypes(txn: ReturnType<MDBX_Env["startRead"]>) {
+  const db = txn.openMap({ name: "raw-types", valueFlag: MDBX_Param.valueFlag.string });
+  const raw: Buffer | undefined = db.get_raw(txn, "key");
+  // @ts-expect-error raw never returns a string, regardless of DBI presentation
+  const wrong: string | undefined = db.get_raw(txn, "key");
+  // @ts-expect-error transaction is required
+  db.get_raw("key");
+  // @ts-expect-error objects are not keys
+  db.get_raw(txn, {});
+  void [raw, wrong];
+}
+void dbRawTypes;

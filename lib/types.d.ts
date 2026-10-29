@@ -275,6 +275,13 @@ export interface MDBX_Dbi<K extends MDBXKey = MDBXKey, V extends MDBXValue = MDB
   put(txn: MDBX_Txn, key: K, value: MDBXValue, flags?: number): void;
   get(txn: MDBX_Txn, key: K): V | undefined;
   /**
+   * Get an owning Buffer copy of the value, bypassing DBI output conversion.
+   * Uses the same key conversion and RO/RW transaction as get().
+   * Missing keys return undefined; empty values return an empty Buffer.
+   * For DUPSORT, returns the first value just like get().
+   */
+  get_raw(txn: MDBX_Txn, key: K): Buffer | undefined;
+  /**
    * Borrow raw MDBX value bytes without copying or applying `valueFlag`
    * decoding. Requires an active read-only transaction and an environment
    * without `MDBX_WRITEMAP`.

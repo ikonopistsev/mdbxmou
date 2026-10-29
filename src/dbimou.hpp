@@ -75,6 +75,7 @@ public:
 	// Основные операции (только синхронные)
 	Napi::Value put(const Napi::CallbackInfo&);
 	Napi::Value get(const Napi::CallbackInfo&);
+	Napi::Value get_raw(const Napi::CallbackInfo&);
 	Napi::Value get_view(const Napi::CallbackInfo&);
 	Napi::Value del(const Napi::CallbackInfo&);
 	Napi::Value has(const Napi::CallbackInfo&);
@@ -92,6 +93,7 @@ public:
 private:
     // Внутренний метод для forEach с начальным ключом
     Napi::Value for_each_from(const Napi::CallbackInfo&);
+	Napi::Value get_impl(const Napi::CallbackInfo&, bool raw);
 
 public:
 

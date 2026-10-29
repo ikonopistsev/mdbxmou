@@ -589,6 +589,21 @@ const binary = dbi.get(txn, "key");
 
 For `valueMode.multiOrdinal`, `get()` returns the first duplicate value for the key, decoded as `number` by default.
 
+**get_raw(txn, key) → Buffer | undefined**
+
+Возвращает независимую Buffer-копию значения без преобразования по настройкам DBI.
+Поиск и преобразование ключа такие же, как у `get()`; для DUPSORT возвращается первое
+значение ключа. Работает в активной read/write-транзакции. Копия сохраняется после
+изменения/удаления записи, commit/abort и закрытия environment. Нет ключа — `undefined`,
+пустое значение — Buffer длины0. Изменение возвращённого Buffer не меняет БД.
+
+```javascript
+const bytes = dbi.get_raw(txn, key); // всегда Buffer при наличии ключа
+```
+
+`get()` сохраняет обычное преобразование результата. `getView()` уже возвращает сырые
+байты без копирования и имеет отдельные ограничения времени жизни; `getViewRaw()` нет.
+
 #### Zero-copy reads with `getView()`
 
 **getView(txn, key) → MDBX_BorrowedView | undefined**
