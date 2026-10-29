@@ -253,10 +253,14 @@ void async_keys::do_keys_from(
 	default: turn_mode = move_operation::next; break;
 	}
 
-	if (is_ordinal) {
-		scan_keys_from<true>(cursor, arg0, from_key, turn_mode);
-	} else {
-		scan_keys_from<false>(cursor, arg0, from_key, turn_mode);
+	try {
+		if (is_ordinal) {
+			scan_keys_from<true>(cursor, arg0, from_key, turn_mode);
+		} else {
+			scan_keys_from<false>(cursor, arg0, from_key, turn_mode);
+		}
+	} catch (const mdbx::not_found&) {
+		// No starting match: this row stays empty; subsequent batch rows still run.
 	}
 }
 

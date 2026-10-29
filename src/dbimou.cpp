@@ -363,6 +363,7 @@ Napi::Function dbimou::init(const char* class_name, Napi::Env env)
 		{
 			InstanceMethod("put", &dbimou::put),
 			InstanceMethod("get", &dbimou::get),
+			InstanceMethod("get_raw", &dbimou::get_raw),
 			InstanceMethod("getView", &dbimou::get_view),
 			InstanceMethod("del", &dbimou::del),
 			InstanceMethod("has", &dbimou::has),
@@ -419,33 +420,41 @@ Napi::Value dbimou::put(const Napi::CallbackInfo& info)
     return env.Undefined();
 }
 
-Napi::Value dbimou::get(const Napi::CallbackInfo& info) 
+Napi::Value dbimou::get(const Napi::CallbackInfo& info)
 {
-    Napi::Env env = info.Env();
-    auto arg_len = info.Length();
-    if (arg_len < 2) {
-        throw Napi::Error::New(env, "get: txnmou and key required");
-    }
-    auto txn = txnmou::unwrap_checked(env, info[0], "get");
+	return get_impl(info, false);
+}
 
-    try {
-        auto conv = get_convmou();
-        std::uint64_t t;
-        auto key = mdbx::is_ordinal(key_mode_) ?
-            keymou::from(info[1], env, t) : 
-            keymou::from(info[1], env, key_buf_);
-        
-        auto val = dbi::get(*txn, key);
-        if (val.is_null()) {
-            return env.Undefined();
-        }
-        
-        return conv.convert_value(env, val);
-    } catch (const std::exception& e) {
-        throw Napi::Error::New(env, std::string("get: ") + e.what());
-    }
+Napi::Value dbimou::get_raw(const Napi::CallbackInfo& info)
+{
+	return get_impl(info, true);
+}
 
-    return env.Undefined();
+Napi::Value dbimou::get_impl(const Napi::CallbackInfo& info, bool raw)
+{
+	Napi::Env env = info.Env();
+	const char* method = raw ? "get_raw" : "get";
+	if (info.Length() < 2) {
+		throw Napi::Error::New(
+			env, std::string(method) + ": txnmou and key required");
+	}
+	auto txn = txnmou::unwrap_checked(env, info[0], method);
+
+	try {
+		std::uint64_t key_number{};
+		auto key = mdbx::is_ordinal(key_mode_)
+			? keymou::from(info[1], env, key_number)
+			: keymou::from(info[1], env, key_buf_);
+
+		auto val = dbi::get(*txn, key);
+		if (val.is_null()) {
+			return env.Undefined();
+		}
+
+		return raw ? val.to_buffer(env) : get_convmou().convert_value(env, val);
+	} catch (const std::exception& e) {
+		throw Napi::Error::New(env, std::string(method) + ": " + e.what());
+	}
 }
 
 Napi::Value dbimou::get_view(const Napi::CallbackInfo& info)

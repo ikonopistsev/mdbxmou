@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.8] - 2026-10-29
+
+- Add query push/pop/peek for passing owning read results to later operations in
+  the same transaction, and result:false for get/del without constructing unused results.
+- Add asynchronous unique-table bulk query jobs with deletion counts, raw boundaries
+  and reusable stack outputs.
+- Return [] for empty keys() ranges and continue remaining batch requests.
+- Export mdbxmou/types for type-only imports without internal paths.
+- Preserve query write-result defaults; the planned minor-version default change
+  is not part of 0.5.8.
+
+- **ID:** MDBXMOU-CURSOR-RAW
+  **Summary:** Separate current_raw() from the ordinary current() getter.
+  **Long description:** current_raw() returns owning Buffer copies of the current
+  key/value without DBI presentation conversion or cursor movement. current()
+  keeps ordinary conversion. This replaces the unpublished current({raw:true})
+  overload; raw reads have a dedicated zero-argument method.
+
+- **ID:** MDBXMOU-CMAKE-TARGET
+  **Summary:** Select the libmdbx CMake target with MDBXMOU_MDBX_TARGET.
+  **Long description:** Default remains mdbx-static. A parent build can supply a
+  compatible target; the driver reuses it without adding libmdbx a second time.
+  Unknown targets fail configuration. Runtime API and standalone defaults are unchanged.
+
+- **ID:** MDBXMOU-CURSOR-BULK
+  **Summary:** Universal cursor deleteRange/deleteBunch bindings and bigint counts.
+  **Long description:** Прямые вызовы native range/bunch в транзакции caller,
+  все MDBX_bunch_action через MDBX_Param.bunchAction. Доступны в обычной сборке,
+  без дополнительных опций сборки. Проверка N-API type tag до unwrap конечного
+  курсора не позволяет принять DBI, transaction или объект с подменённым prototype.
+
 ## [0.5.7] - 2026-10-14
 
 - Permit read/write transactions, query/keys and syncEx during async copyTo.

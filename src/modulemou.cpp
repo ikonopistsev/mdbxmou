@@ -146,6 +146,34 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     MDBXMOU_DECLARE_FLAG_NAME(putFlag, "multiple", put_flag::multiple);
     mdbx_mou.Set("putFlag", putFlag);
 
+	Napi::Object bunch_action = Napi::Object::New(env);
+	MDBXMOU_DECLARE_FLAG_NAME(
+		bunch_action, "currentValue", MDBX_DELETE_CURRENT_VALUE);
+	MDBXMOU_DECLARE_FLAG_NAME(bunch_action,
+		"currentMultivalBeforeExcluding",
+		MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_EXCLUDING);
+	MDBXMOU_DECLARE_FLAG_NAME(bunch_action,
+		"currentMultivalBeforeIncluding",
+		MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING);
+	MDBXMOU_DECLARE_FLAG_NAME(bunch_action,
+		"currentMultivalAfterIncluding",
+		MDBX_DELETE_CURRENT_MULTIVAL_AFTER_INCLUDING);
+	MDBXMOU_DECLARE_FLAG_NAME(bunch_action,
+		"currentMultivalAfterExcluding",
+		MDBX_DELETE_CURRENT_MULTIVAL_AFTER_EXCLUDING);
+	MDBXMOU_DECLARE_FLAG_NAME(
+		bunch_action, "currentMultivalAll", MDBX_DELETE_CURRENT_MULTIVAL_ALL);
+	MDBXMOU_DECLARE_FLAG_NAME(
+		bunch_action, "beforeExcluding", MDBX_DELETE_BEFORE_EXCLUDING);
+	MDBXMOU_DECLARE_FLAG_NAME(
+		bunch_action, "beforeIncluding", MDBX_DELETE_BEFORE_INCLUDING);
+	MDBXMOU_DECLARE_FLAG_NAME(
+		bunch_action, "afterIncluding", MDBX_DELETE_AFTER_INCLUDING);
+	MDBXMOU_DECLARE_FLAG_NAME(
+		bunch_action, "afterExcluding", MDBX_DELETE_AFTER_EXCLUDING);
+	MDBXMOU_DECLARE_FLAG_NAME(bunch_action, "whole", MDBX_DELETE_WHOLE);
+	mdbx_mou.Set("bunchAction", bunch_action);
+
     using move_operation = mdbx::cursor::move_operation;
     Napi::Object cursor_mode = Napi::Object::New(env);
     MDBXMOU_DECLARE_FLAG_NAME(cursor_mode, "first", move_operation::first);

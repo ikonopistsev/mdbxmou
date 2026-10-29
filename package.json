@@ -32,7 +32,10 @@
         "default": "./lib/nativemou.js"
       }
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./types": {
+      "types": "./lib/types.d.ts"
+    }
   },
   "files": [
     "lib/**/*",
@@ -67,6 +70,11 @@
     "e8": "node ./test/e8.js",
     "e9": "node ./test/e9.js",
     "test:types": "node ./test/types/run.mjs",
+    "test:query-bulk": "node test/query-bulk.js",
+    "test:cursor-delete": "node test/cursor-delete.js",
+    "test:cursor-seek-both": "node ./test/cursor-seek-both.js",
+    "test:db-raw": "node ./test/db-raw.js",
+    "test:cursor-raw": "node ./test/cursor-raw.js",
     "test:worker-isolates": "node ./test/worker-isolates.js --run-suite",
     "test:libmdbx-0143": "node ./test/libmdbx-0143.js --run-suite",
     "test:commit-and-start-read": "node ./test/commit-and-start-read.js",
@@ -75,17 +83,19 @@
     "test:sync-ex": "node ./test/sync-ex.js",
     "test:query-buffer-keys": "node --expose-gc ./test/query-buffer-keys.js",
     "test:query-result": "node --expose-gc ./test/query-result.js",
+    "test:query-stack": "node --expose-gc ./test/query-stack.js",
     "test:copy-to": "node ./test/copy-to.js",
     "test:copy-to:native": "node ./test/copy-to.js --native",
     "benchmark:stage5": "node --expose-gc ./test/stage5-benchmark.js",
     "build": "node build.js",
     "build:copy-tests": "node build.js --copy-testing",
     "build-dev": "node build-dev.js",
-    "install": "node build.js"
+    "install": "node build.js",
+    "test:query-rejection": "node test/query-rejection.js"
   },
   "gypfile": true,
   "name": "mdbxmou",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "engines": {
     "node": ">=22.9.0"
   },
