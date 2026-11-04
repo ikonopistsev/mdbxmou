@@ -445,6 +445,61 @@ export interface MDBXKeysRequestObject {
 export type MDBXKeysRequest = MDBX_Dbi | MDBXKeysRequestObject;
 export type MDBXKeysResult = MDBXKey[] | MDBXKey[][];
 
+/**
+ * All fields of native MDBX_envinfo. uint64 values are bigint, uint32 values are number.
+ * 128-bit IDs are 32 lowercase hex chars (hex16(x) + hex16(y)) or null for a zero ID.
+ * Seconds16dot16 fields keep the native fixed-point value: divide by 65536 for seconds.
+ */
+export interface MDBXEnvInfo {
+  readonly geometry: {
+    readonly lower: bigint;
+    readonly upper: bigint;
+    readonly current: bigint;
+    readonly shrink: bigint;
+    readonly grow: bigint;
+  };
+  readonly mapSize: bigint;
+  readonly dxbFileSize: bigint;
+  readonly dxbFileAllocated: bigint;
+  readonly lastPageNumber: bigint;
+  readonly recentTxnId: bigint;
+  readonly latterReaderTxnId: bigint;
+  readonly selfLatterReaderTxnId: bigint;
+  readonly metaTxnId: readonly [bigint, bigint, bigint];
+  readonly metaSign: readonly [bigint, bigint, bigint];
+  readonly maxReaders: number;
+  readonly numReaders: number;
+  readonly dxbPageSize: number;
+  readonly sysPageSize: number;
+  readonly sysUpcblk: number;
+  readonly sysIoblk: number;
+  readonly bootId: {
+    readonly current: string | null;
+    readonly meta: readonly [string | null, string | null, string | null];
+  };
+  readonly unsyncVolume: bigint;
+  readonly autosyncThreshold: bigint;
+  readonly sinceSyncSeconds16dot16: number;
+  readonly autosyncPeriodSeconds16dot16: number;
+  readonly sinceReaderCheckSeconds16dot16: number;
+  readonly mode: number;
+  readonly pageOperations: {
+    readonly newly: bigint;
+    readonly cow: bigint;
+    readonly clone: bigint;
+    readonly split: bigint;
+    readonly merge: bigint;
+    readonly spill: bigint;
+    readonly unspill: bigint;
+    readonly wops: bigint;
+    readonly prefault: bigint;
+    readonly mincore: bigint;
+    readonly msync: bigint;
+    readonly fsync: bigint;
+  };
+  readonly dxbId: string | null;
+}
+
 export declare class MDBX_Env {
   constructor();
 
@@ -506,6 +561,14 @@ export declare class MDBX_Env {
    * Allowed during async copying; rejected while async open/close is in progress.
    */
   syncEx(force: boolean, nonblock: boolean): number;
+  /**
+   * Synchronous mdbx_env_info_ex(). Without txn: information about the last committed
+   * write transaction; with an active txn of this environment: information for it.
+   * Reads only: starts/finishes no transaction, writes nothing and never syncs.
+   * Throws for a closed environment, during async open/close, or for an inactive txn
+   * or a txn of another environment. Allowed during async copying.
+   */
+  info(txn?: MDBX_Txn): MDBXEnvInfo;
 }
 
 export interface MDBX_Param {

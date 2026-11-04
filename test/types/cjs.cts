@@ -89,3 +89,14 @@ function dbRawTypes(txn: ReturnType<InstanceType<typeof MDBX_Env>["startRead"]>)
   void [raw, wrong];
 }
 void dbRawTypes;
+
+function envInfoTypes(env: InstanceType<typeof MDBX_Env>) {
+  const info: native.MDBXEnvInfo = env.info();
+  const pageSize: number = info.dxbPageSize;
+  const geometry: bigint = info.geometry.upper;
+  const dxbId: string | null = info.dxbId;
+  // @ts-expect-error 128-bit IDs are strings
+  const wrongId: bigint | null = info.dxbId;
+  void [pageSize, geometry, dxbId, wrongId];
+}
+void envInfoTypes;

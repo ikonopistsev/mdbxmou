@@ -6,7 +6,7 @@ import type { MDBX_Native } from "mdbxmou/types";
 import native, {
   MDBX_Env, MDBX_Param, type MDBXCursorMode, type MDBX_Dbi, type MDBX_Cursor,
   type MDBXQueryRequest, type MDBXQueryResultItem,
-  type MDBXQueryRowResult, type MDBXQueryResult,
+  type MDBXQueryRowResult, type MDBXQueryResult, type MDBXEnvInfo,
 } from "mdbxmou";
 const nativeTypes: MDBX_Native = native;
 void nativeTypes;
@@ -198,3 +198,23 @@ function dbRawTypes(txn: ReturnType<MDBX_Env["startRead"]>) {
   void [raw, wrong];
 }
 void dbRawTypes;
+
+function envInfoTypes(env: MDBX_Env, txn: ReturnType<MDBX_Env["startRead"]>) {
+  const info: MDBXEnvInfo = env.info();
+  const withTxn: MDBXEnvInfo = env.info(txn);
+  const txnId: bigint = info.recentTxnId;
+  const metaSign: bigint = info.metaSign[2];
+  const readers: number = withTxn.numReaders;
+  const dxbId: string | null = info.dxbId;
+  const bootId: string | null = info.bootId.current;
+  const bootMeta: string | null = info.bootId.meta[1];
+  const fsyncs: bigint = info.pageOperations.fsync;
+  // @ts-expect-error uint64 values are bigint
+  const wrongTxnId: number = info.recentTxnId;
+  // @ts-expect-error result is readonly
+  info.mapSize = 0n;
+  // @ts-expect-error argument must be a transaction
+  env.info({});
+  void [txnId, metaSign, readers, dxbId, bootId, bootMeta, fsyncs, wrongTxnId];
+}
+void envInfoTypes;

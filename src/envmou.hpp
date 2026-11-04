@@ -118,6 +118,7 @@ public:
 
 	Napi::Value set_option(const Napi::CallbackInfo&);
 	Napi::Value sync_ex(const Napi::CallbackInfo&);
+	Napi::Value info(const Napi::CallbackInfo&);
 
 #if defined(MDBXMOU_TESTING)
 	Napi::Value debug_start_writer(const Napi::CallbackInfo&);
