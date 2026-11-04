@@ -5,6 +5,7 @@ import type {
   MDBXQueryBulk as QueryBulk,
   MDBXQueryBulkField as QueryBulkField,
   MDBXQueryBulkResult as QueryBulkResult,
+  MDBXEnvInfo as EnvInfo,
   MDBX_Native
 } from "./types";
 
@@ -18,6 +19,7 @@ declare namespace native {
   type MDBXQueryBulk = QueryBulk;
   type MDBXQueryBulkField = QueryBulkField;
   type MDBXQueryBulkResult = QueryBulkResult;
+  type MDBXEnvInfo = EnvInfo;
 }
 
 export = native;

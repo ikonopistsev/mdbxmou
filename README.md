@@ -262,6 +262,40 @@ data. With `force=false`, libmdbx follows the environment's sync policy and
 autosync thresholds (`syncBytes` / `syncPeriod`). A successful return in this
 mode, including `0`, does not guarantee that all pending data was flushed.
 
+**info(txn?) → MDBXEnvInfo**
+```javascript
+const info = env.info();          // last committed write transaction
+const read = env.startRead();
+const snapshot = env.info(read);  // information for this transaction
+read.abort();
+console.log(info.recentTxnId, info.dxbId, info.bootId.current);
+```
+
+Synchronous `mdbx_env_info_ex()`. The result contains every field of native
+`MDBX_envinfo`, in native order and units:
+
+- `geometry` (`lower`, `upper`, `current`, `shrink`, `grow`), `mapSize`,
+  `dxbFileSize`, `dxbFileAllocated`, `lastPageNumber`, `recentTxnId`,
+  `latterReaderTxnId`, `selfLatterReaderTxnId`, `metaTxnId[3]`, `metaSign[3]`,
+  `unsyncVolume`, `autosyncThreshold` and all 12 `pageOperations` counters are
+  `bigint` (native `uint64_t`, sizes in bytes);
+- `maxReaders`, `numReaders`, `dxbPageSize`, `sysPageSize`, `sysUpcblk`,
+  `sysIoblk`, `mode` and the three `*Seconds16dot16` fields are unsigned
+  `number` (native `uint32_t`; divide `Seconds16dot16` by 65536 for seconds);
+- `dxbId`, `bootId.current` and `bootId.meta[3]` are 128-bit IDs as 32 lowercase
+  hex characters, `hex16(x) + hex16(y)`, or `null` when the native ID is zero.
+  The string is the native `{x, y}` pair, not a UUID text: on Linux
+  `bootId.current` equals the procfs boot ID with its two 64-bit halves swapped.
+
+`dxbId` identifies the database file: copies made by `copyTo()`/`copyToSync()`
+(compact or as-is) get a new ID, a byte-for-byte file copy keeps it.
+
+The call only reads: it starts or finishes no transaction, writes nothing and
+never syncs. It works in read-only and read-write environments and while an
+async copy is running. A closed environment, async open/close in progress, a
+finished transaction or a transaction of another environment throw; native
+errors are rethrown.
+
 **startWrite() → Transaction**
 ```javascript
 const txn = env.startWrite();

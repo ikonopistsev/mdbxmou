@@ -42,6 +42,110 @@ struct abort_transaction final {
 	}
 };
 
+Napi::BigInt uint64_value(Napi::Env env, std::uint64_t value)
+{
+	return Napi::BigInt::New(env, value);
+}
+
+Napi::Number uint32_value(Napi::Env env, std::uint32_t value)
+{
+	return Napi::Number::New(env, static_cast<double>(value));
+}
+
+// 128-bit MDBX ID: hex16(x) + hex16(y), zero pair means "unknown".
+Napi::Value id_value(Napi::Env env, std::uint64_t x, std::uint64_t y)
+{
+	if (x == 0 && y == 0) {
+		return env.Null();
+	}
+	static constexpr char digits[] = "0123456789abcdef";
+	char text[32];
+	for (int i = 0; i < 16; ++i) {
+		text[i] = digits[(x >> (60 - 4 * i)) & 0xf];
+		text[16 + i] = digits[(y >> (60 - 4 * i)) & 0xf];
+	}
+	return Napi::String::New(env, text, sizeof(text));
+}
+
+Napi::Array uint64_array(
+	Napi::Env env, const std::uint64_t* values, std::size_t count)
+{
+	auto array = Napi::Array::New(env, count);
+	for (std::size_t i = 0; i < count; ++i) {
+		array.Set(static_cast<std::uint32_t>(i), uint64_value(env, values[i]));
+	}
+	return array;
+}
+
+Napi::Object env_info_object(Napi::Env env, const MDBX_envinfo& mi)
+{
+	auto geometry = Napi::Object::New(env);
+	geometry.Set("lower", uint64_value(env, mi.mi_geo.lower));
+	geometry.Set("upper", uint64_value(env, mi.mi_geo.upper));
+	geometry.Set("current", uint64_value(env, mi.mi_geo.current));
+	geometry.Set("shrink", uint64_value(env, mi.mi_geo.shrink));
+	geometry.Set("grow", uint64_value(env, mi.mi_geo.grow));
+
+	auto boot_meta = Napi::Array::New(env, 3);
+	for (std::uint32_t i = 0; i < 3; ++i) {
+		boot_meta.Set(
+			i, id_value(env, mi.mi_bootid.meta[i].x, mi.mi_bootid.meta[i].y));
+	}
+	auto boot_id = Napi::Object::New(env);
+	boot_id.Set("current",
+		id_value(env, mi.mi_bootid.current.x, mi.mi_bootid.current.y));
+	boot_id.Set("meta", boot_meta);
+
+	const auto& op = mi.mi_pgop_stat;
+	auto page_operations = Napi::Object::New(env);
+	page_operations.Set("newly", uint64_value(env, op.newly));
+	page_operations.Set("cow", uint64_value(env, op.cow));
+	page_operations.Set("clone", uint64_value(env, op.clone));
+	page_operations.Set("split", uint64_value(env, op.split));
+	page_operations.Set("merge", uint64_value(env, op.merge));
+	page_operations.Set("spill", uint64_value(env, op.spill));
+	page_operations.Set("unspill", uint64_value(env, op.unspill));
+	page_operations.Set("wops", uint64_value(env, op.wops));
+	page_operations.Set("prefault", uint64_value(env, op.prefault));
+	page_operations.Set("mincore", uint64_value(env, op.mincore));
+	page_operations.Set("msync", uint64_value(env, op.msync));
+	page_operations.Set("fsync", uint64_value(env, op.fsync));
+
+	auto result = Napi::Object::New(env);
+	result.Set("geometry", geometry);
+	result.Set("mapSize", uint64_value(env, mi.mi_mapsize));
+	result.Set("dxbFileSize", uint64_value(env, mi.mi_dxb_fsize));
+	result.Set("dxbFileAllocated", uint64_value(env, mi.mi_dxb_fallocated));
+	result.Set("lastPageNumber", uint64_value(env, mi.mi_last_pgno));
+	result.Set("recentTxnId", uint64_value(env, mi.mi_recent_txnid));
+	result.Set(
+		"latterReaderTxnId", uint64_value(env, mi.mi_latter_reader_txnid));
+	result.Set("selfLatterReaderTxnId",
+		uint64_value(env, mi.mi_self_latter_reader_txnid));
+	result.Set("metaTxnId", uint64_array(env, mi.mi_meta_txnid, 3));
+	result.Set("metaSign", uint64_array(env, mi.mi_meta_sign, 3));
+	result.Set("maxReaders", uint32_value(env, mi.mi_maxreaders));
+	result.Set("numReaders", uint32_value(env, mi.mi_numreaders));
+	result.Set("dxbPageSize", uint32_value(env, mi.mi_dxb_pagesize));
+	result.Set("sysPageSize", uint32_value(env, mi.mi_sys_pagesize));
+	result.Set("sysUpcblk", uint32_value(env, mi.mi_sys_upcblk));
+	result.Set("sysIoblk", uint32_value(env, mi.mi_sys_ioblk));
+	result.Set("bootId", boot_id);
+	result.Set("unsyncVolume", uint64_value(env, mi.mi_unsync_volume));
+	result.Set(
+		"autosyncThreshold", uint64_value(env, mi.mi_autosync_threshold));
+	result.Set("sinceSyncSeconds16dot16",
+		uint32_value(env, mi.mi_since_sync_seconds16dot16));
+	result.Set("autosyncPeriodSeconds16dot16",
+		uint32_value(env, mi.mi_autosync_period_seconds16dot16));
+	result.Set("sinceReaderCheckSeconds16dot16",
+		uint32_value(env, mi.mi_since_reader_check_seconds16dot16));
+	result.Set("mode", uint32_value(env, mi.mi_mode));
+	result.Set("pageOperations", page_operations);
+	result.Set("dxbId", id_value(env, mi.mi_dxbid.x, mi.mi_dxbid.y));
+	return result;
+}
+
 std::uint64_t parse_option_value(const Napi::Env &env, const Napi::Value &arg0)
 {
     if (arg0.IsBigInt())
@@ -92,6 +196,7 @@ void envmou::init(const char *class_name, Napi::Env env, Napi::Object exports)
         InstanceMethod("keys", &envmou::keys),
         InstanceMethod("setOption", &envmou::set_option),
         InstanceMethod("syncEx", &envmou::sync_ex),
+        InstanceMethod("info", &envmou::info),
 #if defined(MDBXMOU_TESTING)
         InstanceMethod("_debugStartWriter", &envmou::debug_start_writer),
         InstanceMethod("_debugWriterState", &envmou::debug_writer_state),
@@ -635,6 +740,41 @@ Napi::Value envmou::sync_ex(const Napi::CallbackInfo &info)
 		}
 
 		return Napi::Number::New(env, rc);
+	} catch (const Napi::Error&) {
+		throw;
+	} catch (const std::exception& error) {
+		throw Napi::Error::New(env, error.what());
+	}
+}
+
+Napi::Value envmou::info(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+
+	try {
+		MDBX_txn* txn{};
+		if (info.Length() > 0 && !info[0].IsUndefined()) {
+			auto* wrapper = txnmou::unwrap_checked(env, info[0], "info");
+			if (!wrapper->is_active()) {
+				throw Napi::Error::New(env, "info: transaction is not active");
+			}
+			txn = *wrapper;
+		}
+
+		lock_guard lock(*this);
+
+		check();
+		if (txn && mdbx_txn_env(txn) != static_cast<MDBX_env*>(*this)) {
+			throw Napi::Error::New(
+				env, "info: transaction belongs to another environment");
+		}
+
+		MDBX_envinfo mi{};
+		auto rc = mdbx_env_info_ex(*this, txn, &mi, sizeof(mi));
+		if (rc != MDBX_SUCCESS) {
+			throw Napi::Error::New(env, mdbx_strerror(rc));
+		}
+		return env_info_object(env, mi);
 	} catch (const Napi::Error&) {
 		throw;
 	} catch (const std::exception& error) {

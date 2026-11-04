@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- **ID:** MDBXMOU-ENV-INFO
+  **Summary:** Add synchronous env.info(txn?) with every MDBX_envinfo field.
+  **Long description:** Generic binding of mdbx_env_info_ex(): uint64 fields are
+  bigint, uint32 fields are number, native units are kept. dxbId and boot IDs are
+  exact 32-char hex strings hex16(x)+hex16(y) or null. Without txn the native
+  last-committed-write semantics apply; an active txn of the same environment is
+  passed through, finished or foreign transactions are rejected. Read-only call:
+  no transaction, write or sync. Allowed during async copy, rejected while async
+  open/close runs. No journal-specific policy is added to the driver.
+
 ## [0.5.8] - 2026-10-29
 
 - Add query push/pop/peek for passing owning read results to later operations in
